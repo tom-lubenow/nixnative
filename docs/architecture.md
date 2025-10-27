@@ -25,7 +25,8 @@ This implementation mirrors the plan outlined in the original discussion:
    - Objects are exported as `$out/<tu-name>.o` and captured in `passthru.objectInfos` for downstream tooling.
 
 5. **Link step**
-   - A thin wrapper around `clang++` that links all object derivations with additional `ldflags`/`libraries`. Today libraries are raw strings; future iterations can accept derivations providing `lib` folders.
+   - A thin wrapper around `clang++` that links all object derivations with additional `ldflags`/`libraries`.
+   - Library helpers (`mkStaticLib`, `mkSharedLib`, `mkHeaderOnly`) expose `public` metadata (include dirs, defines, link flags) so executables and dependent libraries consume them without manual flag wiring.
 
 ## Tooling outputs
 
@@ -33,6 +34,9 @@ This implementation mirrors the plan outlined in the original discussion:
 - Each build target exposes:
   - `passthru.objectInfos`: introspection (headers, include flags, TU source roots).
   - `passthru.manifest`: the manifest JSON used for the build (helpful when comparing scanner output vs. checked-in data).
+  - `passthru.public`: propagated compile/link knobs inherited by downstream dependants.
+  - `passthru.generators`: the generator attrsets that fed generated headers/sources into the build.
+- The flake also publishes `nix run .#cpp-sync-manifest`, which copies a manifest derivation back into the workspace for strict mode updates.
 
 ## IFD considerations
 
@@ -43,13 +47,12 @@ This implementation mirrors the plan outlined in the original discussion:
 
 Future features can slot into the same shape:
 
-- **Code generators** produce derivations with their outputs; append them to the header list before building TUs.
+- **Code generators** plug in via the `generators` array; next up is shipping canned helpers (protobuf, FlatBuffers, etc.) that emit manifests automatically.
 - **ThinLTO / PGO**: treat IR bitcode as another per-TU artefact, followed by a final optimization derivation.
 - **Batching**: group translation units by coarse granularity if derivation counts become excessive—`linkFarm` already supports merging multiple files per derivation.
 
 ## Known gaps
 
 - Windows/MSVC backend is out-of-scope for this iteration; WSL + clang is the recommended path for now.
-- Library discovery is manual. Ideally the library layer would expose helpers like `mkStaticLibrary` that return structured outputs consumed by dependent executables.
+- System library discovery remains manual. Wrappers around `pkg-config`/framework search would help surface the right link/include flags automatically.
 - Error reporting from the scanner currently surfaces raw clang warnings (e.g., unused linker flags). We can tailor the toolchain wrapper to silence or adjust these diagnostics.
-

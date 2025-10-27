@@ -35,6 +35,51 @@
         }
       );
 
+      apps = forAllSystems ({ pkgs, cpp, example }:
+        let
+          syncManifest = pkgs.writeShellApplication {
+            name = "sync-manifest";
+            runtimeInputs = [ pkgs.nix pkgs.jq pkgs.coreutils ];
+            text = ''
+              set -euo pipefail
+
+              usage() {
+                cat <<'USAGE'
+Usage: sync-manifest <flake-attr> <destination> [nix build args...]
+
+Example:
+  nix run .#cpp-sync-manifest -- .#checks.x86_64-linux.simpleScanManifest examples/simple/deps.json
+USAGE
+              }
+
+              if [ "$#" -lt 2 ]; then
+                usage >&2
+                exit 1
+              fi
+
+              attr="$1"
+              dest="$2"
+              shift 2
+
+              out_path=$(nix build "$attr" --no-link --print-out-paths "$@")
+              tmp=$(mktemp)
+              cp "$out_path" "$tmp"
+              mkdir -p "$(dirname "$dest")"
+              jq '.' "$tmp" > "$dest.tmp"
+              mv "$dest.tmp" "$dest"
+              echo "updated $dest from $attr" >&2
+            '';
+          };
+        in
+        {
+          cpp-sync-manifest = {
+            type = "app";
+            program = "${syncManifest}/bin/sync-manifest";
+            meta.description = "Copy a dependency manifest derivation to a workspace file";
+          };
+        }
+      );
+
       devShells = forAllSystems ({ pkgs, cpp, example }:
         {
           default = pkgs.mkShell {
