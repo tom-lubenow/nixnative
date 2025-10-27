@@ -9,10 +9,21 @@ let
   ];
   includeDirs = [ "include" ];
 
+  mathLib = cpp.mkStaticLib {
+    name = "math";
+    inherit root includeDirs;
+    sources = [ "src/math.cc" ];
+    depsManifest = ./deps.json;
+    publicIncludeDirs = includeDirs;
+  };
+
   strict = cpp.mkExecutable {
     name = "simple-strict";
-    inherit root sources includeDirs;
+    root = root;
+    sources = [ "src/main.cc" ];
+    includeDirs = includeDirs;
     depsManifest = ./deps.json;
+    libraries = [ mathLib ];
   };
 
   scannedManifest = cpp.mkDependencyScanner {
@@ -22,8 +33,11 @@ let
 
   scanned = cpp.mkExecutable {
     name = "simple-scanned";
-    inherit root sources includeDirs;
+    root = root;
+    sources = [ "src/main.cc" ];
+    includeDirs = includeDirs;
     scanner = scannedManifest;
+    libraries = [ mathLib ];
   };
 
   mkRunCheck = { drv, expectedLines, name }:
@@ -55,6 +69,7 @@ let
 in
 {
   packages = {
+    mathLib = mathLib.drv;
     inherit strict scanned;
   };
 
@@ -63,5 +78,5 @@ in
     simpleScanned = scannedCheck;
   };
 
-  inherit scannedManifest;
+  inherit scannedManifest mathLib;
 }

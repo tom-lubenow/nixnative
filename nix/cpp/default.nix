@@ -57,12 +57,57 @@ let
     in
     replace (dropExt name);
 
+  ensureList = value: if builtins.isList value then value else [ value ];
+
+  normalizeIncludeDir =
+    { rootHost
+    , dir
+    }:
+    if builtins.isString dir then
+      let
+        rel = if hasPrefix "./" dir then removePrefix "./" dir else dir;
+      in
+      builtins.path { path = "${rootHost}/${rel}"; }
+    else if builtins.isPath dir then dir
+    else if builtins.isAttrs dir && dir ? path then builtins.path { path = dir.path; }
+    else
+      throw "includeDirs entries must be relative strings or paths.";
+
+  emptyPublic =
+    {
+      includeDirs = [ ];
+      defines = [ ];
+      cxxFlags = [ ];
+      linkFlags = [ ];
+    };
+
+  mergePublic = a: b:
+    {
+      includeDirs = a.includeDirs ++ b.includeDirs;
+      defines = a.defines ++ b.defines;
+      cxxFlags = a.cxxFlags ++ b.cxxFlags;
+      linkFlags = a.linkFlags ++ b.linkFlags;
+    };
+
+  libraryPublic =
+    lib:
+    if builtins.isAttrs lib && lib ? public then lib.public
+    else if builtins.isAttrs lib && lib ? linkFlags then emptyPublic // { linkFlags = ensureList lib.linkFlags; }
+    else if builtins.isString lib then emptyPublic // { linkFlags = [ lib ]; }
+    else if builtins.isPath lib then emptyPublic // { linkFlags = [ builtins.toString lib ]; }
+    else
+      emptyPublic;
+
+  collectPublic = libs:
+    foldl' mergePublic emptyPublic (map libraryPublic libs);
+
   normalizeSources =
     { root
     , sources
     }:
     let
-      rootHost = builtins.toString root;
+      rootPath = builtins.path { path = root; };
+      rootHost = builtins.toString rootPath;
       mkEntry = source:
         let
           rel =
@@ -89,7 +134,8 @@ let
     , tu
     }:
     let
-      rootHost = builtins.toString root;
+      rootPath = builtins.path { path = root; };
+      rootHost = builtins.toString rootPath;
       entry = manifest.units.${tu.relNorm} or null;
       deps = if entry == null then [ ] else entry.dependencies or [ ];
       mkHeader = path:
@@ -182,28 +228,12 @@ let
       inherit tu headers srcTree includeFlags defineFlags;
     };
 
-  mkLinkFlags =
-    { libraries
-    , ldflags
-    }:
-    let
-      libraryFlags =
-        map
-          (libSpec:
-            if builtins.isString libSpec then libSpec
-            else if builtins.isAttrs libSpec && libSpec ? flag then libSpec.flag
-            else if builtins.isAttrs libSpec && libSpec ? path then "-L${libSpec.path}/lib"
-            else throw "mkExecutable: libraries entries must be strings or attrsets with `flag` or `path`."
-          )
-          libraries;
-    in
-    ldflags ++ libraryFlags;
-
   linkExecutable =
     { name
     , objects
     , cxxFlags
     , ldflags
+    , linkFlags
     }:
     pkgs.runCommand name
       {
@@ -216,7 +246,7 @@ let
           ${concatStringsSep " " clangToolchain.defaultCxxFlags} \
           ${concatStringsSep " " cxxFlags} \
           ${concatStringsSep " " objects} \
-          ${concatStringsSep " " ldflags} \
+          ${concatStringsSep " " (ldflags ++ linkFlags)} \
           -o "$out/bin/${name}"
       '';
 
@@ -358,6 +388,11 @@ PY
     , scanner ? null
     }:
     let
+      rootPath = builtins.path { path = root; };
+      libsPublic = collectPublic libraries;
+      combinedIncludeDirs = includeDirs ++ libsPublic.includeDirs;
+      combinedDefines = defines ++ libsPublic.defines;
+      combinedCxxFlags = cxxFlags ++ libsPublic.cxxFlags;
       tus = normalizeSources { inherit root sources; };
       manifest =
         if depsManifest != null then mkManifest depsManifest
@@ -371,23 +406,259 @@ PY
               headers = headerSet { inherit root manifest tu; };
             in
             compileTranslationUnit {
-              inherit root tu headers includeDirs defines cxxFlags;
+              inherit root tu headers;
+              includeDirs = combinedIncludeDirs;
+              defines = combinedDefines;
+              cxxFlags = combinedCxxFlags;
             })
           tus;
 
       objectPaths = map (info: info.object) objectInfos;
-      linkFlags = mkLinkFlags { inherit libraries ldflags; };
-      compileCommands = generateCompileCommands { inherit root tus includeDirs defines cxxFlags; };
+      compileCommands =
+        generateCompileCommands {
+          root = rootPath;
+          tus = tus;
+          includeDirs = combinedIncludeDirs;
+          defines = combinedDefines;
+          cxxFlags = combinedCxxFlags;
+        };
       drv =
         linkExecutable {
-          inherit name cxxFlags;
+          inherit name;
+          cxxFlags = combinedCxxFlags;
           objects = objectPaths;
-          ldflags = linkFlags;
+          ldflags = ldflags;
+          linkFlags = libsPublic.linkFlags;
         };
     in
     drv // {
       passthru = (drv.passthru or { }) // {
-        inherit objectInfos compileCommands manifest tus;
+        inherit objectInfos compileCommands manifest tus combinedIncludeDirs combinedDefines combinedCxxFlags;
+        libraries = libraries;
+        public = libsPublic;
+      };
+    };
+
+  mkStaticLib =
+    { name
+    , root ? ./. 
+    , sources
+    , includeDirs ? [ ]
+    , defines ? [ ]
+    , cxxFlags ? [ ]
+    , libraries ? [ ]
+    , depsManifest ? null
+    , scanner ? null
+    , publicIncludeDirs ? includeDirs
+    , publicDefines ? [ ]
+    , publicCxxFlags ? [ ]
+    }:
+    let
+      rootPath = builtins.path { path = root; };
+      rootHost = builtins.toString rootPath;
+      libsPublic = collectPublic libraries;
+      combinedIncludeDirs = includeDirs ++ libsPublic.includeDirs;
+      combinedDefines = defines ++ libsPublic.defines;
+      combinedCxxFlags = cxxFlags ++ libsPublic.cxxFlags;
+      manifest =
+        if depsManifest != null then mkManifest depsManifest
+        else if scanner != null then mkManifest scanner
+        else { units = { }; };
+      tus = normalizeSources { inherit root sources; };
+      objectInfos =
+        map
+          (tu:
+            let
+              headers = headerSet { inherit root manifest tu; };
+            in
+            compileTranslationUnit {
+              inherit root tu headers;
+              includeDirs = combinedIncludeDirs;
+              defines = combinedDefines;
+              cxxFlags = combinedCxxFlags;
+            })
+          tus;
+      objectPaths = map (info: info.object) objectInfos;
+      archiveName = "lib${name}.a";
+      objectsArg = concatStringsSep " " objectPaths;
+      archiveScript =
+        if pkgs.stdenv.hostPlatform.isDarwin then
+          ''
+            ${pkgs.darwin.cctools}/bin/libtool -static -o "$out/lib/${archiveName}" ${objectsArg}
+          ''
+        else
+          ''
+            ${clangToolchain.ar} rc "${archiveName}" ${objectsArg}
+            ${clangToolchain.ranlib} "${archiveName}"
+            mv "${archiveName}" "$out/lib/"
+          '';
+      archive =
+        pkgs.runCommand "static-${name}"
+          {
+            buildInputs =
+              clangToolchain.runtimeInputs
+              ++ lib.optional pkgs.stdenv.hostPlatform.isDarwin pkgs.darwin.cctools;
+          }
+          ''
+            set -euo pipefail
+            mkdir -p "$out/lib"
+            ${archiveScript}
+          '';
+      publicIncludeStores =
+        map (dir: normalizeIncludeDir { inherit rootHost; dir = dir; })
+          (ensureList publicIncludeDirs);
+      basePublic =
+        {
+          includeDirs = map (dir: { path = dir; }) publicIncludeStores;
+          defines = publicDefines;
+          cxxFlags = publicCxxFlags;
+          linkFlags = [ "${archive}/lib/${archiveName}" ];
+        };
+      combinedPublic = mergePublic libsPublic basePublic;
+      compileCommands =
+        generateCompileCommands {
+          root = rootPath;
+          tus = tus;
+          includeDirs = combinedIncludeDirs;
+          defines = combinedDefines;
+          cxxFlags = combinedCxxFlags;
+        };
+    in
+    {
+      type = "static";
+      inherit name;
+      drv = archive;
+      archivePath = "${archive}/lib/${archiveName}";
+      inherit objectInfos compileCommands manifest;
+      inherit libraries;
+      public = combinedPublic;
+      passthru = {
+        inherit manifest objectInfos compileCommands libraries;
+      };
+    };
+
+  mkSharedLib =
+    { name
+    , root ? ./.
+    , sources
+    , includeDirs ? [ ]
+    , defines ? [ ]
+    , cxxFlags ? [ ]
+    , ldflags ? [ ]
+    , libraries ? [ ]
+    , depsManifest ? null
+    , scanner ? null
+    , publicIncludeDirs ? includeDirs
+    , publicDefines ? [ ]
+    , publicCxxFlags ? [ ]
+    }:
+    let
+      rootPath = builtins.path { path = root; };
+      rootHost = builtins.toString rootPath;
+      libsPublic = collectPublic libraries;
+      combinedIncludeDirs = includeDirs ++ libsPublic.includeDirs;
+      combinedDefines = defines ++ libsPublic.defines;
+      combinedCxxFlags = cxxFlags ++ libsPublic.cxxFlags;
+      manifest =
+        if depsManifest != null then mkManifest depsManifest
+        else if scanner != null then mkManifest scanner
+        else { units = { }; };
+      tus = normalizeSources { inherit root sources; };
+      objectInfos =
+        map
+          (tu:
+            let
+              headers = headerSet { inherit root manifest tu; };
+            in
+            compileTranslationUnit {
+              inherit root tu headers;
+              includeDirs = combinedIncludeDirs;
+              defines = combinedDefines;
+              cxxFlags = combinedCxxFlags;
+            })
+          tus;
+      objectPaths = map (info: info.object) objectInfos;
+      sharedExt = if pkgs.stdenv.hostPlatform.isDarwin then "dylib" else "so";
+      sharedName = "lib${name}.${sharedExt}";
+      sharedDrv =
+        pkgs.runCommand "shared-${name}"
+          {
+            buildInputs = clangToolchain.runtimeInputs;
+          }
+          ''
+            set -euo pipefail
+            mkdir -p "$out/lib"
+            ${clangToolchain.cxx} \
+              -shared \
+              ${concatStringsSep " " clangToolchain.defaultCxxFlags} \
+              ${concatStringsSep " " combinedCxxFlags} \
+              ${concatStringsSep " " objectPaths} \
+              ${concatStringsSep " " ldflags} \
+              ${concatStringsSep " " libsPublic.linkFlags} \
+              -o "$out/lib/${sharedName}"
+          '';
+      publicIncludeStores =
+        map (dir: normalizeIncludeDir { inherit rootHost; dir = dir; })
+          (ensureList publicIncludeDirs);
+      basePublic =
+        {
+          includeDirs = map (dir: { path = dir; }) publicIncludeStores;
+          defines = publicDefines;
+          cxxFlags = publicCxxFlags;
+          linkFlags = [ "${sharedDrv}/lib/${sharedName}" ];
+        };
+      combinedPublic = mergePublic libsPublic basePublic;
+      compileCommands =
+        generateCompileCommands {
+          root = rootPath;
+          tus = tus;
+          includeDirs = combinedIncludeDirs;
+          defines = combinedDefines;
+          cxxFlags = combinedCxxFlags;
+        };
+    in
+    {
+      type = "shared";
+      inherit name;
+      drv = sharedDrv;
+      sharedLibrary = "${sharedDrv}/lib/${sharedName}";
+      inherit objectInfos compileCommands manifest libraries;
+      public = combinedPublic;
+      passthru = {
+        inherit manifest objectInfos compileCommands libraries sharedName;
+      };
+    };
+
+  mkHeaderOnly =
+    { name
+    , includeDir
+    , publicDefines ? [ ]
+    , publicCxxFlags ? [ ]
+    }:
+    let
+      resolve = value:
+        if builtins.isString value then builtins.path { path = value; }
+        else if builtins.isPath value then value
+        else if builtins.isAttrs value && value ? path then builtins.path { path = value.path; }
+        else throw "mkHeaderOnly: includeDir must be a path or string";
+      includeSource = resolve includeDir;
+      drv = pkgs.runCommand "header-only-${name}" { } ''
+        set -euo pipefail
+        mkdir -p "$out/include"
+        cp -R ${includeSource}/. "$out/include/"
+      '';
+      public = {
+        includeDirs = [ { path = "${drv}/include"; } ];
+        defines = publicDefines;
+        cxxFlags = publicCxxFlags;
+        linkFlags = [ ];
+      };
+    in
+    {
+      type = "header-only";
+      inherit name drv public;
+      passthru = {
+        includePath = "${drv}/include";
       };
     };
 
@@ -397,5 +668,5 @@ in
     clang = clangToolchain;
   };
 
-  inherit mkDependencyScanner mkExecutable;
+  inherit mkDependencyScanner mkExecutable mkStaticLib mkSharedLib mkHeaderOnly;
 }
