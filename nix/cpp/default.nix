@@ -59,6 +59,12 @@ let
 
   ensureList = value: if builtins.isList value then value else [ value ];
 
+  toPathLike = value:
+    if builtins.isPath value then value
+    else if builtins.isString value then value
+    else if builtins.isAttrs value && value ? path then toPathLike value.path
+    else throw "Expected a path-like value";
+
   normalizeIncludeDir =
     { rootHost
     , dir
@@ -132,6 +138,7 @@ let
     { root
     , manifest
     , tu
+    , overrides ? { }
     }:
     let
       rootPath = builtins.path { path = root; };
@@ -141,12 +148,18 @@ let
       mkHeader = path:
         let
           rel = if hasPrefix "./" path then removePrefix "./" path else path;
-          host = "${rootHost}/${rel}";
+          override = overrides.${rel} or null;
+          storePath =
+            if override != null then toPathLike override
+            else builtins.path { path = "${rootHost}/${rel}"; };
+          host =
+            if override != null then builtins.toString storePath
+            else "${rootHost}/${rel}";
         in
         {
           rel = rel;
           host = host;
-          store = builtins.path { path = host; };
+          store = storePath;
         };
     in
     map mkHeader deps;
@@ -375,6 +388,100 @@ out_path.write_text(json.dumps({ "schema": 1, "units": units }, indent=2))
 PY
       '';
 
+  emptyManifest = {
+    schema = 1;
+    units = { };
+  };
+
+  mergeManifests = base: addition:
+    let
+      baseUnits = base.units or { };
+      additionUnits = addition.units or { };
+      schema =
+        if base ? schema then base.schema
+        else if addition ? schema then addition.schema
+        else 1;
+      keys = unique ((builtins.attrNames baseUnits) ++ (builtins.attrNames additionUnits));
+      mergeEntry = baseEntry: additionEntry:
+        if baseEntry == null then additionEntry
+        else if additionEntry == null then baseEntry
+        else
+          let
+            baseDeps = baseEntry.dependencies or [ ];
+            additionDeps = additionEntry.dependencies or [ ];
+          in
+          baseEntry // additionEntry // {
+            dependencies = unique (baseDeps ++ additionDeps);
+          };
+      mergedUnits = builtins.listToAttrs (map (name:
+        {
+          name = name;
+          value = mergeEntry (baseUnits.${name} or null) (additionUnits.${name} or null);
+        }) keys);
+    in
+    {
+      schema = schema;
+      units = mergedUnits;
+    };
+
+  processGenerators = generators:
+    let
+      toOverrideEntry = header:
+        let
+          relRaw =
+            if header ? rel then header.rel
+            else if header ? relative then header.relative
+            else throw "Generator headers must provide a `rel` attribute.";
+          rel = if hasPrefix "./" relRaw then removePrefix "./" relRaw else relRaw;
+          value =
+            if header ? store then toPathLike header.store
+            else if header ? path then toPathLike header.path
+            else throw "Generator headers must provide `path` or `store`.";
+        in
+        { name = rel; value = value; };
+
+      step = acc: generator:
+        let
+          genManifest =
+            if generator ? manifest then mkManifest generator.manifest
+            else emptyManifest;
+          overrides =
+            if generator ? headers
+            then builtins.listToAttrs (map toOverrideEntry generator.headers)
+            else { };
+          genPublic =
+            if generator ? public then generator.public else emptyPublic;
+          genSources = generator.sources or [ ];
+          genIncludeDirs = generator.includeDirs or [ ];
+          genDefines = generator.defines or [ ];
+          genCxxFlags = generator.cxxFlags or [ ];
+          genDerivations =
+            if generator ? drv then [ generator.drv ]
+            else if generator ? derivations then generator.derivations
+            else [ ];
+        in
+        {
+          sources = acc.sources ++ genSources;
+          includeDirs = acc.includeDirs ++ genIncludeDirs;
+          defines = acc.defines ++ genDefines;
+          cxxFlags = acc.cxxFlags ++ genCxxFlags;
+          manifest = mergeManifests acc.manifest genManifest;
+          public = mergePublic acc.public genPublic;
+          headerOverrides = acc.headerOverrides // overrides;
+          derivations = acc.derivations ++ genDerivations;
+        };
+    in
+    foldl' step {
+      sources = [ ];
+      includeDirs = [ ];
+      defines = [ ];
+      cxxFlags = [ ];
+      manifest = emptyManifest;
+      public = emptyPublic;
+      headerOverrides = { };
+      derivations = [ ];
+    } generators;
+
   mkExecutable =
     { name
     , root ? ./. 
@@ -386,24 +493,28 @@ PY
     , libraries ? [ ]
     , depsManifest ? null
     , scanner ? null
+    , generators ? [ ]
     }:
     let
       rootPath = builtins.path { path = root; };
+      generatorInfo = processGenerators generators;
       libsPublic = collectPublic libraries;
-      combinedIncludeDirs = includeDirs ++ libsPublic.includeDirs;
-      combinedDefines = defines ++ libsPublic.defines;
-      combinedCxxFlags = cxxFlags ++ libsPublic.cxxFlags;
-      tus = normalizeSources { inherit root sources; };
-      manifest =
+      publicAggregate = mergePublic libsPublic generatorInfo.public;
+      combinedIncludeDirs = includeDirs ++ publicAggregate.includeDirs ++ generatorInfo.includeDirs;
+      combinedDefines = defines ++ publicAggregate.defines ++ generatorInfo.defines;
+      combinedCxxFlags = cxxFlags ++ publicAggregate.cxxFlags ++ generatorInfo.cxxFlags;
+      tus = normalizeSources { inherit root; sources = sources ++ generatorInfo.sources; };
+      baseManifest =
         if depsManifest != null then mkManifest depsManifest
         else if scanner != null then mkManifest scanner
-        else { units = { }; };
+        else emptyManifest;
+      manifest = mergeManifests baseManifest generatorInfo.manifest;
 
       objectInfos =
         map
           (tu:
             let
-              headers = headerSet { inherit root manifest tu; };
+              headers = headerSet { inherit root manifest tu; overrides = generatorInfo.headerOverrides; };
             in
             compileTranslationUnit {
               inherit root tu headers;
@@ -428,14 +539,15 @@ PY
           cxxFlags = combinedCxxFlags;
           objects = objectPaths;
           ldflags = ldflags;
-          linkFlags = libsPublic.linkFlags;
+          linkFlags = publicAggregate.linkFlags;
         };
     in
     drv // {
       passthru = (drv.passthru or { }) // {
         inherit objectInfos compileCommands manifest tus combinedIncludeDirs combinedDefines combinedCxxFlags;
         libraries = libraries;
-        public = libsPublic;
+        generators = generators;
+        public = publicAggregate;
       };
     };
 
@@ -452,24 +564,28 @@ PY
     , publicIncludeDirs ? includeDirs
     , publicDefines ? [ ]
     , publicCxxFlags ? [ ]
+    , generators ? [ ]
     }:
     let
       rootPath = builtins.path { path = root; };
       rootHost = builtins.toString rootPath;
+      generatorInfo = processGenerators generators;
       libsPublic = collectPublic libraries;
-      combinedIncludeDirs = includeDirs ++ libsPublic.includeDirs;
-      combinedDefines = defines ++ libsPublic.defines;
-      combinedCxxFlags = cxxFlags ++ libsPublic.cxxFlags;
-      manifest =
+      publicAggregate = mergePublic libsPublic generatorInfo.public;
+      combinedIncludeDirs = includeDirs ++ publicAggregate.includeDirs ++ generatorInfo.includeDirs;
+      combinedDefines = defines ++ publicAggregate.defines ++ generatorInfo.defines;
+      combinedCxxFlags = cxxFlags ++ publicAggregate.cxxFlags ++ generatorInfo.cxxFlags;
+      baseManifest =
         if depsManifest != null then mkManifest depsManifest
         else if scanner != null then mkManifest scanner
-        else { units = { }; };
-      tus = normalizeSources { inherit root sources; };
+        else emptyManifest;
+      manifest = mergeManifests baseManifest generatorInfo.manifest;
+      tus = normalizeSources { inherit root; sources = sources ++ generatorInfo.sources; };
       objectInfos =
         map
           (tu:
             let
-              headers = headerSet { inherit root manifest tu; };
+              headers = headerSet { inherit root manifest tu; overrides = generatorInfo.headerOverrides; };
             in
             compileTranslationUnit {
               inherit root tu headers;
@@ -514,7 +630,7 @@ PY
           cxxFlags = publicCxxFlags;
           linkFlags = [ "${archive}/lib/${archiveName}" ];
         };
-      combinedPublic = mergePublic libsPublic basePublic;
+      combinedPublic = mergePublic publicAggregate basePublic;
       compileCommands =
         generateCompileCommands {
           root = rootPath;
@@ -529,11 +645,10 @@ PY
       inherit name;
       drv = archive;
       archivePath = "${archive}/lib/${archiveName}";
-      inherit objectInfos compileCommands manifest;
-      inherit libraries;
+      inherit objectInfos compileCommands manifest libraries generators;
       public = combinedPublic;
       passthru = {
-        inherit manifest objectInfos compileCommands libraries;
+        inherit manifest objectInfos compileCommands libraries generators;
       };
     };
 
@@ -551,24 +666,28 @@ PY
     , publicIncludeDirs ? includeDirs
     , publicDefines ? [ ]
     , publicCxxFlags ? [ ]
+    , generators ? [ ]
     }:
     let
       rootPath = builtins.path { path = root; };
       rootHost = builtins.toString rootPath;
+      generatorInfo = processGenerators generators;
       libsPublic = collectPublic libraries;
-      combinedIncludeDirs = includeDirs ++ libsPublic.includeDirs;
-      combinedDefines = defines ++ libsPublic.defines;
-      combinedCxxFlags = cxxFlags ++ libsPublic.cxxFlags;
-      manifest =
+      publicAggregate = mergePublic libsPublic generatorInfo.public;
+      combinedIncludeDirs = includeDirs ++ publicAggregate.includeDirs ++ generatorInfo.includeDirs;
+      combinedDefines = defines ++ publicAggregate.defines ++ generatorInfo.defines;
+      combinedCxxFlags = cxxFlags ++ publicAggregate.cxxFlags ++ generatorInfo.cxxFlags;
+      baseManifest =
         if depsManifest != null then mkManifest depsManifest
         else if scanner != null then mkManifest scanner
-        else { units = { }; };
-      tus = normalizeSources { inherit root sources; };
+        else emptyManifest;
+      manifest = mergeManifests baseManifest generatorInfo.manifest;
+      tus = normalizeSources { inherit root; sources = sources ++ generatorInfo.sources; };
       objectInfos =
         map
           (tu:
             let
-              headers = headerSet { inherit root manifest tu; };
+              headers = headerSet { inherit root manifest tu; overrides = generatorInfo.headerOverrides; };
             in
             compileTranslationUnit {
               inherit root tu headers;
@@ -594,7 +713,7 @@ PY
               ${concatStringsSep " " combinedCxxFlags} \
               ${concatStringsSep " " objectPaths} \
               ${concatStringsSep " " ldflags} \
-              ${concatStringsSep " " libsPublic.linkFlags} \
+              ${concatStringsSep " " publicAggregate.linkFlags} \
               -o "$out/lib/${sharedName}"
           '';
       publicIncludeStores =
@@ -607,7 +726,7 @@ PY
           cxxFlags = publicCxxFlags;
           linkFlags = [ "${sharedDrv}/lib/${sharedName}" ];
         };
-      combinedPublic = mergePublic libsPublic basePublic;
+      combinedPublic = mergePublic publicAggregate basePublic;
       compileCommands =
         generateCompileCommands {
           root = rootPath;
@@ -622,10 +741,10 @@ PY
       inherit name;
       drv = sharedDrv;
       sharedLibrary = "${sharedDrv}/lib/${sharedName}";
-      inherit objectInfos compileCommands manifest libraries;
+      inherit objectInfos compileCommands manifest libraries generators;
       public = combinedPublic;
       passthru = {
-        inherit manifest objectInfos compileCommands libraries sharedName;
+        inherit manifest objectInfos compileCommands libraries sharedName generators;
       };
     };
 

@@ -9,6 +9,43 @@ let
   ];
   includeDirs = [ "include" ];
 
+  versionGen = let
+    headerDrv = pkgs.runCommand "version-header" { } ''
+      set -euo pipefail
+      mkdir -p "$out/include/generated"
+      cat > "$out/include/generated/version.hpp" <<'EOF'
+#pragma once
+
+inline constexpr int generated_version() {
+  return 7;
+}
+EOF
+    '';
+    manifestDrv = pkgs.writeText "version-manifest.json" (builtins.toJSON {
+      schema = 1;
+      units = {
+        "src/main.cc" = {
+          dependencies = [ "generated/version.hpp" ];
+        };
+      };
+    });
+  in {
+    drv = headerDrv;
+    manifest = manifestDrv;
+    headers = [
+      {
+        rel = "generated/version.hpp";
+        path = "${headerDrv}/include/generated/version.hpp";
+      }
+    ];
+    public = {
+      includeDirs = [ { path = "${headerDrv}/include"; } ];
+      defines = [ ];
+      cxxFlags = [ ];
+      linkFlags = [ ];
+    };
+  };
+
   mathLib = cpp.mkStaticLib {
     name = "math";
     inherit root includeDirs;
@@ -24,11 +61,15 @@ let
     includeDirs = includeDirs;
     depsManifest = ./deps.json;
     libraries = [ mathLib ];
+    generators = [ versionGen ];
   };
+
+  scannerIncludeDirs = includeDirs ++ [ { path = "${versionGen.drv}/include"; } ];
 
   scannedManifest = cpp.mkDependencyScanner {
     name = "simple-scanner";
-    inherit root sources includeDirs;
+    inherit root sources;
+    includeDirs = scannerIncludeDirs;
   };
 
   scanned = cpp.mkExecutable {
@@ -38,6 +79,7 @@ let
     includeDirs = includeDirs;
     scanner = scannedManifest;
     libraries = [ mathLib ];
+    generators = [ versionGen ];
   };
 
   mkRunCheck = { drv, expectedLines, name }:
@@ -56,13 +98,13 @@ let
 
   strictCheck = mkRunCheck {
     drv = strict;
-    expectedLines = [ "2 + 3 = 5" "4 * 5 = 20" ];
+    expectedLines = [ "2 + 3 = 5" "4 * 5 = 20" "generated version = 7" ];
     name = "simple-strict";
   };
 
   scannedCheck = mkRunCheck {
     drv = scanned;
-    expectedLines = [ "2 + 3 = 5" "4 * 5 = 20" ];
+    expectedLines = [ "2 + 3 = 5" "4 * 5 = 20" "generated version = 7" ];
     name = "simple-scanned";
   };
 
@@ -78,5 +120,5 @@ in
     simpleScanned = scannedCheck;
   };
 
-  inherit scannedManifest mathLib;
+  inherit scannedManifest mathLib versionGen;
 }
