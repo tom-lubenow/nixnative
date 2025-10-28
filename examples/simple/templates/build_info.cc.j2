@@ -1,0 +1,17 @@
+#include <string>
+#include <string_view>
+
+#include "generated/build_info.hpp"
+
+namespace generated {
+std::string build_summary() {
+  return std::string(BuildInfo::project_name)
+         + " v"
+         + std::to_string(BuildInfo::version_major)
+         + "."
+         + std::to_string(BuildInfo::version_minor)
+         + "."
+         + std::to_string(BuildInfo::version_patch)
+         + " (mode=" + std::string(BuildInfo::build_mode) + ")";
+}
+}  // namespace generated

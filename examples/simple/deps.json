@@ -4,13 +4,20 @@
     "src/main.cc": {
       "dependencies": [
         "src/main.cc",
-        "include/math.hpp"
+        "include/math.hpp",
+        "generated/build_info.hpp"
       ]
     },
     "src/math.cc": {
       "dependencies": [
         "src/math.cc",
         "include/math.hpp"
+      ]
+    },
+    "generated/build_info.cc": {
+      "dependencies": [
+        "generated/build_info.cc",
+        "generated/build_info.hpp"
       ]
     }
   }

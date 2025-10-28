@@ -14,32 +14,93 @@ let
     removeSuffix
     replaceStrings
     mapAttrsToList
+    recursiveUpdate
     unique;
 
   clangToolchain =
     let
       llvm = pkgs.llvmPackages_18;
+      libcxx = llvm.libcxx;
+      libcxxDev = llvm.libcxx.dev;
+      isDarwin = pkgs.stdenv.hostPlatform.isDarwin;
+      sdkRoot =
+        if isDarwin then
+          pkgs.darwin.apple_sdk.MacOSX-SDK
+        else
+          null;
+      deploymentTarget =
+        if isDarwin then
+          pkgs.stdenv.hostPlatform.darwinMinVersion or "11.0"
+        else
+          null;
+      darwinLibcxxInclude =
+        if isDarwin then
+          "${libcxxDev}/include/c++/v1"
+        else
+          null;
+      darwinCxxFlags =
+        if isDarwin then
+          [
+            "-isysroot"
+            (builtins.toString sdkRoot)
+            "-isystem"
+            darwinLibcxxInclude
+          ]
+        else
+          [ ];
+      darwinLdFlags =
+        if isDarwin then
+          [
+            "-Wl,-syslibroot,${builtins.toString sdkRoot}"
+            "-isysroot"
+            (builtins.toString sdkRoot)
+            "-F${builtins.toString sdkRoot}/System/Library/Frameworks"
+          ]
+        else
+          [ ];
+      darwinEnv =
+        if isDarwin then
+          {
+            SDKROOT = builtins.toString sdkRoot;
+            MACOSX_DEPLOYMENT_TARGET = deploymentTarget;
+          }
+        else
+          { };
     in
     rec {
       name = "clang18";
       clang = llvm.clang;
       cxx = "${clang}/bin/clang++";
       cc = "${clang}/bin/clang";
-      ar = "${llvm.bintools}/bin/llvm-ar";
-      ranlib = "${llvm.bintools}/bin/llvm-ranlib";
-      nm = "${llvm.bintools}/bin/llvm-nm";
-      ld = "${llvm.lld}/bin/ld.lld";
-      defaultCxxFlags = [ "-std=c++20" "-fdiagnostics-color" "-Wall" "-Wextra" ];
-      defaultLdFlags = [ ];
+      ar = "${llvm.bintools}/bin/ar";
+      ranlib = "${llvm.bintools}/bin/ranlib";
+      nm = "${llvm.bintools}/bin/nm";
+      ld =
+        if isDarwin then
+          "${pkgs.stdenv.cc.bintools.bintools}/bin/ld"
+        else
+          "${llvm.lld}/bin/ld.lld";
       runtimeInputs = [
         clang
         llvm.lld
+        llvm.bintools
         pkgs.coreutils
         pkgs.findutils
         pkgs.gnused
         pkgs.gawk
+      ]
+      ++ lib.optionals isDarwin [
+        pkgs.stdenv.cc.bintools.bintools
+        pkgs.darwin.cctools
+        pkgs.darwin.apple_sdk.sdkRoot
+        sdkRoot
+        libcxx
+        libcxxDev
       ];
       targetTriple = llvm.stdenv.targetPlatform.config;
+      defaultCxxFlags = [ "-std=c++20" "-fdiagnostics-color" "-Wall" "-Wextra" ] ++ darwinCxxFlags;
+      defaultLdFlags = darwinLdFlags;
+      environment = darwinEnv;
     };
 
   sanitizeName = name:
@@ -63,7 +124,24 @@ let
     if builtins.isPath value then value
     else if builtins.isString value then value
     else if builtins.isAttrs value && value ? path then toPathLike value.path
+    else if builtins.isAttrs value && value ? outPath then value.outPath
     else throw "Expected a path-like value";
+
+  stripExtension = file: ext:
+    if hasSuffix ext file then removeSuffix ext file else file;
+
+  sanitizePath =
+    { path
+    , name ? null
+    }:
+    let
+      base = {
+        inherit path;
+        filter = _: _: true;
+      };
+      withName = if name == null then base else base // { inherit name; };
+    in
+    builtins.path withName;
 
   normalizeIncludeDir =
     { rootHost
@@ -112,7 +190,7 @@ let
     , sources
     }:
     let
-      rootPath = builtins.path { path = root; };
+      rootPath = sanitizePath { path = root; name = "sources-root"; };
       rootHost = builtins.toString rootPath;
       mkEntry = source:
         let
@@ -128,7 +206,9 @@ let
           objectName = "${sanitizeName relNorm}.o";
         in
         {
-          store = builtins.path { path = host; };
+          store =
+            if builtins.isAttrs source && source ? store then toPathLike source.store
+            else builtins.path { path = host; };
           inherit relNorm host objectName;
         };
     in
@@ -141,7 +221,7 @@ let
     , overrides ? { }
     }:
     let
-      rootPath = builtins.path { path = root; };
+      rootPath = sanitizePath { path = root; };
       rootHost = builtins.toString rootPath;
       entry = manifest.units.${tu.relNorm} or null;
       deps = if entry == null then [ ] else entry.dependencies or [ ];
@@ -169,14 +249,26 @@ let
     , headers
     }:
     let
-      headerMap =
-        builtins.listToAttrs
-          (map (header: { name = header.rel; value = header.store; }) headers);
-      headerEntries =
-        mapAttrsToList (name: path: { inherit name path; }) headerMap;
+      headersToLink = builtins.filter (header: header.rel != tu.relNorm) headers;
+      headerScripts =
+        lib.concatMapStrings (header: ''
+          dst="${header.rel}"
+          mkdir -p "$out/$(dirname "$dst")"
+          cp ${header.store} "$out/$dst"
+        '') headersToLink;
     in
-    pkgs.linkFarm "tu-${sanitizeName tu.relNorm}-src"
-      ([ { name = tu.relNorm; path = tu.store; } ] ++ headerEntries);
+    pkgs.runCommand "tu-${sanitizeName tu.relNorm}-src"
+      {
+        buildInputs = [ pkgs.coreutils ];
+      }
+      ''
+        set -euo pipefail
+        mkdir -p "$out"
+        dst="${tu.relNorm}"
+        mkdir -p "$out/$(dirname "$dst")"
+        cp ${tu.store} "$out/$dst"
+        ${headerScripts}
+      '';
 
   toIncludeFlags =
     { srcTree
@@ -213,6 +305,7 @@ let
     , includeDirs
     , defines
     , cxxFlags
+    , extraInputs ? [ ]
     }:
     let
       srcTree = mkSourceTree { inherit tu headers; };
@@ -220,9 +313,9 @@ let
       defineFlags = toDefineFlags defines;
       drv =
         pkgs.runCommand "${sanitizeName tu.relNorm}.o"
-          {
-            buildInputs = clangToolchain.runtimeInputs;
-          }
+          ({
+            buildInputs = clangToolchain.runtimeInputs ++ extraInputs;
+          } // clangToolchain.environment)
           ''
             set -euo pipefail
             mkdir -p "$out"
@@ -248,18 +341,27 @@ let
     , ldflags
     , linkFlags
     }:
+    let
+      groupedLinkFlags =
+        if pkgs.stdenv.hostPlatform.isLinux
+        then [ "-Wl,--start-group" ] ++ linkFlags ++ [ "-Wl,--end-group" ]
+        else linkFlags;
+      finalLinkFlags = clangToolchain.defaultLdFlags ++ ldflags ++ groupedLinkFlags;
+      envAttrs = clangToolchain.environment;
+    in
     pkgs.runCommand name
-      {
+      ({
         buildInputs = clangToolchain.runtimeInputs;
-      }
+      } // envAttrs)
       ''
         set -euo pipefail
         mkdir -p "$out/bin"
+        echo "linking ${name}" >&2
         ${clangToolchain.cxx} \
           ${concatStringsSep " " clangToolchain.defaultCxxFlags} \
           ${concatStringsSep " " cxxFlags} \
           ${concatStringsSep " " objects} \
-          ${concatStringsSep " " (ldflags ++ linkFlags)} \
+          ${concatStringsSep " " finalLinkFlags} \
           -o "$out/bin/${name}"
       '';
 
@@ -314,9 +416,33 @@ let
     , includeDirs ? [ ]
     , cxxFlags ? [ ]
     , defines ? [ ]
+    , extraInputs ? [ ]
+    , libraries ? [ ]
+    , generators ? [ ]
     }:
     let
-      tus = normalizeSources { inherit root sources; };
+      generatorInfo = processGenerators generators;
+      libsPublic = collectPublic libraries;
+      publicAggregate = mergePublic generatorInfo.public libsPublic;
+      combinedIncludeDirs =
+        includeDirs
+        ++ generatorInfo.includeDirs
+        ++ publicAggregate.includeDirs;
+      combinedDefines = defines ++ generatorInfo.defines ++ publicAggregate.defines;
+      combinedCxxFlags = cxxFlags ++ generatorInfo.cxxFlags ++ publicAggregate.cxxFlags;
+      generatorInputs = generatorInfo.evalInputs;
+      headerOverrides = generatorInfo.headerOverrides;
+      allSources = sources ++ generatorInfo.sources;
+      headerOverrideLines =
+        map
+          (name: "${name}=${headerOverrides.${name}}")
+          (builtins.attrNames headerOverrides);
+      sourceOverrides = generatorInfo.sourceOverrides;
+      sourceOverrideLines =
+        map
+          (name: "${name}=${sourceOverrides.${name}}")
+          (builtins.attrNames sourceOverrides);
+      tus = normalizeSources { inherit root; sources = allSources; };
       includeFlags =
         map
           (dir:
@@ -325,21 +451,49 @@ let
             else if builtins.isAttrs dir && dir ? path then "-I${dir.path}"
             else throw "mkDependencyScanner: includeDirs entries must be strings or paths."
           )
-          includeDirs;
-      defineFlags = toDefineFlags defines;
+          combinedIncludeDirs;
+      defineFlags = toDefineFlags combinedDefines;
+      buildInputs = clangToolchain.runtimeInputs ++ map toPathLike (extraInputs ++ generatorInputs);
+      extraInputPaths = map toPathLike (extraInputs ++ generatorInputs);
     in
     pkgs.runCommand "${name}.json"
-      {
-        buildInputs = clangToolchain.runtimeInputs ++ [ pkgs.python3 ];
-        src = builtins.path { path = root; name = "scanner-root"; };
+      ({
+        buildInputs = buildInputs ++ [ pkgs.python3 ];
+        src = sanitizePath { path = root; name = "scanner-root"; };
         passAsFile = [ "sourceList" ];
         sourceList = concatStringsSep "\n" (map (tu: tu.relNorm) tus) + "\n";
-      }
+      } // clangToolchain.environment)
       ''
         set -euo pipefail
+        for dep in ${concatStringsSep " " extraInputPaths}; do
+          test -z "$dep" && continue
+          if [ ! -e "$dep" ]; then
+            echo "missing generator input: $dep" >&2
+            exit 1
+          fi
+        done
         work=$TMP/work
         mkdir -p "$work"
         cp -r "$src"/* "$work"
+        chmod -R u+w "$work"
+        while IFS='=' read -r rel target; do
+          [ -z "$rel" ] && continue
+          mkdir -p "$work/$(dirname "$rel")"
+          if [ "$target" != "$work/$rel" ]; then
+            cp "$target" "$work/$rel"
+          fi
+        done <<'EOF'
+${concatStringsSep "\n" headerOverrideLines}
+EOF
+        while IFS='=' read -r rel target; do
+          [ -z "$rel" ] && continue
+          mkdir -p "$work/$(dirname "$rel")"
+          if [ "$target" != "$work/$rel" ]; then
+            cp "$target" "$work/$rel"
+          fi
+        done <<'EOF'
+${concatStringsSep "\n" sourceOverrideLines}
+EOF
         cd "$work"
 
         while IFS= read -r srcFile; do
@@ -347,7 +501,7 @@ let
           depfile="$TMP/$(echo "$srcFile" | tr '/' '_').d"
           ${clangToolchain.cxx} \
             ${concatStringsSep " " clangToolchain.defaultCxxFlags} \
-            ${concatStringsSep " " cxxFlags} \
+            ${concatStringsSep " " combinedCxxFlags} \
             ${concatStringsSep " " includeFlags} \
             ${concatStringsSep " " defineFlags} \
             -MMD -MF "$depfile" \
@@ -439,6 +593,18 @@ PY
             else throw "Generator headers must provide `path` or `store`.";
         in
         { name = rel; value = value; };
+      toSourceOverride = source:
+        let
+          relRaw =
+            if source ? rel then source.rel
+            else throw "Generator sources must provide a `rel` attribute.";
+          rel = if hasPrefix "./" relRaw then removePrefix "./" relRaw else relRaw;
+          value =
+            if source ? store then toPathLike source.store
+            else if source ? path then toPathLike source.path
+            else throw "Generator sources must provide `path` or `store`.";
+        in
+        { name = rel; value = value; };
 
       step = acc: generator:
         let
@@ -449,15 +615,19 @@ PY
             if generator ? headers
             then builtins.listToAttrs (map toOverrideEntry generator.headers)
             else { };
+          sourceOverridesMap =
+            if generator ? sources
+            then builtins.listToAttrs (map toSourceOverride generator.sources)
+            else { };
           genPublic =
             if generator ? public then generator.public else emptyPublic;
           genSources = generator.sources or [ ];
           genIncludeDirs = generator.includeDirs or [ ];
           genDefines = generator.defines or [ ];
           genCxxFlags = generator.cxxFlags or [ ];
-          genDerivations =
-            if generator ? drv then [ generator.drv ]
-            else if generator ? derivations then generator.derivations
+          genEvalInputs =
+            if generator ? evalInputs then generator.evalInputs
+            else if generator ? drv then [ generator.drv ]
             else [ ];
         in
         {
@@ -468,7 +638,8 @@ PY
           manifest = mergeManifests acc.manifest genManifest;
           public = mergePublic acc.public genPublic;
           headerOverrides = acc.headerOverrides // overrides;
-          derivations = acc.derivations ++ genDerivations;
+          sourceOverrides = acc.sourceOverrides // sourceOverridesMap;
+          evalInputs = acc.evalInputs ++ genEvalInputs;
         };
     in
     foldl' step {
@@ -479,7 +650,8 @@ PY
       manifest = emptyManifest;
       public = emptyPublic;
       headerOverrides = { };
-      derivations = [ ];
+      sourceOverrides = { };
+      evalInputs = [ ];
     } generators;
 
   mkExecutable =
@@ -496,7 +668,7 @@ PY
     , generators ? [ ]
     }:
     let
-      rootPath = builtins.path { path = root; };
+      rootPath = sanitizePath { path = root; };
       generatorInfo = processGenerators generators;
       libsPublic = collectPublic libraries;
       publicAggregate = mergePublic libsPublic generatorInfo.public;
@@ -521,6 +693,7 @@ PY
               includeDirs = combinedIncludeDirs;
               defines = combinedDefines;
               cxxFlags = combinedCxxFlags;
+              extraInputs = generatorInfo.evalInputs;
             })
           tus;
 
@@ -567,7 +740,7 @@ PY
     , generators ? [ ]
     }:
     let
-      rootPath = builtins.path { path = root; };
+      rootPath = sanitizePath { path = root; };
       rootHost = builtins.toString rootPath;
       generatorInfo = processGenerators generators;
       libsPublic = collectPublic libraries;
@@ -592,6 +765,7 @@ PY
               includeDirs = combinedIncludeDirs;
               defines = combinedDefines;
               cxxFlags = combinedCxxFlags;
+              extraInputs = generatorInfo.evalInputs;
             })
           tus;
       objectPaths = map (info: info.object) objectInfos;
@@ -610,11 +784,11 @@ PY
           '';
       archive =
         pkgs.runCommand "static-${name}"
-          {
+          ({
             buildInputs =
               clangToolchain.runtimeInputs
               ++ lib.optional pkgs.stdenv.hostPlatform.isDarwin pkgs.darwin.cctools;
-          }
+          } // clangToolchain.environment)
           ''
             set -euo pipefail
             mkdir -p "$out/lib"
@@ -669,7 +843,7 @@ PY
     , generators ? [ ]
     }:
     let
-      rootPath = builtins.path { path = root; };
+      rootPath = sanitizePath { path = root; };
       rootHost = builtins.toString rootPath;
       generatorInfo = processGenerators generators;
       libsPublic = collectPublic libraries;
@@ -694,6 +868,7 @@ PY
               includeDirs = combinedIncludeDirs;
               defines = combinedDefines;
               cxxFlags = combinedCxxFlags;
+              extraInputs = generatorInfo.evalInputs;
             })
           tus;
       objectPaths = map (info: info.object) objectInfos;
@@ -701,9 +876,9 @@ PY
       sharedName = "lib${name}.${sharedExt}";
       sharedDrv =
         pkgs.runCommand "shared-${name}"
-          {
+          ({
             buildInputs = clangToolchain.runtimeInputs;
-          }
+          } // clangToolchain.environment)
           ''
             set -euo pipefail
             mkdir -p "$out/lib"
@@ -712,6 +887,7 @@ PY
               ${concatStringsSep " " clangToolchain.defaultCxxFlags} \
               ${concatStringsSep " " combinedCxxFlags} \
               ${concatStringsSep " " objectPaths} \
+              ${concatStringsSep " " clangToolchain.defaultLdFlags} \
               ${concatStringsSep " " ldflags} \
               ${concatStringsSep " " publicAggregate.linkFlags} \
               -o "$out/lib/${sharedName}"
@@ -748,6 +924,111 @@ PY
       };
     };
 
+  mkPythonExtension =
+    { name
+    , moduleName ? name
+    , root ? ./.
+    , python
+    , sources
+    , includeDirs ? [ ]
+    , defines ? [ ]
+    , cxxFlags ? [ ]
+    , ldflags ? [ ]
+    , libraries ? [ ]
+    , depsManifest ? null
+    , scanner ? null
+    , generators ? [ ]
+    }:
+    let
+      rootPath = sanitizePath { path = root; };
+      generatorInfo = processGenerators generators;
+      libsPublic = collectPublic libraries;
+      pythonIncludeDir = builtins.path { path = "${python}/include/${python.libPrefix}"; };
+      pythonSitePackages = python.sitePackages or "lib/${python.libPrefix}/site-packages";
+      pythonLinkFlags =
+        if pkgs.stdenv.hostPlatform.isDarwin then
+          [ "-undefined" "dynamic_lookup" ]
+        else
+          [ "-L${python}/lib" "-Wl,-rpath,${python}/lib" "-l${python.libPrefix}" ];
+      pythonPublic = {
+        includeDirs = [ { path = pythonIncludeDir; } ];
+        defines = [ ];
+        cxxFlags = lib.optionals pkgs.stdenv.hostPlatform.isLinux [ "-fPIC" ];
+        linkFlags = pythonLinkFlags;
+      };
+      basePublic = mergePublic libsPublic generatorInfo.public;
+      publicAggregate = mergePublic basePublic pythonPublic;
+      combinedIncludeDirs = includeDirs ++ generatorInfo.includeDirs ++ publicAggregate.includeDirs;
+      combinedDefines = defines ++ generatorInfo.defines ++ publicAggregate.defines;
+      combinedCxxFlags = cxxFlags ++ generatorInfo.cxxFlags ++ publicAggregate.cxxFlags;
+      baseManifest =
+        if depsManifest != null then mkManifest depsManifest
+        else if scanner != null then mkManifest scanner
+        else emptyManifest;
+      manifest = mergeManifests baseManifest generatorInfo.manifest;
+      tus = normalizeSources { inherit root; sources = sources ++ generatorInfo.sources; };
+      objectInfos =
+        map
+          (tu:
+            let
+              headers = headerSet { inherit root manifest tu; overrides = generatorInfo.headerOverrides; };
+            in
+            compileTranslationUnit {
+              inherit root tu headers;
+              includeDirs = combinedIncludeDirs;
+              defines = combinedDefines;
+              cxxFlags = combinedCxxFlags;
+              extraInputs = generatorInfo.evalInputs;
+            })
+          tus;
+      objectPaths = map (info: info.object) objectInfos;
+      extensionName =
+        let
+          ext = if pkgs.stdenv.hostPlatform.isDarwin then "so" else "so";
+        in
+        "${moduleName}.${ext}";
+      extensionDrv =
+        pkgs.runCommand "python-extension-${name}"
+          ({
+            buildInputs = clangToolchain.runtimeInputs ++ [ python ];
+          } // clangToolchain.environment)
+          ''
+            set -euo pipefail
+            mkdir -p "$out/${pythonSitePackages}"
+            ${clangToolchain.cxx} \
+              -shared \
+              ${concatStringsSep " " clangToolchain.defaultCxxFlags} \
+              ${concatStringsSep " " combinedCxxFlags} \
+              ${concatStringsSep " " objectPaths} \
+              ${concatStringsSep " " clangToolchain.defaultLdFlags} \
+              ${concatStringsSep " " ldflags} \
+              ${concatStringsSep " " publicAggregate.linkFlags} \
+              -o "$out/${pythonSitePackages}/${extensionName}"
+          '';
+      compileCommands =
+        generateCompileCommands {
+          root = rootPath;
+          tus = tus;
+          includeDirs = combinedIncludeDirs;
+          defines = combinedDefines;
+          cxxFlags = combinedCxxFlags;
+        };
+    in
+    {
+      type = "python-extension";
+      inherit name python;
+      drv = extensionDrv;
+      extensionPath = "${extensionDrv}/${pythonSitePackages}/${extensionName}";
+      pythonPath = "${extensionDrv}/${pythonSitePackages}";
+      inherit manifest objectInfos compileCommands libraries generators;
+      public = publicAggregate;
+      passthru = {
+        inherit manifest objectInfos compileCommands libraries generators python moduleName;
+        pythonPath = "${extensionDrv}/${pythonSitePackages}";
+        extension = "${extensionDrv}/${pythonSitePackages}/${extensionName}";
+      };
+    };
+
   mkHeaderOnly =
     { name
     , includeDir
@@ -781,11 +1062,253 @@ PY
       };
     };
 
+  mkJinjaGenerator =
+    { name
+    , root ? ./. 
+    , templates
+    , globalContext ? { }
+    }:
+    let
+      pythonEnv = pkgs.python3.withPackages (ps: [ ps.jinja2 ]);
+      rootStr = builtins.toString root;
+      normalizeTemplate =
+        spec:
+        let
+          templateValue =
+            if spec ? template then spec.template
+            else if spec ? source then spec.source
+            else throw "mkJinjaGenerator: each template must provide `template`.";
+          templatePath =
+            if builtins.isPath templateValue then templateValue
+            else if builtins.isString templateValue then
+              builtins.path { path = "${rootStr}/${templateValue}"; }
+            else if builtins.isAttrs templateValue && templateValue ? path then
+              builtins.path { path = templateValue.path; }
+            else
+              throw "mkJinjaGenerator: unsupported template specification.";
+          outputRaw =
+            if spec ? output then spec.output
+            else throw "mkJinjaGenerator: each template must provide `output`.";
+          output =
+            if hasPrefix "./" outputRaw then removePrefix "./" outputRaw else outputRaw;
+          context =
+            if spec ? context then recursiveUpdate globalContext spec.context
+            else globalContext;
+          depsRaw =
+            if spec ? dependencies then spec.dependencies
+            else [ output ];
+          dependencies =
+            map (dep: if hasPrefix "./" dep then removePrefix "./" dep else dep) depsRaw;
+        in
+        {
+          template = builtins.toString templatePath;
+          inherit output context dependencies;
+        };
+      templateSpecs = map normalizeTemplate templates;
+      specJson = builtins.toJSON (map (spec: {
+        inherit (spec) template output dependencies context;
+      }) templateSpecs);
+      renderDrv =
+        pkgs.runCommand "jinja-${name}"
+          {
+            buildInputs = [ pythonEnv pkgs.coreutils ];
+            passAsFile = [ "spec" ];
+            spec = specJson;
+          }
+          ''
+            set -euo pipefail
+            mkdir -p "$out"
+            ${pythonEnv}/bin/python - "$specPath" "$out" <<'PY'
+import json
+import pathlib
+import sys
+from jinja2 import Template
+
+spec_path = pathlib.Path(sys.argv[1])
+out_dir = pathlib.Path(sys.argv[2])
+specs = json.loads(spec_path.read_text())
+
+for spec in specs:
+    template_path = pathlib.Path(spec["template"])
+    tpl = Template(template_path.read_text())
+    rendered = tpl.render(**spec["context"])
+    target = out_dir / spec["output"]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(rendered)
+PY
+          '';
+      headerExts = [ ".h" ".hh" ".hpp" ".hxx" ];
+      sourceExts = [ ".c" ".cc" ".cpp" ".cxx" ];
+      isOfExt = exts: file: builtins.any (ext: hasSuffix ext file) exts;
+      outputs =
+        map
+          (spec:
+            {
+              rel = spec.output;
+              path = "${renderDrv}/${spec.output}";
+              dependencies = spec.dependencies;
+            })
+          templateSpecs;
+      headers =
+        map (entry: {
+          rel = entry.rel;
+          path = entry.path;
+        })
+          (filter (entry: isOfExt headerExts entry.rel) outputs);
+      sources =
+        map (entry: {
+          rel = entry.rel;
+          store = entry.path;
+        })
+          (filter (entry: isOfExt sourceExts entry.rel) outputs);
+      manifest =
+        pkgs.writeText "jinja-${name}.manifest.json" (builtins.toJSON {
+          schema = 1;
+          units = builtins.listToAttrs (map (entry: {
+            name = entry.rel;
+            value = {
+              dependencies = entry.dependencies;
+            };
+          }) outputs);
+        });
+      includeDir = { path = renderDrv; };
+    in
+    {
+      inherit name renderDrv;
+      drv = renderDrv;
+      manifest = manifest;
+      headers = headers;
+      sources = sources;
+      includeDirs = [ includeDir ];
+      public = {
+        includeDirs = [ includeDir ];
+        defines = [ ];
+        cxxFlags = [ ];
+        linkFlags = [ ];
+      };
+      evalInputs = [ renderDrv ];
+    };
+
+  mkPkgConfigLibrary =
+    { name
+    , packages
+    , modules ? [ name ]
+    }:
+    let
+      pkgDirs = concatMap (pkg:
+        let
+          candidate = toPathLike pkg;
+        in
+        map (suffix: "${candidate}/${suffix}")
+          [ "lib/pkgconfig" "lib64/pkgconfig" "share/pkgconfig" ]
+      ) packages;
+      pkgConfigPath = concatStringsSep ":" pkgDirs;
+      moduleArgs = concatStringsSep " " (map lib.escapeShellArg modules);
+      nixDrv =
+        pkgs.runCommand "pkg-config-${name}.nix"
+          {
+            buildInputs = [ pkgs.pkg-config pkgs.python3 ] ++ packages;
+            PKG_CONFIG_PATH = pkgConfigPath;
+          }
+          ''
+            set -euo pipefail
+            cflags=$(${pkgs.pkg-config}/bin/pkg-config --cflags ${moduleArgs})
+            libs=$(${pkgs.pkg-config}/bin/pkg-config --libs ${moduleArgs})
+${pkgs.python3}/bin/python - "$cflags" "$libs" "$out" <<'PY'
+import shlex
+import sys
+
+cflags = shlex.split(sys.argv[1])
+libs = shlex.split(sys.argv[2])
+out_path = sys.argv[3]
+
+include_dirs = []
+defines = []
+cxx_flags = []
+for token in cflags:
+    if token.startswith('-I'):
+        include_dirs.append(token[2:])
+    elif token.startswith('-D'):
+        defines.append(token[2:])
+    else:
+        cxx_flags.append(token)
+
+link_flags = []
+for token in libs:
+    if token.startswith('-L') or token.startswith('-l') or token.startswith('-Wl'):
+        link_flags.append(token)
+    else:
+        link_flags.append(token)
+
+def dedup(seq):
+    out = []
+    seen = set()
+    for item in seq:
+        if item not in seen:
+            seen.add(item)
+            out.append(item)
+    return out
+
+include_dirs = dedup(include_dirs)
+defines = dedup(defines)
+cxx_flags = dedup(cxx_flags)
+link_flags = dedup(link_flags)
+
+def quote(s):
+    return s.replace('\\\\', '\\\\\\\\').replace('"', '\\\\"')
+
+with open(out_path, 'w') as fh:
+    fh.write("{\n")
+    fh.write("  includeDirs = [\n")
+    for dir in include_dirs:
+        fh.write(f'    (builtins.toPath "{quote(dir)}")\n')
+    fh.write("  ];\n")
+    fh.write("  defines = [\n")
+    for define in defines:
+        fh.write(f'    "{quote(define)}"\n')
+    fh.write("  ];\n")
+    fh.write("  cxxFlags = [\n")
+    for flag in cxx_flags:
+        fh.write(f'    "{quote(flag)}"\n')
+    fh.write("  ];\n")
+    fh.write("  linkFlags = [\n")
+    for flag in link_flags:
+        fh.write(f'    "{quote(flag)}"\n')
+    fh.write("  ];\n")
+    fh.write("}\n")
+PY
+          '';
+      info = import nixDrv;
+      includeDirAttrs = map (dir: { path = dir; }) info.includeDirs;
+      definesList = info.defines;
+    in
+    {
+      inherit name nixDrv;
+      drv = nixDrv;
+      public = {
+        includeDirs = includeDirAttrs;
+        defines = definesList;
+        cxxFlags = info.cxxFlags;
+        linkFlags = info.linkFlags;
+      };
+      passthru = {
+        inherit packages modules info;
+      };
+    };
+
 in
 {
   toolchains = {
     clang = clangToolchain;
   };
 
-  inherit mkDependencyScanner mkExecutable mkStaticLib mkSharedLib mkHeaderOnly;
+  inherit mkDependencyScanner mkExecutable mkStaticLib mkSharedLib mkPythonExtension mkHeaderOnly;
+
+  generators = {
+    jinja = mkJinjaGenerator;
+  };
+
+  pkgConfig = {
+    makeLibrary = mkPkgConfigLibrary;
+  };
 }

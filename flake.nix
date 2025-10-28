@@ -5,7 +5,7 @@
 
   outputs = { self, nixpkgs }:
     let
-      systems = [ "x86_64-linux" "aarch64-darwin" ];
+      systems = [ "x86_64-linux" "aarch64-darwin" "aarch64-linux" ];
       forAllSystems = f:
         nixpkgs.lib.genAttrs systems (system:
           let
@@ -13,9 +13,10 @@
               inherit system;
             };
             cpp = import ./nix/cpp { inherit pkgs; };
-            example = import ./examples/simple { inherit pkgs cpp; };
+            simple = import ./examples/simple { inherit pkgs cpp; };
+            pythonExtension = import ./examples/python-extension { inherit pkgs cpp; };
           in
-          f { inherit pkgs cpp example; }
+          f { inherit pkgs cpp simple pythonExtension; }
         );
     in
     {
@@ -23,19 +24,21 @@
         cpp = import ./nix/cpp;
       };
 
-      packages = forAllSystems ({ pkgs, cpp, example }:
-        example.packages // {
-          default = example.packages.strict;
+      packages = forAllSystems ({ pkgs, cpp, simple, pythonExtension }:
+        simple.packages // pythonExtension.packages // {
+          default = simple.packages.strict;
         }
       );
 
-      checks = forAllSystems ({ pkgs, cpp, example }:
-        example.checks // {
-          simpleScanManifest = example.scannedManifest;
+      checks = forAllSystems ({ pkgs, cpp, simple, pythonExtension }:
+        simple.checks
+        // pythonExtension.checks
+        // {
+          simpleScanManifest = simple.scannedManifest;
         }
       );
 
-      apps = forAllSystems ({ pkgs, cpp, example }:
+      apps = forAllSystems ({ pkgs, cpp, simple, pythonExtension }:
         let
           syncManifest = pkgs.writeShellApplication {
             name = "sync-manifest";
@@ -80,7 +83,7 @@ USAGE
         }
       );
 
-      devShells = forAllSystems ({ pkgs, cpp, example }:
+      devShells = forAllSystems ({ pkgs, cpp, simple, pythonExtension }:
         {
           default = pkgs.mkShell {
             packages = [

@@ -47,7 +47,8 @@ This implementation mirrors the plan outlined in the original discussion:
 
 Future features can slot into the same shape:
 
-- **Code generators** plug in via the `generators` array; next up is shipping canned helpers (protobuf, FlatBuffers, etc.) that emit manifests automatically.
+- **Code generators** plug in via the `generators` array. A Jinja template renderer ships today; future work can add protoc/FlatBuffers adapters that emit manifests automatically.
+- **CPython extensions** compile through `mkPythonExtension`, which wraps the shared-library path and site-packages layout so the resulting `.so` can be imported without setuptools.
 - **ThinLTO / PGO**: treat IR bitcode as another per-TU artefact, followed by a final optimization derivation.
 - **Batching**: group translation units by coarse granularity if derivation counts become excessive—`linkFarm` already supports merging multiple files per derivation.
 

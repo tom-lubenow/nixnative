@@ -9,7 +9,8 @@ Incremental, deterministic C/C++ builds driven directly by Nix. This repository 
 - **Dependency scanner (optional).** A dedicated scanner derivation runs `clang++ -MMD` to discover header/module dependencies and emits a JSON manifest. Keep the JSON in your repo for strict CI builds or import it dynamically via IFD for developer convenience.
 - **`compile_commands.json` passthrough.** Every build target exposes a generated compilation database for editor tooling.
 - **Structured libraries.** `mkStaticLib`, `mkSharedLib`, and `mkHeaderOnly` propagate link flags and public include directories so downstream targets can consume your outputs without manual `-L/-l` churn.
-- **Generator pipeline.** Attach derivations that emit headers/sources (plus manifests) to executables or libraries; include paths, defines, and link flags flow through automatically.
+- **Generator pipeline.** Attach derivations (e.g. the built-in Jinja template renderer) that emit headers/sources (plus manifests) to executables or libraries; include paths, defines, and link flags flow through automatically.
+- **Python extensions.** `mkPythonExtension` compiles CPython modules to the right site-packages layout with zero distutils glue, so you can `import` them straight from the Nix store.
 
 ## Repository layout
 
@@ -51,6 +52,24 @@ Run the full test suite (builds both variants and runs smoke tests):
 nix flake check
 ```
 
+### Build the Python extension example
+
+```sh
+# build the CPython module
+nix build .#pythonExtension
+
+# import it with the right PYTHONPATH
+storePath=$(nix build .#pythonExtension --no-link --print-out-paths)
+STORE_PATH=$storePath python - <<'PY'
+import os, pathlib, sys, sysconfig
+store = pathlib.Path(os.environ['STORE_PATH'])
+site_packages = store / sysconfig.get_paths()['platlib']
+sys.path.insert(0, str(site_packages))
+import hello_ext
+print(hello_ext.greet('Nix'))
+PY
+```
+
 ### Use the library in another flake
 
 ```nix
@@ -69,25 +88,39 @@ nix flake check
         depsManifest = ./math.deps.json;
       };
 
-      versionHeaders = pkgs.runCommand "generate-version" { } ''
-        set -euo pipefail
-        mkdir -p "$out/include/generated"
-        cat > "$out/include/generated/version.hpp" <<'EOF'
-#pragma once
-inline constexpr int generated_version() { return 7; }
-EOF
-      '';
+      buildInfo = cpp.generators.jinja {
+        name = "build-info";
+        root = ./.
+        globalContext = {
+          projectName = "demo-app";
+          version = {
+            major = 1;
+            minor = 2;
+            patch = 3;
+          };
+        };
+        templates = [
+          {
+            template = "templates/build_info.hpp.j2";
+            output = "generated/build_info.hpp";
+            context = { mode = "strict"; };
+          }
+          {
+            template = "templates/build_info.cc.j2";
+            output = "generated/build_info.cc";
+            context = { mode = "strict"; };
+            dependencies = [
+              "generated/build_info.cc"
+              "generated/build_info.hpp"
+            ];
+          }
+        ];
+      };
 
-      versionManifest = pkgs.writeText "version.manifest.json" (builtins.toJSON {
-        schema = 1;
-        units."src/main.cc".dependencies = [ "generated/version.hpp" ];
-      });
-
-      versionGen = {
-        drv = versionHeaders;
-        manifest = versionManifest;
-        headers = [{ rel = "generated/version.hpp"; path = "${versionHeaders}/include/generated/version.hpp"; }];
-        public.includeDirs = [{ path = "${versionHeaders}/include"; }];
+      zlib = cpp.pkgConfig.makeLibrary {
+        name = "zlib";
+        packages = [ pkgs.zlib ];
+        modules = [ "zlib" ];
       };
     in {
       my-app = cpp.mkExecutable {
@@ -96,8 +129,8 @@ EOF
         sources = [ "src/main.cc" ];
         includeDirs = [ "include" ];
         depsManifest = ./app.deps.json;  # or scanner = cpp.mkDependencyScanner { ... };
-        libraries = [ math ];
-        generators = [ versionGen ];
+        libraries = [ math zlib ];
+        generators = [ buildInfo ];
         cxxFlags = [ "-O2" ];
       };
     };
@@ -156,7 +189,7 @@ The JSON format is intentionally simple:
 
 ## Next steps
 
-- Expose helpers for code generators (e.g. protobuf) so their outputs can slot into the dependency graph automatically.
+- Expand the generator toolkit (the Jinja helper is a start; protoc/FlatBuffers adapters would round things out).
 - Emit richer `compile_commands.json` metadata (e.g. per-file `-working-directory`).
 - Ship a `watch` CLI that keeps evaluation warm for sub-second rebuilds during development.
 

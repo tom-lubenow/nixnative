@@ -9,41 +9,44 @@ let
   ];
   includeDirs = [ "include" ];
 
-  versionGen = let
-    headerDrv = pkgs.runCommand "version-header" { } ''
-      set -euo pipefail
-      mkdir -p "$out/include/generated"
-      cat > "$out/include/generated/version.hpp" <<'EOF'
-#pragma once
-
-inline constexpr int generated_version() {
-  return 7;
-}
-EOF
-    '';
-    manifestDrv = pkgs.writeText "version-manifest.json" (builtins.toJSON {
-      schema = 1;
-      units = {
-        "src/main.cc" = {
-          dependencies = [ "generated/version.hpp" ];
+  mkBuildInfoGenerator =
+    mode:
+    cpp.generators.jinja {
+      name = "build-info-${mode}";
+      inherit root;
+      globalContext = {
+        projectName = "nixclang-simple";
+        version = {
+          major = 1;
+          minor = 0;
+          patch = 0;
         };
       };
-    });
-  in {
-    drv = headerDrv;
-    manifest = manifestDrv;
-    headers = [
-      {
-        rel = "generated/version.hpp";
-        path = "${headerDrv}/include/generated/version.hpp";
-      }
-    ];
-    public = {
-      includeDirs = [ { path = "${headerDrv}/include"; } ];
-      defines = [ ];
-      cxxFlags = [ ];
-      linkFlags = [ ];
+      templates = [
+        {
+          template = "templates/build_info.hpp.j2";
+          output = "generated/build_info.hpp";
+          context = { inherit mode; };
+        }
+        {
+          template = "templates/build_info.cc.j2";
+          output = "generated/build_info.cc";
+          context = { inherit mode; };
+          dependencies = [
+            "generated/build_info.cc"
+            "generated/build_info.hpp"
+          ];
+        }
+      ];
     };
+
+  buildInfoStrict = mkBuildInfoGenerator "strict";
+  buildInfoScanned = mkBuildInfoGenerator "scanner";
+
+  zlibLib = cpp.pkgConfig.makeLibrary {
+    name = "zlib";
+    packages = [ pkgs.zlib ];
+    modules = [ "zlib" ];
   };
 
   mathLib = cpp.mkStaticLib {
@@ -56,30 +59,28 @@ EOF
 
   strict = cpp.mkExecutable {
     name = "simple-strict";
-    root = root;
+    inherit root includeDirs;
     sources = [ "src/main.cc" ];
-    includeDirs = includeDirs;
     depsManifest = ./deps.json;
-    libraries = [ mathLib ];
-    generators = [ versionGen ];
+    libraries = [ mathLib zlibLib ];
+    generators = [ buildInfoStrict ];
   };
-
-  scannerIncludeDirs = includeDirs ++ [ { path = "${versionGen.drv}/include"; } ];
 
   scannedManifest = cpp.mkDependencyScanner {
     name = "simple-scanner";
     inherit root sources;
-    includeDirs = scannerIncludeDirs;
+    includeDirs = includeDirs;
+    libraries = [ zlibLib ];
+    generators = [ buildInfoScanned ];
   };
 
   scanned = cpp.mkExecutable {
     name = "simple-scanned";
-    root = root;
+    inherit root includeDirs;
     sources = [ "src/main.cc" ];
-    includeDirs = includeDirs;
     scanner = scannedManifest;
-    libraries = [ mathLib ];
-    generators = [ versionGen ];
+    libraries = [ mathLib zlibLib ];
+    generators = [ buildInfoScanned ];
   };
 
   mkRunCheck = { drv, expectedLines, name }:
@@ -98,13 +99,23 @@ EOF
 
   strictCheck = mkRunCheck {
     drv = strict;
-    expectedLines = [ "2 + 3 = 5" "4 * 5 = 20" "generated version = 7" ];
+    expectedLines = [
+      "2 + 3 = 5"
+      "4 * 5 = 20"
+      "build summary: nixclang-simple v1.0.0 (mode=strict)"
+      "zlib version: "
+    ];
     name = "simple-strict";
   };
 
   scannedCheck = mkRunCheck {
     drv = scanned;
-    expectedLines = [ "2 + 3 = 5" "4 * 5 = 20" "generated version = 7" ];
+    expectedLines = [
+      "2 + 3 = 5"
+      "4 * 5 = 20"
+      "build summary: nixclang-simple v1.0.0 (mode=scanner)"
+      "zlib version: "
+    ];
     name = "simple-scanned";
   };
 
@@ -120,5 +131,5 @@ in
     simpleScanned = scannedCheck;
   };
 
-  inherit scannedManifest mathLib versionGen;
+  inherit scannedManifest mathLib buildInfoStrict buildInfoScanned zlibLib;
 }

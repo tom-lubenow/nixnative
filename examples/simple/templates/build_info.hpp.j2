@@ -1,0 +1,18 @@
+#pragma once
+
+#include <stddef.h>
+#include <cstddef>
+#include <string>
+#include <string_view>
+
+namespace generated {
+struct BuildInfo {
+  static constexpr std::string_view project_name = "{{ projectName }}";
+  static constexpr std::string_view build_mode = "{{ mode }}";
+  static constexpr int version_major = {{ version.major }};
+  static constexpr int version_minor = {{ version.minor }};
+  static constexpr int version_patch = {{ version.patch }};
+};
+
+std::string build_summary();
+}  // namespace generated
