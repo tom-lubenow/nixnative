@@ -9,7 +9,7 @@ Incremental, deterministic C/C++ builds driven directly by Nix. This repository 
 - **Dependency scanner (optional).** A dedicated scanner derivation runs `clang++ -MMD` to discover header/module dependencies and emits a JSON manifest. Keep the JSON in your repo for strict CI builds or import it dynamically via IFD for developer convenience.
 - **`compile_commands.json` passthrough.** Every build target exposes a generated compilation database for editor tooling.
 - **Structured libraries.** `mkStaticLib`, `mkSharedLib`, and `mkHeaderOnly` propagate link flags and public include directories so downstream targets can consume your outputs without manual `-L/-l` churn.
-- **Generator pipeline.** Attach derivations (for example the Jinja renderer shown in `examples/simple/`) that emit headers/sources (plus manifests) to executables or libraries; include paths, defines, and link flags flow through automatically.
+- **Generator pipeline.** Attach derivations (for example the Jinja renderer shown in `examples/app-with-library/`) that emit headers/sources (plus manifests) to executables or libraries; include paths, defines, and link flags flow through automatically.
 - **Pluggable toolchains.** Pass `toolchain = myClang;` into any builder to swap in a different clang/LLVM bundle while keeping the per-TU graph intact.
 - **Python extensions.** `mkPythonExtension` compiles CPython modules to the right site-packages layout with zero distutils glue, so you can `import` them straight from the Nix store.
 
@@ -22,16 +22,34 @@ Incremental, deterministic C/C++ builds driven directly by Nix. This repository 
 ├── nix/
 │   └── cpp/default.nix        # core library (`mkExecutable`, scanners, toolchain)
 ├── examples/
-│   └── simple/                # sample project + tests
-│       ├── include/
-│       ├── src/
-│       ├── deps.json          # strict-mode manifest
-│       └── default.nix        # exposes packages/checks used by the flake
+│   ├── app-with-library/      # executable + static lib + generated sources
+│   ├── executable/            # minimal executable target
+│   ├── library/               # reusable static library
+│   └── python-extension/      # CPython module built with mkPythonExtension
 └── docs/
     └── ...                    # architectural notes (to be expanded)
 ```
 
 ## Quick start
+
+### Example flakes
+
+Each directory under `examples/` contains a self-contained flake template. You can copy any of them into a new repository (or run them in place) and simply replace the sources/generators while reusing the nixclang library. For example:
+
+- `examples/executable` – minimal strict-mode executable with TU-level recompilation.
+- `examples/library` – static library that exposes public headers and ships a smoke-test that links against it.
+- `examples/app-with-library` – executable + internal library + generated sources (mirrors the top-level packages `simple-strict`/`simple-scanned`).
+- `examples/python-extension` – CPython extension module built via `mkPythonExtension`.
+
+To build one of them directly:
+
+```sh
+cd examples/executable
+nix build
+./result/bin/executable-example
+```
+
+Back at the root flake the same packages are exposed as `.#executableExample`, `.#mathLibrary`, `.#simple-strict`, `.#pythonExtension`, etc.
 
 ### Build the example
 
@@ -116,7 +134,7 @@ PY
 }
 ```
 
-`nix/build-info-generator.nix` should return an attrset matching the generator shape (`manifest`, `headers`, `sources`, `includeDirs`, `public`, `evalInputs`). See `examples/simple/default.nix` for a full Jinja-based implementation.
+`nix/build-info-generator.nix` should return an attrset matching the generator shape (`manifest`, `headers`, `sources`, `includeDirs`, `public`, `evalInputs`). See `examples/app-with-library/project.nix` for a full Jinja-based implementation.
 
 
 ### Dev shell
@@ -133,7 +151,7 @@ The shell provides the pinned clang18 toolchain plus `nix`/`git` for day-to-day 
 Need to refresh a checked-in `deps.json` after a scanner run? Use the helper app:
 
 ```sh
-nix run .#cpp-sync-manifest -- .#checks.$(nix eval --raw --impure --expr 'builtins.currentSystem').simpleScanManifest examples/simple/deps.json
+nix run .#cpp-sync-manifest -- .#checks.$(nix eval --raw --impure --expr 'builtins.currentSystem').simpleScanManifest examples/app-with-library/deps.json
 ```
 
 Pass any additional `nix build` flags after the destination path (for example `--refresh`).

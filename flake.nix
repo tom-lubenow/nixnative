@@ -13,10 +13,9 @@
               inherit system;
             };
             cpp = import ./nix/cpp { inherit pkgs; };
-            simple = import ./examples/simple { inherit pkgs cpp; };
-            pythonExtension = import ./examples/python-extension { inherit pkgs cpp; };
+            examples = import ./examples/examples.nix { inherit pkgs cpp; };
           in
-          f { inherit pkgs cpp simple pythonExtension; }
+          f { inherit pkgs cpp examples; }
         );
     in
     {
@@ -24,21 +23,19 @@
         cpp = import ./nix/cpp;
       };
 
-      packages = forAllSystems ({ pkgs, cpp, simple, pythonExtension }:
-        simple.packages // pythonExtension.packages // {
-          default = simple.packages.strict;
+      packages = forAllSystems ({ examples, ... }:
+        examples.packages // {
+          default = examples.defaults.app;
         }
       );
 
-      checks = forAllSystems ({ pkgs, cpp, simple, pythonExtension }:
-        simple.checks
-        // pythonExtension.checks
-        // {
-          simpleScanManifest = simple.scannedManifest;
+      checks = forAllSystems ({ examples, ... }:
+        examples.checks // {
+          simpleScanManifest = examples.manifests.appWithLibrary;
         }
       );
 
-      apps = forAllSystems ({ pkgs, cpp, simple, pythonExtension }:
+      apps = forAllSystems ({ pkgs, examples, ... }:
         let
           syncManifest = pkgs.writeShellApplication {
             name = "sync-manifest";
@@ -51,7 +48,7 @@
 Usage: sync-manifest <flake-attr> <destination> [nix build args...]
 
 Example:
-  nix run .#cpp-sync-manifest -- .#checks.x86_64-linux.simpleScanManifest examples/simple/deps.json
+  nix run .#cpp-sync-manifest -- .#checks.x86_64-linux.simpleScanManifest examples/app-with-library/deps.json
 USAGE
               }
 
@@ -83,7 +80,7 @@ USAGE
         }
       );
 
-      devShells = forAllSystems ({ pkgs, cpp, simple, pythonExtension }:
+      devShells = forAllSystems ({ pkgs, cpp, ... }:
         {
           default = pkgs.mkShell {
             packages = [

@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "units": {
+    "src/math.cc": {
+      "dependencies": [
+        "src/math.cc",
+        "include/math.hpp"
+      ]
+    }
+  }
+}
