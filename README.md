@@ -9,7 +9,8 @@ Incremental, deterministic C/C++ builds driven directly by Nix. This repository 
 - **Dependency scanner (optional).** A dedicated scanner derivation runs `clang++ -MMD` to discover header/module dependencies and emits a JSON manifest. Keep the JSON in your repo for strict CI builds or import it dynamically via IFD for developer convenience.
 - **`compile_commands.json` passthrough.** Every build target exposes a generated compilation database for editor tooling.
 - **Structured libraries.** `mkStaticLib`, `mkSharedLib`, and `mkHeaderOnly` propagate link flags and public include directories so downstream targets can consume your outputs without manual `-L/-l` churn.
-- **Generator pipeline.** Attach derivations (e.g. the built-in Jinja template renderer) that emit headers/sources (plus manifests) to executables or libraries; include paths, defines, and link flags flow through automatically.
+- **Generator pipeline.** Attach derivations (for example the Jinja renderer shown in `examples/simple/`) that emit headers/sources (plus manifests) to executables or libraries; include paths, defines, and link flags flow through automatically.
+- **Pluggable toolchains.** Pass `toolchain = myClang;` into any builder to swap in a different clang/LLVM bundle while keeping the per-TU graph intact.
 - **Python extensions.** `mkPythonExtension` compiles CPython modules to the right site-packages layout with zero distutils glue, so you can `import` them straight from the Nix store.
 
 ## Repository layout
@@ -88,34 +89,10 @@ PY
         depsManifest = ./math.deps.json;
       };
 
-      buildInfo = cpp.generators.jinja {
-        name = "build-info";
-        root = ./.
-        globalContext = {
-          projectName = "demo-app";
-          version = {
-            major = 1;
-            minor = 2;
-            patch = 3;
-          };
-        };
-        templates = [
-          {
-            template = "templates/build_info.hpp.j2";
-            output = "generated/build_info.hpp";
-            context = { mode = "strict"; };
-          }
-          {
-            template = "templates/build_info.cc.j2";
-            output = "generated/build_info.cc";
-            context = { mode = "strict"; };
-            dependencies = [
-              "generated/build_info.cc"
-              "generated/build_info.hpp"
-            ];
-          }
-        ];
-      };
+      buildInfo = import ./nix/build-info-generator.nix {
+        inherit pkgs;
+        mode = "strict";
+      }; # returns { manifest, headers, sources, includeDirs, public, evalInputs }
 
       zlib = cpp.pkgConfig.makeLibrary {
         name = "zlib";
@@ -132,11 +109,15 @@ PY
         libraries = [ math zlib ];
         generators = [ buildInfo ];
         cxxFlags = [ "-O2" ];
+        # toolchain = myCustomClang; # optional override
       };
     };
   };
 }
 ```
+
+`nix/build-info-generator.nix` should return an attrset matching the generator shape (`manifest`, `headers`, `sources`, `includeDirs`, `public`, `evalInputs`). See `examples/simple/default.nix` for a full Jinja-based implementation.
+
 
 ### Dev shell
 
