@@ -2,18 +2,23 @@
   description = "Incremental clang build graph using Nix per translation unit";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+  inputs.nixpkgs-25-05.url = "github:NixOS/nixpkgs/nixos-25.05";
+  inputs.crane.url = "github:ipetkov/crane/v0.16.1";
+  inputs.crane.inputs.nixpkgs.follows = "nixpkgs-25-05";
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, nixpkgs-25-05, crane }:
     let
       systems = [ "x86_64-linux" "aarch64-darwin" "aarch64-linux" ];
       forAllSystems = f:
         nixpkgs.lib.genAttrs systems (system:
           let
-            pkgs = import nixpkgs {
-              inherit system;
-            };
+            pkgs = import nixpkgs { inherit system; };
             cpp = import ./nix/cpp { inherit pkgs; };
-            examples = import ./examples/examples.nix { inherit pkgs cpp; };
+            craneLib = crane.lib.${system};
+            examples = import ./examples/examples.nix {
+              inherit pkgs cpp system;
+              inherit craneLib;
+            };
           in
           f { inherit pkgs cpp examples; }
         );

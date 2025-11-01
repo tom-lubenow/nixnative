@@ -40,6 +40,8 @@ Each directory under `examples/` contains a self-contained flake template. You c
 - `examples/library` – static library exposing public headers and a smoke-test that links against it.
 - `examples/app-with-library` – executable + internal library + generated sources with a checked-in `.clang-deps.nix` manifest (mirrors `.#simple-strict`/`.#simple-scanned`).
 - `examples/python-extension` – CPython extension module built via `mkPythonExtension`.
+- `examples/rust-integration` – executable that links against a Rust static library built via a minimal `rustc` invocation.
+- `examples/rust-integration-crane` – same idea, but the Rust library is built with `crane` for a Cargo-first workflow using nixpkgs 25.05.
 
 To build one of them directly:
 

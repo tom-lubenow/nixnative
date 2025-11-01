@@ -1,4 +1,8 @@
-{ pkgs, cpp }:
+{ pkgs
+, cpp
+, system ? pkgs.stdenv.hostPlatform.system
+, craneLib ? null
+}:
 
 let
   materialize = pkg:
@@ -25,6 +29,22 @@ let
   pythonChecks = import ./python-extension/checks.nix { inherit pkgs; packages = pythonPackagesRaw; };
   pythonPackages = materializeSet pythonPackagesRaw;
 
+  rustPackagesRaw = import ./rust-integration/project.nix { inherit pkgs cpp; };
+  rustChecks = import ./rust-integration/checks.nix { inherit pkgs; packages = rustPackagesRaw; };
+  rustPackages = materializeSet rustPackagesRaw;
+
+  rustCranePackagesRaw =
+    if craneLib != null then
+      import ./rust-integration-crane/project.nix { inherit pkgs cpp craneLib; }
+    else
+      { };
+  rustCraneChecks =
+    if craneLib != null then
+      import ./rust-integration-crane/checks.nix { inherit pkgs; packages = rustCranePackagesRaw; }
+    else
+      { };
+  rustCranePackages = materializeSet rustCranePackagesRaw;
+
   mergeAttrs = attrsList: pkgs.lib.foldl' (acc: attrs: acc // attrs) { } attrsList;
 
 in {
@@ -33,6 +53,8 @@ in {
     libraryPackages
     pythonPackages
     appPackages
+    rustPackages
+    rustCranePackages
   ];
 
   checks = mergeAttrs [
@@ -40,6 +62,8 @@ in {
     libraryChecks
     appChecks
     pythonChecks
+    rustChecks
+    rustCraneChecks
   ];
 
   defaults = {
@@ -47,5 +71,9 @@ in {
     library = materialize libraryPackagesRaw.mathLibrary;
     app = appPackagesRaw.strict;
     pythonExtension = materialize pythonPackagesRaw.pythonExtension;
+    rustInterop = materialize rustPackagesRaw.rustInteropExample;
+    rustInteropCrane =
+      if rustCranePackagesRaw ? rustCraneInterop then materialize rustCranePackagesRaw.rustCraneInterop
+      else null;
   };
 }

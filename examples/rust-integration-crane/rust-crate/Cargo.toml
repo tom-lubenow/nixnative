@@ -1,0 +1,10 @@
+[package]
+name = "nixclang-rust-crane"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "nixclang_rust_crane"
+crate-type = ["staticlib"]
+
+[dependencies]

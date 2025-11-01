@@ -1,0 +1,3 @@
+[[package]]
+name = "nixclang-rust-crane"
+version = "0.1.0"
