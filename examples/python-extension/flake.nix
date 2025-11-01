@@ -11,16 +11,15 @@
         let
           pkgs = import nixpkgs { inherit system; };
           cpp = nixclang.lib.cpp { inherit pkgs; };
-          example = import ./project.nix { inherit pkgs cpp; };
-        in f { inherit pkgs cpp example; }
+          packages = import ./project.nix { inherit pkgs cpp; };
+          checks = import ./checks.nix { inherit pkgs; packages = packages; };
+        in f { inherit pkgs cpp packages checks; }
       );
     in {
-      packages = forAllSystems ({ example, ... }:
-        example.packages // {
-          default = example.packages.pythonExtension;
-        }
-      );
+      packages = forAllSystems ({ packages, ... }: packages // {
+        default = packages.pythonExtension;
+      });
 
-      checks = forAllSystems ({ example, ... }: example.checks);
+      checks = forAllSystems ({ checks, ... }: checks);
     };
 }

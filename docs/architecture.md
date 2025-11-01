@@ -31,6 +31,7 @@ This implementation mirrors the plan outlined in the original discussion:
 ## Tooling outputs
 
 - `compile_commands.json` is generated directly from the normalized TU metadata so editors can plug into clangd without extra configuration.
+- `mkDevShell` consumes any build target (library/executable/etc.) and spawns a shell with the matching toolchain, linking the target’s `compile_commands.json` automatically so `clangd` sees the right flags.
 - Each build target exposes:
   - `passthru.objectInfos`: introspection (headers, include flags, TU source roots).
   - `passthru.manifest`: the manifest JSON used for the build (helpful when comparing scanner output vs. checked-in data).

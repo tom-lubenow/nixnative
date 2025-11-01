@@ -1058,6 +1058,35 @@ PY
       };
     };
 
+  mkDevShell =
+    { target
+    , extraPackages ? [ ]
+    , linkCompileCommands ? true
+    , symlinkName ? "compile_commands.json"
+    }:
+    let
+      tc = target.passthru.toolchain or clangToolchain;
+      compileCommands = target.passthru.compileCommands or null;
+      packages = pkgs.lib.unique (
+        tc.runtimeInputs
+        ++ [ tc.clang ]
+        ++ extraPackages
+      );
+      linkHook =
+        if linkCompileCommands && compileCommands != null then
+          ''
+            if [ ! -e ${symlinkName} ] || [ "$(readlink ${symlinkName} 2>/dev/null)" != "${compileCommands}" ]; then
+              ln -sf ${compileCommands} ${symlinkName}
+              echo "Linked ${symlinkName} -> ${compileCommands}" >&2
+            fi
+          ''
+        else "";
+    in
+    pkgs.mkShell {
+      inherit packages;
+      shellHook = pkgs.lib.optionalString (linkHook != "") linkHook;
+    };
+
   mkHeaderOnly =
     { name
     , includeDir
@@ -1205,6 +1234,8 @@ in
   };
 
   inherit mkDependencyScanner mkExecutable mkStaticLib mkSharedLib mkPythonExtension mkHeaderOnly;
+
+  inherit mkDevShell;
 
   pkgConfig = {
     makeLibrary = mkPkgConfigLibrary;

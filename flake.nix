@@ -30,9 +30,7 @@
       );
 
       checks = forAllSystems ({ examples, ... }:
-        examples.checks // {
-          simpleScanManifest = examples.manifests.appWithLibrary;
-        }
+        examples.checks
       );
 
       apps = forAllSystems ({ pkgs, examples, ... }:
@@ -80,18 +78,11 @@ USAGE
         }
       );
 
-      devShells = forAllSystems ({ pkgs, cpp, ... }:
+      devShells = forAllSystems ({ pkgs, cpp, examples }:
         {
-          default = pkgs.mkShell {
-            packages = [
-              cpp.toolchains.clang.clang
-              pkgs.llvmPackages_18.lld
-              pkgs.nix
-              pkgs.git
-            ];
-            shellHook = ''
-              echo "nixclang dev shell loaded"
-            '';
+          default = cpp.mkDevShell {
+            target = examples.defaults.app;
+            extraPackages = [ pkgs.nix pkgs.git ];
           };
         }
       );

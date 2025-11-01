@@ -1,5 +1,5 @@
 {
-  description = "Template: executable + library with generated sources";
+  description = "Template: executable + static library with generated sources";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
   inputs.nixclang.url = "path:../..";
@@ -11,16 +11,15 @@
         let
           pkgs = import nixpkgs { inherit system; };
           cpp = nixclang.lib.cpp { inherit pkgs; };
-          example = import ./project.nix { inherit pkgs cpp; };
-        in f { inherit pkgs cpp example; }
+          packages = import ./project.nix { inherit pkgs cpp; };
+          checks = import ./checks.nix { inherit pkgs; packages = packages; };
+        in f { inherit pkgs cpp packages checks; }
       );
     in {
-      packages = forAllSystems ({ example, ... }:
-        example.packages // {
-          default = example.packages.strict;
-        }
-      );
+      packages = forAllSystems ({ packages, ... }: packages // {
+        default = packages.strict;
+      });
 
-      checks = forAllSystems ({ example, ... }: example.checks);
+      checks = forAllSystems ({ checks, ... }: checks);
     };
 }

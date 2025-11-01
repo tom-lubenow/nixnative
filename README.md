@@ -142,9 +142,14 @@ PY
 ```sh
 nix develop
 clang++ --version
+ls -l compile_commands.json
 ```
 
-The shell provides the pinned clang18 toolchain plus `nix`/`git` for day-to-day editing.
+`nix develop` now uses `cpp.mkDevShell`, which:
+
+- Drops you into a shell with the toolchain associated with the default app (`examples.defaults.app`).
+- Automatically symlinks `compile_commands.json` to the selected target’s database so `clangd` works out of the box.
+- Lets you target a different derivation by calling `cpp.mkDevShell { target = …; }` in your own flake (add `extraPackages` for editors, etc.).
 
 ### Sync dependency manifests
 

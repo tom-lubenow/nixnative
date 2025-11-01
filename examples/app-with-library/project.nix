@@ -112,70 +112,22 @@ PY
     generators = [ buildInfoStrict ];
   };
 
-  scannedManifest = cpp.mkDependencyScanner {
-    name = "simple-scanner";
-    inherit root sources;
-    includeDirs = includeDirs;
-    libraries = [ zlibLib ];
-    generators = [ buildInfoScanned ];
-  };
-
   scanned = cpp.mkExecutable {
     name = "simple-scanned";
     inherit root includeDirs;
     sources = [ "src/main.cc" ];
-    scanner = scannedManifest;
+    scanner = cpp.mkDependencyScanner {
+      name = "simple-scanner";
+      inherit root sources includeDirs;
+      libraries = [ zlibLib ];
+      generators = [ buildInfoScanned ];
+    };
     libraries = [ mathLib zlibLib ];
     generators = [ buildInfoScanned ];
   };
 
-  mkRunCheck = { drv, expectedLines, name }:
-    let
-      assertions = lib.concatStringsSep "\n"
-        (map (line: "${pkgs.gnugrep}/bin/grep -F ${lib.escapeShellArg line} \"$tmp\" >/dev/null") expectedLines);
-    in
-    pkgs.runCommand name { } ''
-      set -euo pipefail
-      tmp=$TMP/result
-      ${drv}/bin/${name} > "$tmp"
-      ${assertions}
-      mkdir -p "$out"
-      cp "$tmp" "$out/output.txt"
-    '';
-
-  strictCheck = mkRunCheck {
-    drv = strict;
-    expectedLines = [
-      "2 + 3 = 5"
-      "4 * 5 = 20"
-      "build summary: nixclang-simple v1.0.0 (mode=strict)"
-      "zlib version: "
-    ];
-    name = "simple-strict";
-  };
-
-  scannedCheck = mkRunCheck {
-    drv = scanned;
-    expectedLines = [
-      "2 + 3 = 5"
-      "4 * 5 = 20"
-      "build summary: nixclang-simple v1.0.0 (mode=scanner)"
-      "zlib version: "
-    ];
-    name = "simple-scanned";
-  };
-
-in
-{
-  packages = {
-    mathLib = mathLib.drv;
-    inherit strict scanned;
-  };
-
-  checks = {
-    simpleStrict = strictCheck;
-    simpleScanned = scannedCheck;
-  };
-
-  inherit scannedManifest mathLib buildInfoStrict buildInfoScanned zlibLib;
+in {
+  strict = strict;
+  scanned = scanned;
+  mathLib = mathLib.drv;
 }
