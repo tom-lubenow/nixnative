@@ -6,7 +6,7 @@ Incremental, deterministic C/C++ builds driven directly by Nix. This repository 
 
 - **Per translation unit derivations.** Each `.cc` file becomes its own derivation that compiles to an object file. Touching a source or header only rebuilds the affected units.
 - **Hermetic clang toolchain.** We vendor LLVM 18 from `nixpkgs` so compilation flags and target triple are part of the cache key.
-- **Dependency scanner (optional).** A dedicated scanner derivation runs `clang++ -MMD` to discover header/module dependencies and emits a JSON manifest. Keep the JSON in your repo for strict CI builds or import it dynamically via IFD for developer convenience.
+- **Dependency scanner (automatic).** When you omit a manifest nixclang spins up a dedicated `clang++ -MMD` scanner derivation to discover header/module dependencies. Use it directly (IFD) or materialize the result into `.clang-deps.nix` for strict CI.
 - **`compile_commands.json` passthrough.** Every build target exposes a generated compilation database for editor tooling.
 - **Structured libraries.** `mkStaticLib`, `mkSharedLib`, and `mkHeaderOnly` propagate link flags and public include directories so downstream targets can consume your outputs without manual `-L/-l` churn.
 - **Generator pipeline.** Attach derivations (for example the Jinja renderer shown in `examples/app-with-library/`) that emit headers/sources (plus manifests) to executables or libraries; include paths, defines, and link flags flow through automatically.
@@ -36,9 +36,9 @@ Incremental, deterministic C/C++ builds driven directly by Nix. This repository 
 
 Each directory under `examples/` contains a self-contained flake template. You can copy any of them into a new repository (or run them in place) and simply replace the sources/generators while reusing the nixclang library. For example:
 
-- `examples/executable` – minimal strict-mode executable with TU-level recompilation.
-- `examples/library` – static library that exposes public headers and ships a smoke-test that links against it.
-- `examples/app-with-library` – executable + internal library + generated sources (mirrors the top-level packages `simple-strict`/`simple-scanned`).
+- `examples/executable` – minimal executable that relies on the dependency scanner.
+- `examples/library` – static library exposing public headers and a smoke-test that links against it.
+- `examples/app-with-library` – executable + internal library + generated sources with a checked-in `.clang-deps.nix` manifest (mirrors `.#simple-strict`/`.#simple-scanned`).
 - `examples/python-extension` – CPython extension module built via `mkPythonExtension`.
 
 To build one of them directly:
@@ -54,7 +54,7 @@ Back at the root flake the same packages are exposed as `.#executableExample`, `
 ### Build the example
 
 ```sh
-nix build .#simple-strict           # uses the checked-in deps.json
+nix build .#simple-strict           # uses the checked-in .clang-deps.nix
 ./result/bin/simple-strict
 ```
 
@@ -104,7 +104,6 @@ PY
         root = ./.
         sources = [ "src/math.cc" ];
         includeDirs = [ "include" ];
-        depsManifest = ./math.deps.json;
       };
 
       buildInfo = import ./nix/build-info-generator.nix {
@@ -123,7 +122,6 @@ PY
         root = ./.
         sources = [ "src/main.cc" ];
         includeDirs = [ "include" ];
-        depsManifest = ./app.deps.json;  # or scanner = cpp.mkDependencyScanner { ... };
         libraries = [ math zlib ];
         generators = [ buildInfo ];
         cxxFlags = [ "-O2" ];
@@ -153,34 +151,36 @@ ls -l compile_commands.json
 
 ### Sync dependency manifests
 
-Need to refresh a checked-in `deps.json` after a scanner run? Use the helper app:
+Need to refresh a checked-in `.clang-deps.nix` after a scanner run? Use the helper app:
 
 ```sh
-nix run .#cpp-sync-manifest -- .#checks.$(nix eval --raw --impure --expr 'builtins.currentSystem').simpleScanManifest examples/app-with-library/deps.json
+system=$(nix eval --raw --impure --expr 'builtins.currentSystem')
+nix run .#cpp-sync-manifest -- .#checks.${system}.simpleScanManifest examples/app-with-library/.clang-deps.nix
 ```
 
 Pass any additional `nix build` flags after the destination path (for example `--refresh`).
 
 ## Dependency manifests
 
-Two workflows coexist:
+You can operate in three complementary modes:
 
-1. **Strict mode (`depsManifest`).** Commit the JSON manifest under version control (regenerate with `nix run .#cpp-sync-manifest`). CI evaluates without IFD and substitutes pre-built objects from a binary cache.
-2. **Scanner mode (`scanner`).** Call `mkDependencyScanner`, which returns a derivation producing `deps.json`. Passing it into `mkExecutable` triggers Import From Derivation (IFD) and yields fully accurate dependency edges without manual updates.
+1. **Strict mode (`depsManifest`).** Commit a `.clang-deps.nix` file that mirrors the scanner output. CI avoids IFD while still reusing the per-TU cache. Regenerate with `nix run .#cpp-sync-manifest`.
+2. **Scanner mode (`scanner`).** Omit `depsManifest` (the default) and nixclang will automatically run `mkDependencyScanner` and import the produced manifest via IFD so developers never have to touch the manifest manually. You can still pass your own scanner derivation if you want to reuse the same scan across multiple targets or tweak the invocation.
+3. **Hybrid workflow.** Run the scanner locally, commit the materialized `.clang-deps.nix`, and let developers opt into IFD by pointing their build at the scanner instead of the checked-in file.
 
-The JSON format is intentionally simple:
+Manifests share a simple schema:
 
-```json
+```nix
 {
-  "schema": 1,
-  "units": {
-    "src/main.cc": {
-      "dependencies": [
-        "src/main.cc",
+  schema = 1;
+  units = {
+    "src/main.cc" = {
+      dependencies = [
+        "src/main.cc"
         "include/foo.hpp"
-      ]
-    }
-  }
+      ];
+    };
+  };
 }
 ```
 

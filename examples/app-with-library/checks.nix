@@ -3,6 +3,7 @@
 let
   strict = packages.strict;
   scanned = packages.scanned;
+  mathLib = packages.mathLib;
 
   mkRunCheck = { drv, expectedLines, name }:
     let
@@ -17,6 +18,33 @@ let
       mkdir -p "$out"
       cp "$tmp" "$out/output.txt"
     '';
+
+  mergeManifests = a: b:
+    let
+      aUnits = a.units or { };
+      bUnits = b.units or { };
+      keys = pkgs.lib.unique ((builtins.attrNames aUnits) ++ (builtins.attrNames bUnits));
+      mergeEntry = name:
+        let
+          aEntry = aUnits.${name} or { };
+          bEntry = bUnits.${name} or { };
+          deps =
+            pkgs.lib.unique (
+              (aEntry.dependencies or [ ])
+              ++ (bEntry.dependencies or [ ])
+            );
+        in
+        {
+          dependencies = deps;
+        };
+    in
+    {
+      schema = a.schema or b.schema or 1;
+      units = builtins.listToAttrs (map (name: { inherit name; value = mergeEntry name; }) keys);
+    };
+
+  combinedManifest =
+    mergeManifests mathLib.passthru.manifest scanned.passthru.manifest;
 
 in {
   simpleStrict = mkRunCheck {
@@ -42,5 +70,5 @@ in {
   };
 
   simpleScanManifest = pkgs.writeText "simple-scanner.json"
-    (builtins.toJSON packages.scanned.passthru.manifest);
+    (builtins.toJSON combinedManifest);
 }

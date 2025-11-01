@@ -3,14 +3,11 @@
 let
   lib = pkgs.lib;
   root = ./.;
-  sources = [
-    "src/main.cc"
-    "src/math.cc"
-  ];
   includeDirs = [ "include" ];
+  appSources = [ "src/main.cc" ];
+  libSources = [ "src/math.cc" ];
 
-  mkBuildInfoGenerator =
-    mode:
+  mkBuildInfoGenerator = mode:
     let
       pythonEnv = pkgs.python3.withPackages (ps: [ ps.jinja2 ]);
       rootStore = builtins.path { path = root; name = "build-info-root"; };
@@ -48,34 +45,26 @@ PY
         '';
       manifest = pkgs.writeText "build-info-${mode}.manifest.json" (builtins.toJSON {
         schema = 1;
-        units = {
-          "generated/build_info.cc" = {
-            dependencies = [
-              "generated/build_info.cc"
-              "generated/build_info.hpp"
-            ];
-          };
-        };
+        units."generated/build_info.cc".dependencies = [
+          "generated/build_info.cc"
+          "generated/build_info.hpp"
+        ];
       });
       includeDir = { path = "${renderDrv}"; };
     in
     {
       name = "build-info-${mode}";
       inherit manifest;
-      headers = [
-        {
-          rel = "generated/build_info.hpp";
-          path = "${renderDrv}/generated/build_info.hpp";
-          store = "${renderDrv}/generated/build_info.hpp";
-        }
-      ];
-      sources = [
-        {
-          rel = "generated/build_info.cc";
-          path = "${renderDrv}/generated/build_info.cc";
-          store = "${renderDrv}/generated/build_info.cc";
-        }
-      ];
+      headers = [{
+        rel = "generated/build_info.hpp";
+        path = "${renderDrv}/generated/build_info.hpp";
+        store = "${renderDrv}/generated/build_info.hpp";
+      }];
+      sources = [{
+        rel = "generated/build_info.cc";
+        path = "${renderDrv}/generated/build_info.cc";
+        store = "${renderDrv}/generated/build_info.cc";
+      }];
       includeDirs = [ includeDir ];
       public = {
         includeDirs = [ includeDir ];
@@ -98,16 +87,16 @@ PY
   mathLib = cpp.mkStaticLib {
     name = "math";
     inherit root includeDirs;
-    sources = [ "src/math.cc" ];
-    depsManifest = ./deps.json;
+    sources = libSources;
+    depsManifest = ./.clang-deps.nix;
     publicIncludeDirs = includeDirs;
   };
 
   strict = cpp.mkExecutable {
     name = "simple-strict";
     inherit root includeDirs;
-    sources = [ "src/main.cc" ];
-    depsManifest = ./deps.json;
+    sources = appSources;
+    depsManifest = ./.clang-deps.nix;
     libraries = [ mathLib zlibLib ];
     generators = [ buildInfoStrict ];
   };
@@ -115,19 +104,13 @@ PY
   scanned = cpp.mkExecutable {
     name = "simple-scanned";
     inherit root includeDirs;
-    sources = [ "src/main.cc" ];
-    scanner = cpp.mkDependencyScanner {
-      name = "simple-scanner";
-      inherit root sources includeDirs;
-      libraries = [ zlibLib ];
-      generators = [ buildInfoScanned ];
-    };
+    sources = appSources;
     libraries = [ mathLib zlibLib ];
     generators = [ buildInfoScanned ];
   };
 
 in {
+  mathLib = mathLib;
   strict = strict;
   scanned = scanned;
-  mathLib = mathLib.drv;
 }

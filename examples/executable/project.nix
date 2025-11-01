@@ -7,8 +7,7 @@ let
 
   executable = cpp.mkExecutable {
     name = "executable-example";
-    inherit root sources includeDirs;
-    depsManifest = ./deps.json;
+    inherit root includeDirs sources;
   };
 
 in {

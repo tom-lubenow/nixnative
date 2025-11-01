@@ -360,7 +360,6 @@ let
       ''
         set -euo pipefail
         mkdir -p "$out/bin"
-        echo "linking ${name}" >&2
         ${tc.cxx} \
           ${concatStringsSep " " tc.defaultCxxFlags} \
           ${concatStringsSep " " cxxFlags} \
@@ -408,11 +407,20 @@ let
     pkgs.writeText "compile_commands.json" (builtins.toJSON entries);
 
   mkManifest =
-    manifestPath:
+    manifestSpec:
     let
-      json = builtins.fromJSON (builtins.readFile manifestPath);
+      load = spec:
+        if builtins.isAttrs spec && spec ? units then spec
+        else
+          let
+            path = toPathLike spec;
+            pathStr = builtins.toString path;
+          in
+          if lib.hasSuffix ".nix" pathStr then import path
+          else builtins.fromJSON (builtins.readFile path);
+      manifest = load manifestSpec;
     in
-    if json ? units then json
+    if manifest ? units then manifest
     else throw "Dependency manifest must contain a `units` attribute.";
 
   mkDependencyScanner =
@@ -682,13 +690,30 @@ PY
       generatorInfo = processGenerators generators;
       libsPublic = collectPublic libraries;
       publicAggregate = mergePublic libsPublic generatorInfo.public;
+      allSources = sources ++ generatorInfo.sources;
       combinedIncludeDirs = includeDirs ++ publicAggregate.includeDirs ++ generatorInfo.includeDirs;
       combinedDefines = defines ++ publicAggregate.defines ++ generatorInfo.defines;
       combinedCxxFlags = cxxFlags ++ publicAggregate.cxxFlags ++ generatorInfo.cxxFlags;
-      tus = normalizeSources { inherit root; sources = sources ++ generatorInfo.sources; };
+      tus = normalizeSources { inherit root; sources = allSources; };
+      autoScanner =
+        if depsManifest == null && scanner == null then
+          mkDependencyScanner {
+            name = "${name}-scanner";
+            inherit root;
+            sources = allSources;
+            includeDirs = combinedIncludeDirs;
+            defines = combinedDefines;
+            cxxFlags = combinedCxxFlags;
+            libraries = libraries;
+            generators = generators;
+            toolchain = tc;
+          }
+        else
+          null;
+      effectiveScanner = if scanner != null then scanner else autoScanner;
       baseManifest =
         if depsManifest != null then mkManifest depsManifest
-        else if scanner != null then mkManifest scanner
+        else if effectiveScanner != null then mkManifest effectiveScanner
         else emptyManifest;
       manifest = mergeManifests baseManifest generatorInfo.manifest;
 
@@ -735,6 +760,7 @@ PY
         generators = generators;
         public = publicAggregate;
         toolchain = tc;
+        scanner = effectiveScanner;
       };
     };
 
@@ -761,15 +787,32 @@ PY
       generatorInfo = processGenerators generators;
       libsPublic = collectPublic libraries;
       publicAggregate = mergePublic libsPublic generatorInfo.public;
+      allSources = sources ++ generatorInfo.sources;
       combinedIncludeDirs = includeDirs ++ publicAggregate.includeDirs ++ generatorInfo.includeDirs;
       combinedDefines = defines ++ publicAggregate.defines ++ generatorInfo.defines;
       combinedCxxFlags = cxxFlags ++ publicAggregate.cxxFlags ++ generatorInfo.cxxFlags;
+      autoScanner =
+        if depsManifest == null && scanner == null then
+          mkDependencyScanner {
+            name = "${name}-scanner";
+            inherit root;
+            sources = allSources;
+            includeDirs = combinedIncludeDirs;
+            defines = combinedDefines;
+            cxxFlags = combinedCxxFlags;
+            libraries = libraries;
+            generators = generators;
+            toolchain = tc;
+          }
+        else
+          null;
+      effectiveScanner = if scanner != null then scanner else autoScanner;
       baseManifest =
         if depsManifest != null then mkManifest depsManifest
-        else if scanner != null then mkManifest scanner
+        else if effectiveScanner != null then mkManifest effectiveScanner
         else emptyManifest;
       manifest = mergeManifests baseManifest generatorInfo.manifest;
-      tus = normalizeSources { inherit root; sources = sources ++ generatorInfo.sources; };
+      tus = normalizeSources { inherit root; sources = allSources; };
       objectInfos =
         map
           (tu:
@@ -842,6 +885,7 @@ PY
       passthru = {
         inherit manifest objectInfos compileCommands libraries generators;
         toolchain = tc;
+        scanner = effectiveScanner;
       };
     };
 
@@ -869,15 +913,32 @@ PY
       generatorInfo = processGenerators generators;
       libsPublic = collectPublic libraries;
       publicAggregate = mergePublic libsPublic generatorInfo.public;
+      allSources = sources ++ generatorInfo.sources;
       combinedIncludeDirs = includeDirs ++ publicAggregate.includeDirs ++ generatorInfo.includeDirs;
       combinedDefines = defines ++ publicAggregate.defines ++ generatorInfo.defines;
       combinedCxxFlags = cxxFlags ++ publicAggregate.cxxFlags ++ generatorInfo.cxxFlags;
+      autoScanner =
+        if depsManifest == null && scanner == null then
+          mkDependencyScanner {
+            name = "${name}-scanner";
+            inherit root;
+            sources = allSources;
+            includeDirs = combinedIncludeDirs;
+            defines = combinedDefines;
+            cxxFlags = combinedCxxFlags;
+            libraries = libraries;
+            generators = generators;
+            toolchain = tc;
+          }
+        else
+          null;
+      effectiveScanner = if scanner != null then scanner else autoScanner;
       baseManifest =
         if depsManifest != null then mkManifest depsManifest
-        else if scanner != null then mkManifest scanner
+        else if effectiveScanner != null then mkManifest effectiveScanner
         else emptyManifest;
       manifest = mergeManifests baseManifest generatorInfo.manifest;
-      tus = normalizeSources { inherit root; sources = sources ++ generatorInfo.sources; };
+      tus = normalizeSources { inherit root; sources = allSources; };
       objectInfos =
         map
           (tu:
@@ -945,6 +1006,7 @@ PY
       passthru = {
         inherit manifest objectInfos compileCommands libraries sharedName generators;
         toolchain = tc;
+        scanner = effectiveScanner;
       };
     };
 
@@ -987,12 +1049,29 @@ PY
       combinedIncludeDirs = includeDirs ++ generatorInfo.includeDirs ++ publicAggregate.includeDirs;
       combinedDefines = defines ++ generatorInfo.defines ++ publicAggregate.defines;
       combinedCxxFlags = cxxFlags ++ generatorInfo.cxxFlags ++ publicAggregate.cxxFlags;
+      allSources = sources ++ generatorInfo.sources;
+      autoScanner =
+        if depsManifest == null && scanner == null then
+          mkDependencyScanner {
+            name = "${name}-scanner";
+            inherit root;
+            sources = allSources;
+            includeDirs = combinedIncludeDirs;
+            defines = combinedDefines;
+            cxxFlags = combinedCxxFlags;
+            libraries = libraries;
+            generators = generators;
+            toolchain = tc;
+          }
+        else
+          null;
+      effectiveScanner = if scanner != null then scanner else autoScanner;
       baseManifest =
         if depsManifest != null then mkManifest depsManifest
-        else if scanner != null then mkManifest scanner
+        else if effectiveScanner != null then mkManifest effectiveScanner
         else emptyManifest;
       manifest = mergeManifests baseManifest generatorInfo.manifest;
-      tus = normalizeSources { inherit root; sources = sources ++ generatorInfo.sources; };
+      tus = normalizeSources { inherit root; sources = allSources; };
       objectInfos =
         map
           (tu:
@@ -1055,6 +1134,7 @@ PY
         pythonPath = "${extensionDrv}/${pythonSitePackages}";
         extension = "${extensionDrv}/${pythonSitePackages}/${extensionName}";
         toolchain = tc;
+        scanner = effectiveScanner;
       };
     };
 
