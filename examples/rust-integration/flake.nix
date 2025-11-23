@@ -1,7 +1,7 @@
 {
   description = "Template: C++ executable linking against a Rust static library via nixclang";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
   inputs.nixclang.url = "path:../..";
 
   outputs = { self, nixpkgs, nixclang }:

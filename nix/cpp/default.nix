@@ -25,7 +25,7 @@ let
       isDarwin = pkgs.stdenv.hostPlatform.isDarwin;
       sdkRoot =
         if isDarwin then
-          pkgs.darwin.apple_sdk.MacOSX-SDK
+          pkgs.apple-sdk.sdkroot
         else
           null;
       deploymentTarget =
@@ -92,8 +92,7 @@ let
       ++ lib.optionals isDarwin [
         pkgs.stdenv.cc.bintools.bintools
         pkgs.darwin.cctools
-        pkgs.darwin.apple_sdk.sdkRoot
-        sdkRoot
+        pkgs.apple-sdk
         libcxx
         libcxxDev
       ];

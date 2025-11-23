@@ -1,7 +1,7 @@
 {
   description = "Template: CPython extension module built with nixclang";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
   inputs.nixclang.url = "path:../..";
 
   outputs = { self, nixpkgs, nixclang }:
