@@ -117,6 +117,7 @@ rec {
             if builtins.isAttrs source && source ? path then builtins.toString source.path
             else "${rootHost}/${relNorm}";
           objectName = "${sanitizeName relNorm}.o";
+          _ = if builtins.pathExists host then true else throw "nixclang: source '${relNorm}' not found at ${host}";
         in
         {
           store =
