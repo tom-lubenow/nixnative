@@ -841,6 +841,7 @@ PY
             ${tc.ranlib} "${archiveName}"
             mv "${archiveName}" "$out/lib/"
           '';
+      installHeaders = concatStringsSep "\n" (map (dir: "cp -r ${dir}/. $out/include/") publicIncludeStores);
       archive =
         pkgs.runCommand "static-${name}"
           ({
@@ -850,8 +851,9 @@ PY
           } // tc.environment)
           ''
             set -euo pipefail
-            mkdir -p "$out/lib"
+            mkdir -p "$out/lib" "$out/include"
             ${archiveScript}
+            ${installHeaders}
           '';
       publicIncludeStores =
         map (dir: normalizeIncludeDir { inherit rootHost; dir = dir; })
@@ -874,14 +876,13 @@ PY
           cxxFlags = combinedCxxFlags;
         };
     in
-    {
-      type = "static";
+    archive // {
+      artifactType = "static";
       inherit name;
-      drv = archive;
       archivePath = "${archive}/lib/${archiveName}";
       inherit objectInfos compileCommands manifest libraries generators;
       public = combinedPublic;
-      passthru = {
+      passthru = (archive.passthru or { }) // {
         inherit manifest objectInfos compileCommands libraries generators;
         toolchain = tc;
         scanner = effectiveScanner;
@@ -956,6 +957,7 @@ PY
       objectPaths = map (info: info.object) objectInfos;
       sharedExt = if pkgs.stdenv.hostPlatform.isDarwin then "dylib" else "so";
       sharedName = "lib${name}.${sharedExt}";
+      installHeaders = concatStringsSep "\n" (map (dir: "cp -r ${dir}/. $out/include/") publicIncludeStores);
       sharedDrv =
         pkgs.runCommand "shared-${name}"
           ({
@@ -963,7 +965,7 @@ PY
           } // tc.environment)
           ''
             set -euo pipefail
-            mkdir -p "$out/lib"
+            mkdir -p "$out/lib" "$out/include"
             ${tc.cxx} \
               -shared \
               ${concatStringsSep " " tc.defaultCxxFlags} \
@@ -973,6 +975,7 @@ PY
               ${concatStringsSep " " ldflags} \
               ${concatStringsSep " " publicAggregate.linkFlags} \
               -o "$out/lib/${sharedName}"
+            ${installHeaders}
           '';
       publicIncludeStores =
         map (dir: normalizeIncludeDir { inherit rootHost; dir = dir; })
@@ -995,14 +998,13 @@ PY
           cxxFlags = combinedCxxFlags;
         };
     in
-    {
-      type = "shared";
+    sharedDrv // {
+      artifactType = "shared";
       inherit name;
-      drv = sharedDrv;
       sharedLibrary = "${sharedDrv}/lib/${sharedName}";
       inherit objectInfos compileCommands manifest libraries generators;
       public = combinedPublic;
-      passthru = {
+      passthru = (sharedDrv.passthru or { }) // {
         inherit manifest objectInfos compileCommands libraries sharedName generators;
         toolchain = tc;
         scanner = effectiveScanner;
