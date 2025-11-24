@@ -1308,6 +1308,41 @@ PY
       };
     };
 
+  mkDoc =
+    { name
+    , root ? ./.
+    , sources ? []
+    , doxygenConfig ? null
+    }:
+    let
+      rootPath = sanitizePath { path = root; };
+      defaultDoxyfile = pkgs.writeText "Doxyfile" ''
+        PROJECT_NAME = "${name}"
+        INPUT = ${if sources == [] then "." else builtins.concatStringsSep " " sources}
+        RECURSIVE = YES
+        OUTPUT_DIRECTORY = doc
+        GENERATE_HTML = YES
+        GENERATE_LATEX = NO
+      '';
+      configFile = if doxygenConfig != null then doxygenConfig else defaultDoxyfile;
+    in
+    pkgs.runCommand "doc-${name}"
+      {
+        nativeBuildInputs = [ pkgs.doxygen ];
+        src = rootPath;
+      }
+      ''
+        mkdir -p $out
+        cp ${configFile} Doxyfile
+        # Copy source content to current dir to allow Doxygen to find files relative to root
+        cp -r $src/. .
+        chmod -R u+w .
+        
+        doxygen Doxyfile
+        
+        mv doc/html $out/html
+      '';
+
   mkTest =
     { name
     , executable
@@ -1355,7 +1390,7 @@ in
     clang = clangToolchain;
   };
 
-  inherit mkDependencyScanner mkExecutable mkStaticLib mkSharedLib mkPythonExtension mkHeaderOnly mkTest;
+  inherit mkDependencyScanner mkExecutable mkStaticLib mkSharedLib mkPythonExtension mkHeaderOnly mkTest mkDoc;
 
   inherit mkDevShell;
 
