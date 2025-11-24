@@ -113,7 +113,34 @@ PY
         inherit packages modules info;
       };
     };
+
+  mkFrameworkLibrary =
+    { name
+    , framework ? name
+    , sdk ? (pkgs.apple-sdk.sdkroot or null)
+    }:
+    let
+      frameworkFlag = "-framework ${framework}";
+      frameworkSearch =
+        if sdk != null then "-F${builtins.toString sdk}/System/Library/Frameworks"
+        else null;
+      linkFlags =
+        if frameworkSearch == null then [ frameworkFlag ] else [ frameworkSearch frameworkFlag ];
+    in
+    {
+      inherit name;
+      public = {
+        includeDirs = [ ];
+        defines = [ ];
+        cxxFlags = [ ];
+        linkFlags = linkFlags;
+      };
+      passthru = {
+        inherit framework sdk;
+      };
+    };
 in
 {
-  inherit mkPkgConfigLibrary;
+  mkPkgConfigLibrary = mkPkgConfigLibrary;
+  inherit mkFrameworkLibrary;
 }

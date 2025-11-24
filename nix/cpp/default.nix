@@ -42,6 +42,7 @@ in
   
   pkgConfig = {
     makeLibrary = pkgconfig.mkPkgConfigLibrary;
+    makeFramework = pkgconfig.mkFrameworkLibrary;
   };
   
   inherit (utils)
