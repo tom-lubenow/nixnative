@@ -20,7 +20,7 @@
           # Common interface library (header-only)
           commonLib = cpp.mkHeaderOnly {
             name = "plugin-interface";
-            includeDir = ./common;
+            includeDirs = [ ./common ];
           };
 
           # The Plugin (Shared Library)
