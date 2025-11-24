@@ -16,6 +16,12 @@ let
     inherit (pkgs) lib;
     inherit utils clangToolchain scanner;
   };
+
+  pkgconfig = import ./pkgconfig.nix {
+    inherit pkgs;
+    inherit (pkgs) lib;
+    inherit utils;
+  };
 in
 {
   inherit (toolchain) clangToolchain;
@@ -33,6 +39,10 @@ in
     mkTest
     mkDoc
     mkDevShell;
+  
+  pkgConfig = {
+    makeLibrary = pkgconfig.mkPkgConfigLibrary;
+  };
   
   inherit (utils)
     sanitizeName
