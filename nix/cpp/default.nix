@@ -1144,13 +1144,23 @@ PY
     , extraPackages ? [ ]
     , linkCompileCommands ? true
     , symlinkName ? "compile_commands.json"
+    , includeTools ? true
     }:
     let
       tc = target.passthru.toolchain or clangToolchain;
       compileCommands = target.passthru.compileCommands or null;
+      tools =
+        if includeTools then
+          [
+            pkgs.clang-tools
+            (if pkgs.stdenv.hostPlatform.isDarwin then pkgs.lldb else pkgs.gdb)
+          ]
+        else
+          [ ];
       packages = pkgs.lib.unique (
         tc.runtimeInputs
         ++ [ tc.clang ]
+        ++ tools
         ++ extraPackages
       );
       linkHook =
