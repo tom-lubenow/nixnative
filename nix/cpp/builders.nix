@@ -352,6 +352,7 @@ rec {
     { name
     , root ? ./. 
     , sources
+    , python ? pkgs.python3
     , includeDirs ? [ ]
     , defines ? [ ]
     , cxxFlags ? [ ]
@@ -365,11 +366,21 @@ rec {
     let
       tc = toolchain;
       rootPath = sanitizePath { path = root; };
+      pyLibPrefix = python.libPrefix or (if python ? pythonVersion then "python${python.pythonVersion}" else "python3");
+      pyIncludeBase = if python ? dev then python.dev else python;
+      pyInclude = "${pyIncludeBase}/include/${pyLibPrefix}";
+      pyLibBase = if python ? out then python else python;
+      pyLibDir = "${pyLibBase}/lib";
+      pyLdFlags = [ "-L${pyLibDir}" "-l${pyLibPrefix}" ];
       generatorInfo = processGenerators generators;
       libsPublic = collectPublic libraries;
       publicAggregate = mergePublic libsPublic generatorInfo.public;
       allSources = sources ++ generatorInfo.sources;
-      combinedIncludeDirs = includeDirs ++ publicAggregate.includeDirs ++ generatorInfo.includeDirs;
+      combinedIncludeDirs =
+        includeDirs
+        ++ [ { path = pyInclude; } ]
+        ++ publicAggregate.includeDirs
+        ++ generatorInfo.includeDirs;
       combinedDefines = defines ++ publicAggregate.defines ++ generatorInfo.defines;
       combinedCxxFlags = cxxFlags ++ publicAggregate.cxxFlags ++ generatorInfo.cxxFlags;
       autoScanner =
@@ -410,7 +421,8 @@ rec {
             })
           tus;
       objectPaths = map (info: info.object) objectInfos;
-      sharedExt = if pkgs.stdenv.hostPlatform.isDarwin then "dylib" else "so";
+      # Python expects extension modules to use `.so` on all platforms.
+      sharedExt = "so";
       sharedName = "${name}.${sharedExt}";
       sharedDrv =
         pkgs.runCommand "python-ext-${name}"
@@ -426,7 +438,7 @@ rec {
               ${concatStringsSep " " combinedCxxFlags} \
               ${concatStringsSep " " objectPaths} \
               ${concatStringsSep " " tc.defaultLdFlags} \
-              ${concatStringsSep " " ldflags} \
+              ${concatStringsSep " " (pyLdFlags ++ ldflags)} \
               ${concatStringsSep " " publicAggregate.linkFlags} \
               -o "$out/lib/${sharedName}"
           '';
@@ -444,11 +456,14 @@ rec {
       artifactType = "python-extension";
       inherit name;
       extensionPath = "${sharedDrv}/lib/${sharedName}";
+      pythonPath = "${sharedDrv}/lib";
       inherit objectInfos compileCommands manifest libraries generators;
       passthru = (sharedDrv.passthru or { }) // {
         inherit manifest objectInfos compileCommands libraries sharedName generators;
         toolchain = tc;
         scanner = effectiveScanner;
+        inherit python;
+        pythonPath = "${sharedDrv}/lib";
       };
     };
 

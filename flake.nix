@@ -33,8 +33,20 @@
         }
       );
 
-      checks = forAllSystems ({ examples, ... }:
-        examples.checks
+      checks = forAllSystems ({ pkgs, cpp, examples, ... }:
+        examples.checks // {
+          pkgconfig-zlib = pkgs.runCommand "pkgconfig-zlib-check" { } ''
+            set -euo pipefail
+            drv=${(cpp.pkgConfig.makeLibrary {
+              name = "zlib";
+              packages = [ pkgs.zlib ];
+              modules = [ "zlib" ];
+            }).drv}
+            grep -q -- "-lz" "$drv"
+            test "$(grep -c 'includeDirs' "$drv")" -gt 0
+            touch "$out"
+          '';
+        }
       );
 
       apps = forAllSystems ({ pkgs, examples, ... }:
