@@ -669,19 +669,19 @@ PY
       evalInputs = [ ];
     } generators;
 
-  mkExecutable =
+  mkBuildContext =
     { name
-    , root ? ./. 
+    , root
     , sources
     , includeDirs ? [ ]
     , defines ? [ ]
     , cxxFlags ? [ ]
-    , ldflags ? [ ]
     , libraries ? [ ]
     , depsManifest ? null
     , scanner ? null
     , generators ? [ ]
     , toolchain ? clangToolchain
+    , ...
     }:
     let
       tc = toolchain;
@@ -742,106 +742,58 @@ PY
           defines = combinedDefines;
           cxxFlags = combinedCxxFlags;
         };
+    in
+    {
+      inherit name rootPath toolchain;
+      inherit objectInfos objectPaths compileCommands;
+      inherit manifest tus;
+      inherit combinedIncludeDirs combinedDefines combinedCxxFlags;
+      inherit publicAggregate;
+      inherit libraries generators;
+      scanner = effectiveScanner;
+    };
+
+  mkExecutable = args:
+    let
+      ctx = mkBuildContext args;
+      inherit (ctx) toolchain name objectPaths combinedCxxFlags publicAggregate;
+      
       drv =
         linkExecutable {
-          toolchain = tc;
-          inherit name;
-          cxxFlags = combinedCxxFlags;
+          inherit toolchain name;
           objects = objectPaths;
-          ldflags = ldflags;
+          cxxFlags = combinedCxxFlags;
+          ldflags = args.ldflags or [ ];
           linkFlags = publicAggregate.linkFlags;
         };
     in
     drv // {
-      passthru = (drv.passthru or { }) // {
-        inherit objectInfos compileCommands manifest tus combinedIncludeDirs combinedDefines combinedCxxFlags;
-        libraries = libraries;
-        generators = generators;
-        public = publicAggregate;
-        toolchain = tc;
-        scanner = effectiveScanner;
-      };
+      passthru = (drv.passthru or { }) // ctx;
     };
 
-  mkStaticLib =
-    { name
-    , root ? ./. 
-    , sources
-    , includeDirs ? [ ]
-    , defines ? [ ]
-    , cxxFlags ? [ ]
-    , libraries ? [ ]
-    , depsManifest ? null
-    , scanner ? null
-    , publicIncludeDirs ? includeDirs
-    , publicDefines ? [ ]
-    , publicCxxFlags ? [ ]
-    , generators ? [ ]
-    , toolchain ? clangToolchain
-    }:
+  mkStaticLib = args:
     let
+      ctx = mkBuildContext args;
+      inherit (ctx) toolchain name rootPath publicAggregate;
       tc = toolchain;
-      rootPath = sanitizePath { path = root; };
+      
+      publicIncludeDirs = args.publicIncludeDirs or args.includeDirs or [ ];
+      publicDefines = args.publicDefines or [ ];
+      publicCxxFlags = args.publicCxxFlags or [ ];
+
+      publicIncludeStores =
+        map (dir: normalizeIncludeDir { inherit rootHost; dir = dir; })
+          (ensureList publicIncludeDirs);
+      
+      # We need rootHost for normalizeIncludeDir, which is toString rootPath
       rootHost = builtins.toString rootPath;
-      generatorInfo = processGenerators generators;
-      libsPublic = collectPublic libraries;
-      publicAggregate = mergePublic libsPublic generatorInfo.public;
-      allSources = sources ++ generatorInfo.sources;
-      combinedIncludeDirs = includeDirs ++ publicAggregate.includeDirs ++ generatorInfo.includeDirs;
-      combinedDefines = defines ++ publicAggregate.defines ++ generatorInfo.defines;
-      combinedCxxFlags = cxxFlags ++ publicAggregate.cxxFlags ++ generatorInfo.cxxFlags;
-      autoScanner =
-        if depsManifest == null && scanner == null then
-          mkDependencyScanner {
-            name = "${name}-scanner";
-            inherit root;
-            sources = allSources;
-            includeDirs = combinedIncludeDirs;
-            defines = combinedDefines;
-            cxxFlags = combinedCxxFlags;
-            libraries = libraries;
-            generators = generators;
-            toolchain = tc;
-          }
-        else
-          null;
-      effectiveScanner = if scanner != null then scanner else autoScanner;
-      baseManifest =
-        if depsManifest != null then mkManifest depsManifest
-        else if effectiveScanner != null then mkManifest effectiveScanner
-        else emptyManifest;
-      manifest = mergeManifests baseManifest generatorInfo.manifest;
-      tus = normalizeSources { inherit root; sources = allSources; };
-      objectInfos =
-        map
-          (tu:
-            let
-              headers = headerSet { inherit root manifest tu; overrides = generatorInfo.headerOverrides; };
-            in
-            compileTranslationUnit {
-              toolchain = tc;
-              inherit root tu headers;
-              includeDirs = combinedIncludeDirs;
-              defines = combinedDefines;
-              cxxFlags = combinedCxxFlags;
-              extraInputs = generatorInfo.evalInputs;
-            })
-          tus;
-      objectPaths = map (info: info.object) objectInfos;
-      archiveName = "lib${name}.a";
-      objectsArg = concatStringsSep " " objectPaths;
+
       archiveScript =
-        if pkgs.stdenv.hostPlatform.isDarwin then
-          ''
-            ${pkgs.darwin.cctools}/bin/libtool -static -o "$out/lib/${archiveName}" ${objectsArg}
-          ''
-        else
-          ''
-            ${tc.ar} rc "${archiveName}" ${objectsArg}
-            ${tc.ranlib} "${archiveName}"
-            mv "${archiveName}" "$out/lib/"
-          '';
+        lib.concatMapStrings (obj: "${tc.ar} rcs \"${archiveName}\" \"${obj}\"\n") ctx.objectPaths;
+      archiveName = "lib${sanitizeName name}.a";
+      
       installHeaders = concatStringsSep "\n" (map (dir: "cp -r ${dir}/. $out/include/") publicIncludeStores);
+      
       archive =
         pkgs.runCommand "static-${name}"
           ({
@@ -853,11 +805,11 @@ PY
             set -euo pipefail
             mkdir -p "$out/lib" "$out/include"
             ${archiveScript}
+            ${tc.ranlib} "${archiveName}"
+            mv "${archiveName}" "$out/lib/"
             ${installHeaders}
           '';
-      publicIncludeStores =
-        map (dir: normalizeIncludeDir { inherit rootHost; dir = dir; })
-          (ensureList publicIncludeDirs);
+
       basePublic =
         {
           includeDirs = map (dir: { path = dir; }) publicIncludeStores;
@@ -866,98 +818,37 @@ PY
           linkFlags = [ "${archive}/lib/${archiveName}" ];
         };
       combinedPublic = mergePublic publicAggregate basePublic;
-      compileCommands =
-        generateCompileCommands {
-          toolchain = tc;
-          root = rootPath;
-          tus = tus;
-          includeDirs = combinedIncludeDirs;
-          defines = combinedDefines;
-          cxxFlags = combinedCxxFlags;
-        };
     in
     archive // {
       artifactType = "static";
       inherit name;
       archivePath = "${archive}/lib/${archiveName}";
-      inherit objectInfos compileCommands manifest libraries generators;
+      inherit (ctx) objectInfos compileCommands manifest libraries generators;
       public = combinedPublic;
-      passthru = (archive.passthru or { }) // {
-        inherit manifest objectInfos compileCommands libraries generators;
-        toolchain = tc;
-        scanner = effectiveScanner;
-      };
+      passthru = (archive.passthru or { }) // ctx;
     };
 
-  mkSharedLib =
-    { name
-    , root ? ./.
-    , sources
-    , includeDirs ? [ ]
-    , defines ? [ ]
-    , cxxFlags ? [ ]
-    , ldflags ? [ ]
-    , libraries ? [ ]
-    , depsManifest ? null
-    , scanner ? null
-    , publicIncludeDirs ? includeDirs
-    , publicDefines ? [ ]
-    , publicCxxFlags ? [ ]
-    , generators ? [ ]
-    , toolchain ? clangToolchain
-    }:
+  mkSharedLib = args:
     let
+      ctx = mkBuildContext args;
+      inherit (ctx) toolchain name rootPath publicAggregate combinedCxxFlags;
       tc = toolchain;
-      rootPath = sanitizePath { path = root; };
+      
+      publicIncludeDirs = args.publicIncludeDirs or args.includeDirs or [ ];
+      publicDefines = args.publicDefines or [ ];
+      publicCxxFlags = args.publicCxxFlags or [ ];
+
+      publicIncludeStores =
+        map (dir: normalizeIncludeDir { inherit (ctx) rootHost; dir = dir; })
+          (ensureList publicIncludeDirs);
+      
+      # We need rootHost for normalizeIncludeDir, which is toString rootPath
       rootHost = builtins.toString rootPath;
-      generatorInfo = processGenerators generators;
-      libsPublic = collectPublic libraries;
-      publicAggregate = mergePublic libsPublic generatorInfo.public;
-      allSources = sources ++ generatorInfo.sources;
-      combinedIncludeDirs = includeDirs ++ publicAggregate.includeDirs ++ generatorInfo.includeDirs;
-      combinedDefines = defines ++ publicAggregate.defines ++ generatorInfo.defines;
-      combinedCxxFlags = cxxFlags ++ publicAggregate.cxxFlags ++ generatorInfo.cxxFlags;
-      autoScanner =
-        if depsManifest == null && scanner == null then
-          mkDependencyScanner {
-            name = "${name}-scanner";
-            inherit root;
-            sources = allSources;
-            includeDirs = combinedIncludeDirs;
-            defines = combinedDefines;
-            cxxFlags = combinedCxxFlags;
-            libraries = libraries;
-            generators = generators;
-            toolchain = tc;
-          }
-        else
-          null;
-      effectiveScanner = if scanner != null then scanner else autoScanner;
-      baseManifest =
-        if depsManifest != null then mkManifest depsManifest
-        else if effectiveScanner != null then mkManifest effectiveScanner
-        else emptyManifest;
-      manifest = mergeManifests baseManifest generatorInfo.manifest;
-      tus = normalizeSources { inherit root; sources = allSources; };
-      objectInfos =
-        map
-          (tu:
-            let
-              headers = headerSet { inherit root manifest tu; overrides = generatorInfo.headerOverrides; };
-            in
-            compileTranslationUnit {
-              toolchain = tc;
-              inherit root tu headers;
-              includeDirs = combinedIncludeDirs;
-              defines = combinedDefines;
-              cxxFlags = combinedCxxFlags;
-              extraInputs = generatorInfo.evalInputs;
-            })
-          tus;
-      objectPaths = map (info: info.object) objectInfos;
+      
       sharedExt = if pkgs.stdenv.hostPlatform.isDarwin then "dylib" else "so";
       sharedName = "lib${name}.${sharedExt}";
       installHeaders = concatStringsSep "\n" (map (dir: "cp -r ${dir}/. $out/include/") publicIncludeStores);
+      
       sharedDrv =
         pkgs.runCommand "shared-${name}"
           ({
@@ -970,16 +861,14 @@ PY
               -shared \
               ${concatStringsSep " " tc.defaultCxxFlags} \
               ${concatStringsSep " " combinedCxxFlags} \
-              ${concatStringsSep " " objectPaths} \
+              ${concatStringsSep " " ctx.objectPaths} \
               ${concatStringsSep " " tc.defaultLdFlags} \
-              ${concatStringsSep " " ldflags} \
+              ${concatStringsSep " " (args.ldflags or [])} \
               ${concatStringsSep " " publicAggregate.linkFlags} \
               -o "$out/lib/${sharedName}"
             ${installHeaders}
           '';
-      publicIncludeStores =
-        map (dir: normalizeIncludeDir { inherit rootHost; dir = dir; })
-          (ensureList publicIncludeDirs);
+
       basePublic =
         {
           includeDirs = map (dir: { path = dir; }) publicIncludeStores;
@@ -988,27 +877,14 @@ PY
           linkFlags = [ "${sharedDrv}/lib/${sharedName}" ];
         };
       combinedPublic = mergePublic publicAggregate basePublic;
-      compileCommands =
-        generateCompileCommands {
-          toolchain = tc;
-          root = rootPath;
-          tus = tus;
-          includeDirs = combinedIncludeDirs;
-          defines = combinedDefines;
-          cxxFlags = combinedCxxFlags;
-        };
     in
     sharedDrv // {
       artifactType = "shared";
       inherit name;
       sharedLibrary = "${sharedDrv}/lib/${sharedName}";
-      inherit objectInfos compileCommands manifest libraries generators;
+      inherit (ctx) objectInfos compileCommands manifest libraries generators;
       public = combinedPublic;
-      passthru = (sharedDrv.passthru or { }) // {
-        inherit manifest objectInfos compileCommands libraries sharedName generators;
-        toolchain = tc;
-        scanner = effectiveScanner;
-      };
+      passthru = (sharedDrv.passthru or { }) // ctx;
     };
 
   mkPythonExtension =
