@@ -149,7 +149,7 @@ ls -l compile_commands.json
 
 - Drops you into a shell with the toolchain associated with the default app (`examples.defaults.app`).
 - Automatically symlinks `compile_commands.json` to the selected target’s database so `clangd` works out of the box.
-- Lets you target a different derivation by calling `cpp.mkDevShell { target = …; }` in your own flake (add `extraPackages` for editors, etc.).
+- Lets you target a different derivation by calling `cpp.mkDevShell { target = …; }` in your own flake (add `extraPackages` for editors, etc.). Pass `toolchain = …` to override the toolchain.
 
 ### Sync dependency manifests
 

@@ -587,13 +587,16 @@ rec {
 
   mkDevShell =
     { target
+    , toolchain ? null
     , extraPackages ? [ ]
     , linkCompileCommands ? true
     , symlinkName ? "compile_commands.json"
     , includeTools ? true
     }:
     let
-      tc = target.passthru.toolchain or clangToolchain;
+      tc =
+        if toolchain != null then toolchain
+        else target.passthru.toolchain or clangToolchain;
       compileCommands = target.passthru.compileCommands or null;
       tools =
         if includeTools then
