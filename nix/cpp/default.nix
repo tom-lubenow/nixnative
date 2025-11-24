@@ -1306,13 +1306,54 @@ PY
       };
     };
 
+  mkTest =
+    { name
+    , executable
+    , args ? []
+    , stdin ? null
+    , expectedOutput ? null
+    }:
+    pkgs.runCommand "test-${name}"
+      {
+        nativeBuildInputs = [ executable ];
+      }
+      ''
+        set -euo pipefail
+        echo "Running test: ${name}"
+        
+        # Construct command
+        # We assume the executable name matches the derivation name, or we find the first binary
+        BIN_PATH=$(find ${executable}/bin -type f -executable | head -n 1)
+        CMD="$BIN_PATH ${builtins.concatStringsSep " " args}"
+        
+        echo "Command: $CMD"
+        
+        # Run with stdin if provided
+        ${if stdin != null then "echo '${stdin}' | $CMD > output.log" else "$CMD > output.log"}
+        
+        # Check output if expected
+        ${if expectedOutput != null then ''
+          if ! grep -q "${expectedOutput}" output.log; then
+            echo "Test failed: Expected output '${expectedOutput}' not found."
+            echo "Actual output:"
+            cat output.log
+            exit 1
+          fi
+        '' else ""}
+        
+        # Save output as result
+        mkdir -p $out
+        cp output.log $out/test.log
+        echo "Test passed"
+      '';
+
 in
 {
   toolchains = {
     clang = clangToolchain;
   };
 
-  inherit mkDependencyScanner mkExecutable mkStaticLib mkSharedLib mkPythonExtension mkHeaderOnly;
+  inherit mkDependencyScanner mkExecutable mkStaticLib mkSharedLib mkPythonExtension mkHeaderOnly mkTest;
 
   inherit mkDevShell;
 
