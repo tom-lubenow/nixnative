@@ -190,7 +190,7 @@ Manifests share a simple schema:
 
 - Only clang/LLVM 18 is supported. GCC, MSVC, or cross toolchains would require extending `toolchains`.
 - Dependency scanning runs `clang++ -MMD`; custom generators or exotic include search paths may need additional hooks.
-- System libraries still require manual flags today (`-lfoo`, `-L/path`). Wrappers around pkg-config or framework discovery would improve ergonomics.
+- System libraries: pkg-config is supported via `cpp.pkgConfig.makeLibrary`, but Apple frameworks and non-pkg-config discovery still need manual flags (`-framework Foo`, `-L/path`, etc.).
 - We operate on discrete files. Widely used headers still fan out rebuilds; address this by refactoring headers, introducing modules, or grouping TUs.
 
 ## Next steps

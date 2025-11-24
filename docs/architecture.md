@@ -57,5 +57,5 @@ Future features can slot into the same shape:
 ## Known gaps
 
 - Windows/MSVC backend is out-of-scope for this iteration; WSL + clang is the recommended path for now.
-- System library discovery remains manual. Wrappers around `pkg-config`/framework search would help surface the right link/include flags automatically.
+- System library discovery: pkg-config is supported via `cpp.pkgConfig.makeLibrary`, but framework discovery (e.g. macOS `-framework`) still needs manual flags.
 - Error reporting from the scanner currently surfaces raw clang warnings (e.g., unused linker flags). We can tailor the toolchain wrapper to silence or adjust these diagnostics.
