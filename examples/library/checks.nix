@@ -5,7 +5,7 @@ let
   toolchain = mathLibrary.passthru.toolchain;
   includeFlags = pkgs.lib.concatMapStringsSep " " (dir: "-I${dir.path}") mathLibrary.public.includeDirs;
   linkFlags = pkgs.lib.concatStringsSep " " mathLibrary.public.linkFlags;
-  defaultCxxFlags = pkgs.lib.concatStringsSep " " toolchain.defaultCxxFlags;
+  defaultCxxFlags = pkgs.lib.concatStringsSep " " toolchain.getDefaultCxxFlags;
 
 in {
   mathLibrary = pkgs.runCommand "library-example-check" {
@@ -21,7 +21,7 @@ int main() {
   return 0;
 }
 CC
-    ${toolchain.cxx} ${defaultCxxFlags} ${includeFlags} main.cc ${linkFlags} -o test
+    ${toolchain.getCXX} ${defaultCxxFlags} ${includeFlags} main.cc ${linkFlags} -o test
     ./test > "$out"
   '';
 }

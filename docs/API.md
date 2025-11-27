@@ -1,6 +1,6 @@
-# NixClang API Reference
+# Nixnative API Reference
 
-This document describes the public API exposed by `nixclang.lib.cpp`.
+This document describes the public API exposed by `nixnative.lib.native`.
 
 ## Core Builders
 
@@ -286,7 +286,7 @@ All fields must be lists. Invalid types will produce clear error messages.
 Creates a library from pkg-config modules:
 
 ```nix
-cpp.pkgConfig.mkPkgConfigLibrary {
+native.pkgConfig.mkPkgConfigLibrary {
   name = "zlib";
   packages = [ pkgs.zlib ];   # Nix packages providing pkg-config files
   modules = [ "zlib" ];       # pkg-config module names (defaults to [ name ])
@@ -298,7 +298,7 @@ cpp.pkgConfig.mkPkgConfigLibrary {
 Creates a library for macOS frameworks:
 
 ```nix
-cpp.pkgConfig.mkFrameworkLibrary {
+native.pkgConfig.mkFrameworkLibrary {
   name = "CoreFoundation";
   framework = "CoreFoundation";  # Framework name (defaults to name)
   sdk = pkgs.apple-sdk.sdkroot;  # SDK root (auto-detected if omitted)

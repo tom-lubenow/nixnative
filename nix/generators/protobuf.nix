@@ -49,7 +49,7 @@ let
 
   # Refined derivation
   # We want headers in $out/include and sources in $out/src (or just $out)
-  # The nixclang library expects `headers` to have { rel, store } and `sources` to have { rel, store }
+  # The nixnative library expects `headers` to have { rel, store } and `sources` to have { rel, store }
   
   drv = pkgs.runCommand "protobuf-gen"
     {

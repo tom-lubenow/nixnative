@@ -52,7 +52,7 @@ in {
     expectedLines = [
       "2 + 3 = 5"
       "4 * 5 = 20"
-      "build summary: nixclang-simple v1.0.0 (mode=strict)"
+      "build summary: nixnative-simple v1.0.0 (mode=strict)"
       "zlib version: "
     ];
     name = "simple-strict";
@@ -63,7 +63,7 @@ in {
     expectedLines = [
       "2 + 3 = 5"
       "4 * 5 = 20"
-      "build summary: nixclang-simple v1.0.0 (mode=scanner)"
+      "build summary: nixnative-simple v1.0.0 (mode=scanner)"
       "zlib version: "
     ];
     name = "simple-scanned";

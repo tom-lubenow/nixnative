@@ -1,12 +1,12 @@
 # Rust interop example
 
 This template demonstrates how to link a C++ executable built with
-`nixclang` against a Rust static library without requiring any Rust-specific
+`nixnative` against a Rust static library without requiring any Rust-specific
 support in the core library.
 
 ## What it does
 
-- Compiles a tiny `no_std` Rust crate to `libnixclang_rust.a` using `rustc`.
+- Compiles a tiny `no_std` Rust crate to `libnixnative_rust.a` using `rustc`.
 - Exposes the Rust functions via a C ABI and declares them in a C++ header.
 - Links the C++ translation unit against the static archive via the standard
   `libraries` mechanism.

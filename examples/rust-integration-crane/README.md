@@ -11,7 +11,7 @@ dependencies with Cargo.
   self-contained.
 - Uses `craneLib.buildPackage` to produce a `staticlib` archive from the
   Cargo project.
-- Links the resulting archive into a C++ executable via `nixclang`'s
+- Links the resulting archive into a C++ executable via `nixnative`'s
   `libraries` interface—no extra Rust support needed in the core library.
 
 ## Usage
