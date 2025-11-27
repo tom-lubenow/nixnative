@@ -4,6 +4,7 @@ let
   inherit (lib)
     concatMap
     concatStringsSep
+    escapeShellArg
     filter
     foldl'
     hasPrefix
@@ -16,6 +17,42 @@ let
     unique;
 in
 rec {
+  # ==========================================================================
+  # Validation helpers
+  # ==========================================================================
+
+  # Validates that a value is a list, with a contextual error message
+  assertList = { value, name, context }:
+    if builtins.isList value then value
+    else throw "nixclang (${context}): '${name}' must be a list, got ${builtins.typeOf value}";
+
+  # Validates the structure of a 'public' attribute set
+  validatePublic = { public, context }:
+    let
+      checkField = field: expected:
+        if !(public ? ${field}) then
+          throw "nixclang (${context}): public attribute missing required field '${field}'"
+        else if expected == "list" && !(builtins.isList public.${field}) then
+          throw "nixclang (${context}): public.${field} must be a list, got ${builtins.typeOf public.${field}}"
+        else
+          true;
+      _ = checkField "includeDirs" "list";
+      __ = checkField "defines" "list";
+      ___ = checkField "cxxFlags" "list";
+      ____ = checkField "linkFlags" "list";
+    in
+    public;
+
+  # Formats a value for error messages
+  showValue = value:
+    if builtins.isString value then "'${value}'"
+    else if builtins.isPath value then "<path: ${toString value}>"
+    else if builtins.isAttrs value then
+      if value ? name then "<attrset with name='${value.name}'>"
+      else if value ? rel then "<attrset with rel='${value.rel}'>"
+      else "<attrset with keys: ${concatStringsSep ", " (builtins.attrNames value)}>"
+    else if builtins.isList value then "<list of ${toString (builtins.length value)} items>"
+    else "<${builtins.typeOf value}>";
   sanitizeName = name:
     let
       dropExt =
@@ -38,7 +75,7 @@ rec {
     else if builtins.isString value then value
     else if builtins.isAttrs value && value ? path then toPathLike value.path
     else if builtins.isAttrs value && value ? outPath then value.outPath
-    else throw "Expected a path-like value";
+    else throw "nixclang: expected a path-like value (path, string, or attrset with 'path'/'outPath'), got ${showValue value}";
 
   stripExtension = file: ext:
     if hasSuffix ext file then removeSuffix ext file else file;
@@ -68,7 +105,7 @@ rec {
     else if builtins.isPath dir then dir
     else if builtins.isAttrs dir && dir ? path then builtins.path { path = dir.path; }
     else
-      throw "includeDirs entries must be relative strings or paths.";
+      throw "nixclang: includeDirs entries must be relative strings, paths, or attrsets with 'path', got ${showValue dir}";
 
   emptyPublic =
     {
@@ -110,14 +147,15 @@ rec {
           rel =
             if builtins.isAttrs source && source ? rel then source.rel
             else if builtins.isString source then source
-            else throw "mkExecutable: sources must be relative strings or attrsets with `rel`.";
+            else throw "nixclang: sources must be relative strings or attrsets with 'rel' attribute, got ${showValue source}";
           relNorm =
             if hasPrefix "./" rel then removePrefix "./" rel else rel;
           host =
             if builtins.isAttrs source && source ? path then builtins.toString source.path
             else "${rootHost}/${relNorm}";
           objectName = "${sanitizeName relNorm}.o";
-          _ = if builtins.pathExists host then true else throw "nixclang: source '${relNorm}' not found at ${host}";
+          _ = if builtins.pathExists host then true
+              else throw "nixclang: source '${relNorm}' not found at ${host}. Check that the file exists and the 'root' path is correct.";
         in
         {
           store =
@@ -193,7 +231,7 @@ rec {
         if builtins.isString dir then "-I${srcTree}/${dir}"
         else if builtins.isPath dir then "-I${dir}"
         else if builtins.isAttrs dir && dir ? path then "-I${dir.path}"
-        else throw "mkExecutable: includeDirs entries must be strings or paths.";
+        else throw "nixclang: includeDirs entries must be strings, paths, or attrsets with 'path', got ${showValue dir}";
     in
     map toFlag includeDirs;
 
@@ -208,7 +246,7 @@ rec {
           if value == "" then "-D${define.name}"
           else "-D${define.name}=${toString value}"
         else
-          throw "mkExecutable: defines must be strings or attrsets with name/value."
+          throw "nixclang: defines must be strings or attrsets with 'name' (and optional 'value'), got ${showValue define}"
       )
       defines;
 }

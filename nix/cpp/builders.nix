@@ -1,6 +1,6 @@
 { pkgs, lib, utils, clangToolchain, scanner }:
 let
-  inherit (lib) concatStringsSep ensureList;
+  inherit (lib) concatStringsSep ensureList escapeShellArg;
   inherit (utils)
     sanitizeName
     sanitizePath
@@ -13,13 +13,83 @@ let
     headerSet
     mkSourceTree
     toIncludeFlags
-    toDefineFlags;
+    toDefineFlags
+    validatePublic
+    showValue;
   inherit (scanner)
     mkManifest
     emptyManifest
     mergeManifests
     processGenerators
     mkDependencyScanner;
+
+  # ==========================================================================
+  # Shared link step helper (consolidates duplicate link logic)
+  # ==========================================================================
+  mkLinkStep =
+    { toolchain
+    , name
+    , objects
+    , cxxFlags
+    , ldflags
+    , linkFlags
+    , outputDir ? "bin"
+    , outputName ? name
+    , extraFlags ? [ ]  # e.g. [ "-shared" ] for shared libs
+    , targetPlatform ? pkgs.stdenv.targetPlatform  # Use target, not host, for cross-compilation
+    }:
+    let
+      tc = toolchain;
+      # Use target platform for linker flag decisions (correct for cross-compilation)
+      groupedLinkFlags =
+        if targetPlatform.isLinux
+        then [ "-Wl,--start-group" ] ++ linkFlags ++ [ "-Wl,--end-group" ]
+        else linkFlags;
+      finalLinkFlags = tc.defaultLdFlags ++ ldflags ++ groupedLinkFlags;
+      envAttrs = tc.environment;
+    in
+    pkgs.runCommand name
+      ({
+        buildInputs = tc.runtimeInputs;
+      } // envAttrs)
+      ''
+        set -euo pipefail
+        mkdir -p "$out/${outputDir}"
+        ${tc.cxx} \
+          ${concatStringsSep " " extraFlags} \
+          ${concatStringsSep " " tc.defaultCxxFlags} \
+          ${concatStringsSep " " cxxFlags} \
+          ${concatStringsSep " " objects} \
+          ${concatStringsSep " " finalLinkFlags} \
+          -o "$out/${outputDir}/${outputName}"
+      '';
+
+  # ==========================================================================
+  # Optimization and sanitizer flag helpers
+  # ==========================================================================
+
+  # Build LTO flags based on mode
+  ltoFlags = mode:
+    if mode == "thin" then [ "-flto=thin" ]
+    else if mode == "full" then [ "-flto" ]
+    else if mode == true then [ "-flto=thin" ]  # default to thin LTO
+    else [ ];
+
+  # Build sanitizer flags
+  sanitizerFlags = sanitizers:
+    let
+      validSanitizers = [ "address" "memory" "thread" "undefined" "leak" ];
+      checkSanitizer = s:
+        if builtins.elem s validSanitizers then "-fsanitize=${s}"
+        else throw "nixclang: unknown sanitizer '${s}'. Valid options: ${concatStringsSep ", " validSanitizers}";
+    in
+    map checkSanitizer sanitizers;
+
+  # Build coverage flags
+  coverageFlags = enable:
+    if enable then [ "--coverage" "-fprofile-arcs" "-ftest-coverage" ]
+    else [ ];
+
 in
 rec {
   compileTranslationUnit =
@@ -60,6 +130,7 @@ rec {
       inherit tu headers srcTree includeFlags defineFlags;
     };
 
+  # Legacy wrapper that uses mkLinkStep internally
   linkExecutable =
     { toolchain
     , name
@@ -68,29 +139,10 @@ rec {
     , ldflags
     , linkFlags
     }:
-    let
-      tc = toolchain;
-      groupedLinkFlags =
-        if pkgs.stdenv.hostPlatform.isLinux
-        then [ "-Wl,--start-group" ] ++ linkFlags ++ [ "-Wl,--end-group" ]
-        else linkFlags;
-      finalLinkFlags = tc.defaultLdFlags ++ ldflags ++ groupedLinkFlags;
-      envAttrs = tc.environment;
-    in
-    pkgs.runCommand name
-      ({
-        buildInputs = tc.runtimeInputs;
-      } // envAttrs)
-      ''
-        set -euo pipefail
-        mkdir -p "$out/bin"
-        ${tc.cxx} \
-          ${concatStringsSep " " tc.defaultCxxFlags} \
-          ${concatStringsSep " " cxxFlags} \
-          ${concatStringsSep " " objects} \
-          ${concatStringsSep " " finalLinkFlags} \
-          -o "$out/bin/${name}"
-      '';
+    mkLinkStep {
+      inherit toolchain name objects cxxFlags ldflags linkFlags;
+      outputDir = "bin";
+    };
 
   generateCompileCommands =
     { toolchain
@@ -142,18 +194,29 @@ rec {
     , scanner ? null
     , generators ? [ ]
     , toolchain ? clangToolchain
+    # New optimization options
+    , lto ? false          # false, true, "thin", or "full"
+    , sanitizers ? [ ]     # [ "address" "undefined" ] etc.
+    , coverage ? false     # Enable code coverage instrumentation
     , ...
     }:
     let
       tc = toolchain;
       rootPath = sanitizePath { path = root; };
       generatorInfo = processGenerators generators;
+      # Validate public attributes from libraries
+      _ = map (lib:
+        if lib ? public then validatePublic { public = lib.public; context = "library '${lib.name or "unknown"}'"; }
+        else true
+      ) libraries;
       libsPublic = collectPublic libraries;
       publicAggregate = mergePublic libsPublic generatorInfo.public;
       allSources = sources ++ generatorInfo.sources;
       combinedIncludeDirs = includeDirs ++ publicAggregate.includeDirs ++ generatorInfo.includeDirs;
       combinedDefines = defines ++ publicAggregate.defines ++ generatorInfo.defines;
-      combinedCxxFlags = cxxFlags ++ publicAggregate.cxxFlags ++ generatorInfo.cxxFlags;
+      # Add LTO, sanitizer, and coverage flags
+      extraOptFlags = (ltoFlags lto) ++ (sanitizerFlags sanitizers) ++ (coverageFlags coverage);
+      combinedCxxFlags = cxxFlags ++ publicAggregate.cxxFlags ++ generatorInfo.cxxFlags ++ extraOptFlags;
       tus = normalizeSources { inherit root; sources = allSources; };
       autoScanner =
         if depsManifest == null && scanner == null then
@@ -294,7 +357,7 @@ rec {
       ctx = mkBuildContext args;
       inherit (ctx) toolchain name rootPath publicAggregate combinedCxxFlags;
       tc = toolchain;
-      
+
       publicIncludeDirs = args.publicIncludeDirs or args.includeDirs or [ ];
       publicDefines = args.publicDefines or [ ];
       publicCxxFlags = args.publicCxxFlags or [ ];
@@ -305,28 +368,34 @@ rec {
       publicIncludeStores =
         map (dir: normalizeIncludeDir { inherit rootHost; dir = dir; })
           (utils.ensureList publicIncludeDirs);
-      
-      sharedExt = if pkgs.stdenv.hostPlatform.isDarwin then "dylib" else "so";
+
+      # Use target platform (correct for cross-compilation)
+      sharedExt = if pkgs.stdenv.targetPlatform.isDarwin then "dylib" else "so";
       sharedName = "lib${name}.${sharedExt}";
       installHeaders = concatStringsSep "\n" (map (dir: "cp -r ${dir}/. $out/include/") publicIncludeStores);
-      
+
+      # Use mkLinkStep for consistent link handling
+      linkDrv = mkLinkStep {
+        inherit toolchain;
+        name = "shared-${name}-link";
+        objects = ctx.objectPaths;
+        cxxFlags = combinedCxxFlags;
+        ldflags = args.ldflags or [ ];
+        linkFlags = publicAggregate.linkFlags;
+        outputDir = "lib";
+        outputName = sharedName;
+        extraFlags = [ "-shared" ];
+        targetPlatform = pkgs.stdenv.targetPlatform;
+      };
+
+      # Combine link output with header installation
       sharedDrv =
         pkgs.runCommand "shared-${name}"
-          ({
-            buildInputs = tc.runtimeInputs;
-          } // tc.environment)
+          { }
           ''
             set -euo pipefail
             mkdir -p "$out/lib" "$out/include"
-            ${tc.cxx} \
-              -shared \
-              ${concatStringsSep " " tc.defaultCxxFlags} \
-              ${concatStringsSep " " combinedCxxFlags} \
-              ${concatStringsSep " " ctx.objectPaths} \
-              ${concatStringsSep " " tc.defaultLdFlags} \
-              ${concatStringsSep " " (args.ldflags or [])} \
-              ${concatStringsSep " " publicAggregate.linkFlags} \
-              -o "$out/lib/${sharedName}"
+            cp ${linkDrv}/lib/${sharedName} "$out/lib/"
             ${installHeaders}
           '';
 
@@ -424,24 +493,19 @@ rec {
       # Python expects extension modules to use `.so` on all platforms.
       sharedExt = "so";
       sharedName = "${name}.${sharedExt}";
-      sharedDrv =
-        pkgs.runCommand "python-ext-${name}"
-          ({
-            buildInputs = tc.runtimeInputs;
-          } // tc.environment)
-          ''
-            set -euo pipefail
-            mkdir -p "$out/lib"
-            ${tc.cxx} \
-              -shared \
-              ${concatStringsSep " " tc.defaultCxxFlags} \
-              ${concatStringsSep " " combinedCxxFlags} \
-              ${concatStringsSep " " objectPaths} \
-              ${concatStringsSep " " tc.defaultLdFlags} \
-              ${concatStringsSep " " (pyLdFlags ++ ldflags)} \
-              ${concatStringsSep " " publicAggregate.linkFlags} \
-              -o "$out/lib/${sharedName}"
-          '';
+      # Use mkLinkStep for consistent link handling
+      sharedDrv = mkLinkStep {
+        toolchain = tc;
+        name = "python-ext-${name}";
+        objects = objectPaths;
+        cxxFlags = combinedCxxFlags;
+        ldflags = pyLdFlags ++ ldflags;
+        linkFlags = publicAggregate.linkFlags;
+        outputDir = "lib";
+        outputName = sharedName;
+        extraFlags = [ "-shared" ];
+        targetPlatform = pkgs.stdenv.targetPlatform;
+      };
       compileCommands =
         generateCompileCommands {
           toolchain = tc;
@@ -548,6 +612,12 @@ rec {
     }:
     let
       stdinFile = if stdin != null then pkgs.writeText "stdin" stdin else null;
+      # Properly escape args for shell
+      escapedArgs = map escapeShellArg args;
+      # Write expected output to a file to avoid shell escaping issues
+      expectedOutputFile = if expectedOutput != null
+        then pkgs.writeText "expected-output" expectedOutput
+        else null;
     in
     pkgs.runCommand "test-${name}"
       {
@@ -556,32 +626,34 @@ rec {
       ''
         set -euo pipefail
         mkdir -p $out
-        
+
         # Locate the executable binary
         BIN=$(find ${executable}/bin -type f -executable | head -n 1)
         if [ -z "$BIN" ]; then
           echo "Error: No executable found in ${executable}/bin"
           exit 1
         fi
-        
-        echo "Running test: $BIN ${builtins.concatStringsSep " " args}"
-        
+
+        echo "Running test: $BIN (${toString (builtins.length args)} args)"
+
         ${if stdin != null then "cat ${stdinFile} |" else ""} \
-        "$BIN" ${builtins.concatStringsSep " " args} > output.log 2>&1 || {
+        "$BIN" ${concatStringsSep " " escapedArgs} > output.log 2>&1 || {
           echo "Test failed with exit code $?"
           cat output.log
           exit 1
         }
-        
+
         cat output.log
-        
+
         ${if expectedOutput != null then ''
-          if ! grep -q "${expectedOutput}" output.log; then
-            echo "Test failed: Expected output '${expectedOutput}' not found."
+          expected=$(cat ${expectedOutputFile})
+          if ! grep -qF "$expected" output.log; then
+            echo "Test failed: Expected output not found."
+            echo "Expected: $expected"
             exit 1
           fi
         '' else ""}
-        
+
         cp output.log $out/test.log
       '';
 

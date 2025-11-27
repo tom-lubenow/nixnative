@@ -8,7 +8,9 @@ let
     toDefineFlags
     emptyPublic
     mergePublic
-    collectPublic;
+    collectPublic
+    showValue
+    validatePublic;
 in
 rec {
   mkManifest =
@@ -26,7 +28,7 @@ rec {
       manifest = load manifestSpec;
     in
     if manifest ? units then manifest
-    else throw "Dependency manifest must contain a `units` attribute.";
+    else throw "nixclang: dependency manifest must contain a 'units' attribute. Got: ${showValue manifest}. Expected format: { schema = 1; units = { \"src/file.cc\" = { dependencies = [...]; }; }; }";
 
   emptyManifest = {
     schema = 1;
@@ -71,29 +73,30 @@ rec {
           relRaw =
             if header ? rel then header.rel
             else if header ? relative then header.relative
-            else throw "Generator headers must provide a `rel` attribute.";
+            else throw "nixclang: generator header must provide a 'rel' or 'relative' attribute. Got: ${showValue header}";
           rel = if lib.hasPrefix "./" relRaw then lib.removePrefix "./" relRaw else relRaw;
           value =
             if header ? store then toPathLike header.store
             else if header ? path then toPathLike header.path
-            else throw "Generator headers must provide `path` or `store`.";
+            else throw "nixclang: generator header '${rel}' must provide 'path' or 'store' attribute. Got: ${showValue header}";
         in
         { name = rel; value = value; };
       toSourceOverride = source:
         let
           relRaw =
             if source ? rel then source.rel
-            else throw "Generator sources must provide a `rel` attribute.";
+            else throw "nixclang: generator source must provide a 'rel' attribute. Got: ${showValue source}";
           rel = if lib.hasPrefix "./" relRaw then lib.removePrefix "./" relRaw else relRaw;
           value =
             if source ? store then toPathLike source.store
             else if source ? path then toPathLike source.path
-            else throw "Generator sources must provide `path` or `store`.";
+            else throw "nixclang: generator source '${rel}' must provide 'path' or 'store' attribute. Got: ${showValue source}";
         in
         { name = rel; value = value; };
 
       step = acc: generator:
         let
+          generatorName = generator.name or "<unnamed generator>";
           genManifest =
             if generator ? manifest then mkManifest generator.manifest
             else emptyManifest;
@@ -105,8 +108,11 @@ rec {
             if generator ? sources
             then builtins.listToAttrs (map toSourceOverride generator.sources)
             else { };
+          # Validate generator public attributes if present
           genPublic =
-            if generator ? public then generator.public else emptyPublic;
+            if generator ? public then
+              validatePublic { public = generator.public; context = "generator '${generatorName}'"; }
+            else emptyPublic;
           genSources = generator.sources or [ ];
           genIncludeDirs = generator.includeDirs or [ ];
           genDefines = generator.defines or [ ];

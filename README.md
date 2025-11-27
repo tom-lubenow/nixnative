@@ -186,12 +186,97 @@ Manifests share a simple schema:
 }
 ```
 
+## Troubleshooting
+
+### Build is slow / rebuilding too much
+
+**Symptom:** Changing one file triggers many recompilations.
+
+**Causes and solutions:**
+1. **Widely-included headers**: If a header is included by many sources, changing it rebuilds all of them. Consider:
+   - Splitting large headers into smaller, focused ones
+   - Using forward declarations where possible
+   - Moving implementation details to `.cc` files
+
+2. **Missing or stale manifest**: If using strict mode, ensure your `.clang-deps.nix` is up to date:
+   ```sh
+   nix run .#cpp-sync-manifest -- .#checks.${system}.yourScanManifest path/to/.clang-deps.nix
+   ```
+
+3. **Too many translation units**: Each source file becomes a separate derivation. For very large codebases (100+ files), consider grouping related sources.
+
+### clangd / LSP not working
+
+**Symptom:** Editor shows errors or can't find headers.
+
+**Solutions:**
+1. Ensure `compile_commands.json` is symlinked in your project root:
+   ```sh
+   nix develop  # Auto-symlinks compile_commands.json
+   ls -la compile_commands.json
+   ```
+
+2. If the symlink is stale or missing, rebuild:
+   ```sh
+   nix build .#yourTarget
+   ln -sf $(nix build .#yourTarget --no-link --print-out-paths)/compile_commands.json .
+   ```
+
+3. Restart your LSP server after updating the compilation database.
+
+### Scanner fails with "source not found"
+
+**Symptom:** Error like `nixclang: source 'src/foo.cc' not found at /nix/store/.../src/foo.cc`
+
+**Solutions:**
+1. Check that the file exists at the specified path relative to `root`
+2. Ensure `root` points to the correct directory
+3. If using generators, verify the generator's `sources` entries have correct `rel` and `path` attributes
+
+### Generator errors
+
+**Symptom:** Error mentioning generator headers/sources/public attributes.
+
+**Solutions:**
+1. Check that all `headers` entries have both `rel` and `path`/`store` attributes
+2. Check that all `sources` entries have both `rel` and `path`/`store` attributes
+3. If providing `public`, ensure all fields are lists (not strings):
+   ```nix
+   # Wrong:
+   public = { linkFlags = "-lfoo"; };
+   # Right:
+   public = { linkFlags = [ "-lfoo" ]; includeDirs = []; defines = []; cxxFlags = []; };
+   ```
+
+### LTO / sanitizer issues
+
+**Symptom:** Build fails with LTO or sanitizer flags.
+
+**Solutions:**
+1. LTO requires all objects to be compiled with the same LTO mode
+2. Sanitizers may require runtime libraries; ensure they're available
+3. Some sanitizers are mutually exclusive (e.g., AddressSanitizer and MemorySanitizer)
+
+### macOS-specific issues
+
+**Symptom:** Build fails on macOS with SDK or framework errors.
+
+**Solutions:**
+1. Ensure `apple-sdk` is available in your nixpkgs
+2. For framework issues, use `cpp.pkgConfig.mkFrameworkLibrary`:
+   ```nix
+   CoreFoundation = cpp.pkgConfig.mkFrameworkLibrary { name = "CoreFoundation"; };
+   ```
+3. Check that `SDKROOT` and `MACOSX_DEPLOYMENT_TARGET` are set (automatic in dev shells)
+
 ## Current limitations
 
 - Only clang/LLVM 18 is supported. GCC, MSVC, or cross toolchains would require extending `toolchains`.
 - Dependency scanning runs `clang++ -MMD`; custom generators or exotic include search paths may need additional hooks.
 - System libraries: pkg-config is supported via `cpp.pkgConfig.makeLibrary`; Apple frameworks can be added with `cpp.pkgConfig.makeFramework`, but other non-pkg-config discovery still needs manual flags (`-L/path`, etc.).
 - We operate on discrete files. Widely used headers still fan out rebuilds; address this by refactoring headers, introducing modules, or grouping TUs.
+- C++20 modules are not yet supported (scanner uses traditional `-MMD` dependency discovery).
+- Precompiled headers (PCH) are not supported.
 
 ## Next steps
 
