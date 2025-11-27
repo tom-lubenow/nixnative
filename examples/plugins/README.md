@@ -1,0 +1,149 @@
+# Dynamic Plugin System Example
+
+This example demonstrates building a plugin system with shared libraries and runtime loading using `dlopen`.
+
+## What This Demonstrates
+
+- Building shared libraries with `native.sharedLib`
+- Building header-only libraries with `native.headerOnly`
+- Runtime plugin loading with `dlopen`/`dlsym`
+- Cross-platform support (Linux + macOS)
+
+## Project Structure
+
+```
+plugins/
+├── flake.nix           # Build definitions
+├── common/
+│   └── interface.h     # Plugin interface (shared between host and plugin)
+├── host/
+│   └── main.cc         # Host application that loads plugins
+└── plugin/
+    └── plugin.cc       # Example plugin implementation
+```
+
+## Build and Run
+
+```sh
+nix build
+./result/bin/run-plugin-example
+```
+
+Expected output:
+```
+Loading plugin from: /nix/store/.../lib/libmy-plugin.so
+Loaded plugin: MyPlugin
+Hello from MyPlugin!
+```
+
+You can also build components separately:
+
+```sh
+nix build .#hostApp    # Just the host application
+nix build .#myPlugin   # Just the plugin shared library
+```
+
+## How It Works
+
+### 1. Define the Plugin Interface
+
+```cpp
+// common/interface.h
+class Plugin {
+public:
+  virtual ~Plugin() = default;
+  virtual std::string getName() const = 0;
+  virtual void doSomething() = 0;
+};
+
+// Factory function type that plugins must export
+using CreatePluginFunc = Plugin* (*)();
+```
+
+### 2. Build the Interface as Header-Only Library
+
+```nix
+commonLib = native.headerOnly {
+  name = "plugin-interface";
+  includeDirs = [ ./common ];
+};
+```
+
+### 3. Build the Plugin as a Shared Library
+
+```nix
+myPlugin = native.sharedLib {
+  name = "my-plugin";
+  root = ./.;
+  sources = [ "plugin/plugin.cc" ];
+  libraries = [ commonLib ];
+};
+```
+
+The plugin implements the interface and exports a factory function:
+
+```cpp
+extern "C" {
+  Plugin* createPlugin() { return new MyPlugin(); }
+}
+```
+
+### 4. Build the Host Application
+
+```nix
+hostApp = native.executable {
+  name = "host-app";
+  root = ./.;
+  sources = [ "host/main.cc" ];
+  libraries = [ commonLib ];
+  ldflags = if pkgs.stdenv.isLinux then [ "-ldl" ] else [ ];
+};
+```
+
+### 5. Load the Plugin at Runtime
+
+```cpp
+void* handle = dlopen(pluginPath, RTLD_LAZY);
+CreatePluginFunc createPlugin = (CreatePluginFunc)dlsym(handle, "createPlugin");
+Plugin* plugin = createPlugin();
+plugin->doSomething();
+```
+
+## Key Concepts
+
+### Shared Libraries
+
+Use `native.sharedLib` to build `.so` (Linux) or `.dylib` (macOS) files:
+
+```nix
+native.sharedLib {
+  name = "my-lib";
+  sources = [ "lib.cc" ];
+  # Output: lib/libmy-lib.so or lib/libmy-lib.dylib
+};
+```
+
+Access the library path via `.sharedLibrary` attribute.
+
+### Header-Only Libraries
+
+Use `native.headerOnly` when there's no compiled code:
+
+```nix
+native.headerOnly {
+  name = "my-headers";
+  includeDirs = [ ./include ];
+  publicDefines = [ "MY_FEATURE=1" ];  # Optional
+};
+```
+
+### Platform Differences
+
+- **Linux**: Requires `-ldl` for `dlopen`/`dlsym`
+- **macOS**: `dlopen`/`dlsym` are in libc (no extra flags needed)
+
+## Next Steps
+
+- See `install/` for library installation and consumption
+- See `library/` for static libraries
+- See `testing/` for test infrastructure

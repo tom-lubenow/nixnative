@@ -1,3 +1,8 @@
+# Library installation example for nixnative
+#
+# Demonstrates building both static and shared libraries with proper
+# installation layout (headers in $out/include, libraries in $out/lib).
+
 {
   description = "Testing Standard Installation";
 
@@ -17,13 +22,23 @@
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };
 
+          # Static library
+          #
+          # Output:
+          #   $out/lib/libmylib-static.a
+          #   $out/include/lib.h
           staticLib = native.staticLib {
             name = "mylib-static";
             root = ./.;
             sources = [ "lib.cc" ];
-            publicIncludeDirs = [ ./. ];
+            publicIncludeDirs = [ ./. ];  # Installs lib.h to $out/include
           };
 
+          # Shared library
+          #
+          # Output:
+          #   $out/lib/libmylib-shared.so (or .dylib on macOS)
+          #   $out/include/lib.h
           sharedLib = native.sharedLib {
             name = "mylib-shared";
             root = ./.;

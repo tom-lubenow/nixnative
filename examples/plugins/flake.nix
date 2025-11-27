@@ -1,3 +1,7 @@
+# Dynamic Plugin System example for nixnative
+#
+# Demonstrates building a plugin system with shared libraries (dlopen/dlsym).
+
 {
   description = "Dynamic Plugin System example for nixnative";
 
@@ -17,13 +21,19 @@
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };
 
-          # Common interface library (header-only)
+          # Header-only library defining the plugin interface
+          #
+          # Both the host application and plugins include this header to share
+          # the Plugin base class and CreatePluginFunc type.
           commonLib = native.headerOnly {
             name = "plugin-interface";
             includeDirs = [ ./common ];
           };
 
-          # The Plugin (Shared Library)
+          # Plugin: a shared library that implements the Plugin interface
+          #
+          # Exports a C-linkage factory function: Plugin* createPlugin()
+          # The host loads this via dlopen/dlsym at runtime.
           myPlugin = native.sharedLib {
             name = "my-plugin";
             root = ./.;
@@ -31,17 +41,20 @@
             libraries = [ commonLib ];
           };
 
-          # The Host Application
+          # Host application that loads plugins at runtime
+          #
+          # Uses dlopen to load the plugin .so/.dylib and dlsym to find
+          # the createPlugin factory function.
           hostApp = native.executable {
             name = "host-app";
             root = ./.;
             sources = [ "host/main.cc" ];
             libraries = [ commonLib ];
-            # We need to link against dl for dlopen
+            # Linux requires -ldl for dlopen/dlsym; macOS has them in libc
             ldflags = if pkgs.stdenv.isLinux then [ "-ldl" ] else [ ];
           };
 
-          # Wrapper script to run the host with the plugin
+          # Wrapper script that runs the host with the plugin
           runScript = pkgs.writeShellScriptBin "run-plugin-example" ''
             ${hostApp}/bin/host-app ${myPlugin.sharedLibrary}
           '';

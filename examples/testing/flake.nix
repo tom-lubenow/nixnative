@@ -1,3 +1,13 @@
+# Testing example for nixnative
+#
+# Demonstrates the test infrastructure and edge cases like:
+# - Basic tests with expected output
+# - Tests with arguments
+# - Shell escaping (special characters)
+# - LTO builds
+# - AddressSanitizer (Linux only)
+# - Minimal configuration
+
 {
   description = "Testing mkTest and edge cases";
 
@@ -17,20 +27,25 @@
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };
 
-          # Basic app for testing
+          # Basic app for testing - prints "Hello <arg>" or "Hello Test"
           app = native.executable {
             name = "test-app";
             root = ./.;
             sources = [ "main.cc" ];
           };
 
-          # Basic tests
+          # ================================================================
+          # Basic Tests
+          # ================================================================
+
+          # Simple test: run executable, check output
           test1 = native.test {
             name = "basic-test";
             executable = app;
             expectedOutput = "Hello Test";
           };
 
+          # Test with command-line arguments
           test2 = native.test {
             name = "arg-test";
             executable = app;
@@ -38,7 +53,8 @@
             expectedOutput = "Hello World";
           };
 
-          # Edge case: special characters in args (shell escaping test)
+          # Edge case: verify shell escaping works correctly
+          # This catches bugs where special characters aren't properly quoted
           test3 = native.test {
             name = "special-chars-test";
             executable = app;
@@ -46,7 +62,11 @@
             expectedOutput = "Hello it's \"quoted\" & $special";
           };
 
-          # Edge case: LTO build using abstract flags
+          # ================================================================
+          # Build Configuration Tests
+          # ================================================================
+
+          # Test LTO (Link-Time Optimization) builds
           appLto = native.executable {
             name = "test-app-lto";
             root = ./.;
@@ -60,7 +80,8 @@
             expectedOutput = "Hello Test";
           };
 
-          # Edge case: Address sanitizer (only on Linux, ASan has issues on macOS)
+          # Test AddressSanitizer builds (Linux only - ASan has runtime
+          # issues on macOS within Nix sandboxing)
           appAsan = native.executable {
             name = "test-app-asan";
             root = ./.;
@@ -77,7 +98,11 @@
             expectedOutput = "Hello Test";
           };
 
-          # Edge case: empty optional lists (should work fine)
+          # ================================================================
+          # Edge Cases
+          # ================================================================
+
+          # Test that empty optional lists work correctly
           appMinimal = native.executable {
             name = "test-app-minimal";
             root = ./.;
@@ -101,13 +126,13 @@
           inherit app appLto appMinimal;
           inherit test1 test2 test3 testLto testMinimal;
         }
-        # Only include ASan tests on Linux (ASan has runtime issues on macOS with Nix)
+        # ASan tests only on Linux
         // (if pkgs.stdenv.hostPlatform.isLinux then {
           inherit appAsan testAsan;
         } else { })
       );
 
-      # Expose checks for `nix flake check`
+      # Expose tests for `nix flake check`
       checks = forAllSystems (system:
         let
           packages' = self.packages.${system};
