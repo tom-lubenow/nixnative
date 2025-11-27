@@ -20,83 +20,18 @@
         let
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };
-
-          # ================================================================
-          # Wrapping System Libraries with pkg-config
-          # ================================================================
-
-          # zlib - compression library
-          #
-          # mkPkgConfigLibrary runs pkg-config to extract:
-          # - Include paths (-I flags)
-          # - Defines (-D flags)
-          # - Link flags (-l and -L flags)
-          zlibLib = native.pkgConfig.makeLibrary {
-            name = "zlib";
-            packages = [ pkgs.zlib ];
-            # modules defaults to [ name ], i.e. [ "zlib" ]
-          };
-
-          # curl - HTTP client library
-          #
-          # Some libraries have different pkg-config module names
-          curlLib = native.pkgConfig.makeLibrary {
-            name = "curl";
-            packages = [ pkgs.curl ];
-            modules = [ "libcurl" ];  # pkg-config module name
-          };
-
-          # ================================================================
-          # macOS Frameworks (Darwin only)
-          # ================================================================
-
-          # On macOS, many system APIs are in frameworks rather than
-          # traditional libraries. mkFrameworkLibrary handles the
-          # -framework flag and SDK path.
-          frameworkLibs =
-            if pkgs.stdenv.isDarwin then [
-              (native.pkgConfig.mkFrameworkLibrary {
-                name = "CoreFoundation";
-              })
-              (native.pkgConfig.mkFrameworkLibrary {
-                name = "Security";
-              })
-            ]
-            else [];
-
-          # ================================================================
-          # Building with pkg-config Libraries
-          # ================================================================
-
-          demo = native.executable {
-            name = "pkgconfig-demo";
-            root = ./.;
-            sources = [ "main.cc" ];
-
-            # Use pkg-config wrapped libraries just like any other library
-            libraries = [ zlibLib curlLib ] ++ frameworkLibs;
-          };
-
+          packages = import ./project.nix { inherit pkgs native; };
         in
-        {
-          default = demo;
-          inherit demo zlibLib curlLib;
-        }
+        packages // { default = packages.demo; }
       );
 
       checks = forAllSystems (system:
         let
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };
-          packages' = self.packages.${system};
+          packages = import ./project.nix { inherit pkgs native; };
         in
-        {
-          demo = native.test {
-            name = "pkgconfig-demo";
-            executable = packages'.demo;
-            expectedOutput = "All libraries working correctly";
-          };
-        }
+        import ./checks.nix { inherit pkgs native packages; }
       );
     };
 }

@@ -21,54 +21,18 @@
         let
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };
-
-          # Header-only library: no sources to compile, just headers
-          #
-          # This creates a library that can be used as a dependency.
-          # Consumers get the include directories added to their compile commands.
-          vec3Lib = native.headerOnly {
-            name = "vec3";
-            root = ./.;
-
-            # Headers to expose to consumers
-            # These will be available as #include "vec3.hpp"
-            publicIncludeDirs = [ "include" ];
-
-            # Optional: propagate defines to consumers
-            # publicDefines = [ "VEC3_USE_SIMD" ];
-          };
-
-          # Executable that uses the header-only library
-          demo = native.executable {
-            name = "header-only-demo";
-            root = ./.;
-            sources = [ "main.cc" ];
-
-            # The header-only library is consumed like any other library
-            libraries = [ vec3Lib ];
-          };
-
+          packages = import ./project.nix { inherit pkgs native; };
         in
-        {
-          default = demo;
-          inherit vec3Lib demo;
-        }
+        { default = packages.testApp; inherit (packages) testApp vec3Lib; }
       );
 
       checks = forAllSystems (system:
         let
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };
-          packages' = self.packages.${system};
+          packages = import ./project.nix { inherit pkgs native; };
         in
-        {
-          # Verify the demo runs correctly
-          demo = native.test {
-            name = "header-only-demo";
-            executable = packages'.demo;
-            expectedOutput = "a + b = (5, 7, 9)";
-          };
-        }
+        import ./checks.nix { inherit pkgs native packages; }
       );
     };
 }

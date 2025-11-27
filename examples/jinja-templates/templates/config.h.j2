@@ -1,0 +1,33 @@
+// Auto-generated configuration header
+// Template: config.h.j2
+// Do not edit directly - modify the template instead
+
+#pragma once
+
+#include <string_view>
+
+namespace config {
+
+// Application identity
+constexpr std::string_view APP_NAME = "{{ appName }}";
+constexpr std::string_view VERSION = "{{ version }}";
+
+// Version components
+constexpr int VERSION_MAJOR = {{ versionMajor }};
+constexpr int VERSION_MINOR = {{ versionMinor }};
+constexpr int VERSION_PATCH = {{ versionPatch }};
+
+// Build configuration
+{% if debug %}
+constexpr bool DEBUG_ENABLED = true;
+#define DEBUG_MODE 1
+{% else %}
+constexpr bool DEBUG_ENABLED = false;
+#define DEBUG_MODE 0
+{% endif %}
+
+// Limits
+constexpr int MAX_CONNECTIONS = {{ maxConnections }};
+constexpr int BUFFER_SIZE = {{ bufferSize }};
+
+}  // namespace config

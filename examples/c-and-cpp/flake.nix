@@ -21,78 +21,18 @@
         let
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };
-
-          # ================================================================
-          # Option 1: Single executable with mixed sources
-          # ================================================================
-          #
-          # nixnative handles .c files with the C compiler and .cc/.cpp
-          # files with the C++ compiler automatically based on extension.
-          mixedApp = native.executable {
-            name = "mixed-app";
-            root = ./.;
-
-            # Mix of C and C++ sources - handled automatically
-            sources = [
-              "clib.c"     # Compiled as C
-              "main.cc"    # Compiled as C++
-            ];
-
-            includeDirs = [ "include" ];
-          };
-
-          # ================================================================
-          # Option 2: C library consumed by C++ code
-          # ================================================================
-          #
-          # Build the C code as a separate static library, then link
-          # it into the C++ application. This is useful when you want
-          # to reuse the C library in multiple projects.
-
-          # C-only static library
-          cLib = native.staticLib {
-            name = "clib";
-            root = ./.;
-            sources = [ "clib.c" ];
-            includeDirs = [ "include" ];
-            publicIncludeDirs = [ "include" ];
-          };
-
-          # C++ application using the C library
-          cppApp = native.executable {
-            name = "cpp-app";
-            root = ./.;
-            sources = [ "main.cc" ];
-            includeDirs = [ "include" ];
-            libraries = [ cLib ];
-          };
-
+          packages = import ./project.nix { inherit pkgs native; };
         in
-        {
-          default = mixedApp;
-          inherit mixedApp cLib cppApp;
-        }
+        packages // { default = packages.mixedApp; }
       );
 
       checks = forAllSystems (system:
         let
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };
-          packages' = self.packages.${system};
+          packages = import ./project.nix { inherit pkgs native; };
         in
-        {
-          mixedApp = native.test {
-            name = "mixed-app";
-            executable = packages'.mixedApp;
-            expectedOutput = "Mixed C/C++ working correctly";
-          };
-
-          cppApp = native.test {
-            name = "cpp-app";
-            executable = packages'.cppApp;
-            expectedOutput = "Mixed C/C++ working correctly";
-          };
-        }
+        import ./checks.nix { inherit pkgs native packages; }
       );
     };
 }

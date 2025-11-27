@@ -12,12 +12,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-latest
             system: aarch64-darwin
           - os: ubuntu-latest
             system: x86_64-linux
-          - os: ubuntu-24.04-arm
-            system: aarch64-linux
 
     runs-on: ${{ matrix.os }}
     name: nix flake check (${{ matrix.system }})

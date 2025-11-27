@@ -1,0 +1,28 @@
+// Auto-generated message implementation
+// Template: messages.cc.j2
+
+#include "messages.h"
+
+namespace messages {
+
+{% for msg in messages %}
+const std::string_view {{ msg.name }} = "{{ msg.text }}";
+{% endfor %}
+
+// Static message array for ID lookup
+static const std::string_view* messageTable[] = {
+{% for msg in messages %}
+    &{{ msg.name }},
+{% endfor %}
+};
+
+static constexpr int MESSAGE_COUNT = {{ messages | length }};
+
+const std::string_view* getMessage(int id) {
+    if (id < 0 || id >= MESSAGE_COUNT) {
+        return nullptr;
+    }
+    return messageTable[id];
+}
+
+}  // namespace messages

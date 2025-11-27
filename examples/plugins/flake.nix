@@ -20,50 +20,18 @@
         let
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };
-
-          # Header-only library defining the plugin interface
-          #
-          # Both the host application and plugins include this header to share
-          # the Plugin base class and CreatePluginFunc type.
-          commonLib = native.headerOnly {
-            name = "plugin-interface";
-            includeDirs = [ ./common ];
-          };
-
-          # Plugin: a shared library that implements the Plugin interface
-          #
-          # Exports a C-linkage factory function: Plugin* createPlugin()
-          # The host loads this via dlopen/dlsym at runtime.
-          myPlugin = native.sharedLib {
-            name = "my-plugin";
-            root = ./.;
-            sources = [ "plugin/plugin.cc" ];
-            libraries = [ commonLib ];
-          };
-
-          # Host application that loads plugins at runtime
-          #
-          # Uses dlopen to load the plugin .so/.dylib and dlsym to find
-          # the createPlugin factory function.
-          hostApp = native.executable {
-            name = "host-app";
-            root = ./.;
-            sources = [ "host/main.cc" ];
-            libraries = [ commonLib ];
-            # Linux requires -ldl for dlopen/dlsym; macOS has them in libc
-            ldflags = if pkgs.stdenv.isLinux then [ "-ldl" ] else [ ];
-          };
-
-          # Wrapper script that runs the host with the plugin
-          runScript = pkgs.writeShellScriptBin "run-plugin-example" ''
-            ${hostApp}/bin/host-app ${myPlugin.sharedLibrary}
-          '';
-
+          packages = import ./project.nix { inherit pkgs native; };
         in
-        {
-          inherit hostApp myPlugin;
-          default = runScript;
-        }
+        packages // { default = packages.runScript; }
+      );
+
+      checks = forAllSystems (system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+          native = nixnative.lib.native { inherit pkgs; };
+          packages = import ./project.nix { inherit pkgs native; };
+        in
+        import ./checks.nix { inherit pkgs native packages; }
       );
     };
 }

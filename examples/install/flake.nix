@@ -21,35 +21,18 @@
         let
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };
-
-          # Static library
-          #
-          # Output:
-          #   $out/lib/libmylib-static.a
-          #   $out/include/lib.h
-          staticLib = native.staticLib {
-            name = "mylib-static";
-            root = ./.;
-            sources = [ "lib.cc" ];
-            publicIncludeDirs = [ ./. ];  # Installs lib.h to $out/include
-          };
-
-          # Shared library
-          #
-          # Output:
-          #   $out/lib/libmylib-shared.so (or .dylib on macOS)
-          #   $out/include/lib.h
-          sharedLib = native.sharedLib {
-            name = "mylib-shared";
-            root = ./.;
-            sources = [ "lib.cc" ];
-            publicIncludeDirs = [ ./. ];
-          };
-
+          packages = import ./project.nix { inherit pkgs native; };
         in
-        {
-          inherit staticLib sharedLib;
-        }
+        packages // { default = packages.staticLib; }
+      );
+
+      checks = forAllSystems (system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+          native = nixnative.lib.native { inherit pkgs; };
+          packages = import ./project.nix { inherit pkgs native; };
+        in
+        import ./checks.nix { inherit pkgs native packages; }
       );
     };
 }

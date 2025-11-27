@@ -73,9 +73,35 @@ let
 
       variables = config.variables or {};
 
+      # Check if any templates are store paths (from writeText)
+      isStorePath = path: lib.hasPrefix "/nix/store/" path;
+      storePathTemplates = builtins.filter (t: isStorePath t.template) templates;
+      localTemplates = builtins.filter (t: !isStorePath t.template) templates;
+
+      # Create a derivation that collects all template files into one directory
+      templateInputs = pkgs.runCommand "jinja-inputs" {} (
+        ''
+          mkdir -p $out
+          # Copy store-path templates to output with their basename
+        '' + concatStringsSep "\n" (map (t:
+          let baseName = builtins.baseNameOf t.template;
+          in "cp ${t.template} $out/${baseName}"
+        ) storePathTemplates)
+      );
+
+      # Rewrite templates to use basenames for store paths
+      rewrittenTemplates = map (t:
+        if isStorePath t.template
+        then t // { template = builtins.baseNameOf t.template; }
+        else t
+      ) templates;
+
       configJson = builtins.toJSON {
-        inherit templates variables;
+        templates = rewrittenTemplates;
+        inherit variables;
       };
+
+      hasStorePathTemplates = storePathTemplates != [];
     in
     pkgs.runCommand "jinja-gen"
       {
@@ -86,9 +112,18 @@ let
         set -euo pipefail
         mkdir -p $out
 
+        # Merge source templates with any store-path templates
+        TEMPLATE_DIR="$src"
+        ${lib.optionalString hasStorePathTemplates ''
+          # Create merged template directory
+          TEMPLATE_DIR=$(mktemp -d)
+          cp -r "$src"/* "$TEMPLATE_DIR/" 2>/dev/null || true
+          cp ${templateInputs}/* "$TEMPLATE_DIR/" 2>/dev/null || true
+        ''}
+
         ${pkgs.python3.withPackages (ps: [ ps.jinja2 ])}/bin/python3 \
           ${jinjaRenderer} \
-          "$src" \
+          "$TEMPLATE_DIR" \
           "$out" \
           '${configJson}'
       '';

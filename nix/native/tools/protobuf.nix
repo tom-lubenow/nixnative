@@ -104,7 +104,7 @@ in rec {
 
     # Link against protobuf runtime
     dependencies = [
-      "-l${pkgs.protobuf.lib}/lib/libprotobuf${pkgs.stdenv.hostPlatform.extensions.sharedLibrary}"
+      "${pkgs.protobuf}/lib/libprotobuf${pkgs.stdenv.hostPlatform.extensions.sharedLibrary}"
     ];
 
     defaultConfig = {

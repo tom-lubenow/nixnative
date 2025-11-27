@@ -31,13 +31,15 @@ Follow this progression to learn nixnative:
 ```
 
 Then explore specific features as needed:
-- **Testing**: `testing/`
+- **Testing**: `testing/`, `coverage/`
 - **IDE Support**: `devshell/`
 - **Shared Libraries**: `plugins/`, `install/`
-- **Language Interop**: `rust-integration/`, `rust-integration-crane/`, `interop/`
-- **Code Generation**: `protobuf/`, `simple-tool/`, `app-with-library/`
+- **Multi-Binary Projects**: `multi-binary/`
+- **Language Interop**: `rust-integration/`, `rust-integration-crane/`, `interop/`, `python-extension/`
+- **Code Generation**: `protobuf/`, `grpc/`, `jinja-templates/`, `simple-tool/`
 - **System Libraries**: `pkg-config/`
 - **Mixed Languages**: `c-and-cpp/`
+- **Cross-Compilation**: `cross-compile/`
 
 ## Example Index
 
@@ -54,12 +56,18 @@ Then explore specific features as needed:
 | [plugins](./plugins/) | Dynamic plugin system | `native.sharedLib`, dlopen |
 | [install](./install/) | Library installation | Static vs shared comparison |
 | [protobuf](./protobuf/) | Protocol Buffers | `native.tools.protobuf`, code generation |
+| [grpc](./grpc/) | gRPC services | `native.tools.grpc`, server/client |
+| [jinja-templates](./jinja-templates/) | Jinja2 templates | `native.tools.jinja`, config headers |
 | [simple-tool](./simple-tool/) | Custom code generator | Generator schema, inline tools |
 | [pkg-config](./pkg-config/) | System libraries | `makeLibrary`, `mkFrameworkLibrary` |
 | [c-and-cpp](./c-and-cpp/) | Mixed C/C++ | `.c` + `.cc` sources, `extern "C"` |
 | [rust-integration](./rust-integration/) | Rust interop (rustc) | Foreign library wrapping |
 | [rust-integration-crane](./rust-integration-crane/) | Rust interop (Cargo) | Crane integration |
 | [interop](./interop/) | Zig interop | C ABI, foreign libraries |
+| [multi-binary](./multi-binary/) | Multiple executables | Shared libraries, CLI + daemon + tests |
+| [coverage](./coverage/) | Code coverage | `{ type = "coverage"; }`, lcov |
+| [cross-compile](./cross-compile/) | Cross-compilation | Nix cross, Zig targets |
+| [python-extension](./python-extension/) | Python C extension | Python C API, shared libraries |
 
 ## Feature Matrix
 
@@ -67,20 +75,26 @@ Then explore specific features as needed:
 |---------|-----------|
 | High-level API (`native.executable`, etc.) | All examples |
 | Low-level API (`native.mkExecutable`, etc.) | `multi-toolchain/` |
-| Static libraries | `library/`, `library-chain/`, `app-with-library/`, `install/` |
-| Shared libraries | `plugins/`, `install/` |
+| Static libraries | `library/`, `library-chain/`, `app-with-library/`, `install/`, `multi-binary/` |
+| Shared libraries | `plugins/`, `install/`, `python-extension/` |
 | Header-only libraries | `header-only/`, `plugins/` |
-| Abstract flags (LTO, sanitizers, etc.) | `multi-toolchain/`, `testing/` |
+| Abstract flags (LTO, sanitizers, coverage) | `multi-toolchain/`, `testing/`, `coverage/` |
 | Custom toolchains | `multi-toolchain/` |
 | Dependency manifests | `app-with-library/` |
-| Code generation tools | `app-with-library/`, `protobuf/`, `simple-tool/` |
-| pkg-config integration | `pkg-config/`, `app-with-library/`, `protobuf/` |
+| Code generation tools | `app-with-library/`, `protobuf/`, `grpc/`, `jinja-templates/`, `simple-tool/` |
+| Jinja2 templates | `jinja-templates/`, `app-with-library/` |
+| gRPC services | `grpc/` |
+| pkg-config integration | `pkg-config/`, `app-with-library/`, `protobuf/`, `grpc/` |
 | macOS frameworks | `pkg-config/` |
-| Test infrastructure | `testing/`, most examples via `checks.nix` |
-| IDE/LSP integration | `devshell/` |
-| Foreign language interop | `rust-integration/`, `rust-integration-crane/`, `interop/` |
+| Test infrastructure | `testing/`, `coverage/`, most examples via checks |
+| Code coverage | `coverage/` |
+| IDE/LSP integration | `devshell/`, `multi-binary/` |
+| Foreign language interop | `rust-integration/`, `rust-integration-crane/`, `interop/`, `python-extension/` |
+| Python extensions | `python-extension/` |
 | Mixed C/C++ sources | `c-and-cpp/` |
 | Multi-library dependencies | `library-chain/` |
+| Multi-binary projects | `multi-binary/` |
+| Cross-compilation | `cross-compile/` |
 
 ## Running Examples
 
