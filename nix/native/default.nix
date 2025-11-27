@@ -316,6 +316,11 @@ let
     inherit pkgs lib utils context link;
   };
 
+  # High-level API (Option B style)
+  api = import ./builders/api.nix {
+    inherit lib compilers linkers mkToolchain helpers;
+  };
+
 in {
   # ==========================================================================
   # Public API
@@ -350,10 +355,35 @@ in {
   darwin = darwinLinkers;
 
   # ==========================================================================
-  # High-Level Build Functions
+  # High-Level API (recommended)
   # ==========================================================================
+  #
+  # These functions accept `compiler` and `linker` as optional string params
+  # with sensible defaults (clang + platform default linker).
+  #
+  # Usage:
+  #   native.executable { name = "app"; sources = [...]; }
+  #   native.staticLib { compiler = "gcc"; linker = "mold"; ... }
+  #
+  inherit (api) executable staticLib sharedLib headerOnly devShell test;
 
-  # Primary builders
+  # Expose resolvers for advanced use
+  inherit (api) resolveCompiler resolveLinker;
+
+  # ==========================================================================
+  # Low-Level Build Functions (explicit toolchain)
+  # ==========================================================================
+  #
+  # These require an explicit `toolchain` argument. Use these when you need
+  # full control or are building custom toolchains.
+  #
+  # Usage:
+  #   native.mkExecutable {
+  #     toolchain = native.mkToolchain { compiler = ...; linker = ...; };
+  #     name = "app";
+  #     ...
+  #   }
+  #
   inherit (helpers) mkExecutable mkStaticLib mkSharedLib mkHeaderOnly;
   inherit (helpers) mkDevShell mkTest;
 

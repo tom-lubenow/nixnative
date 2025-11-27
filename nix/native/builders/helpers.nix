@@ -46,7 +46,8 @@ in rec {
       inherit (ctx) toolchain name objectPaths flags combinedExtraCxxFlags publicAggregate;
 
       drv = linkExecutable {
-        inherit toolchain name objectPaths flags;
+        inherit toolchain name flags;
+        objects = objectPaths;
         extraCxxFlags = combinedExtraCxxFlags;
         ldflags = args.ldflags or [];
         linkFlags = publicAggregate.linkFlags;
@@ -160,7 +161,8 @@ in rec {
 
       # Link the shared library
       linkDrv = linkSharedLibrary {
-        inherit toolchain name objectPaths flags;
+        inherit toolchain name flags;
+        objects = objectPaths;
         extraCxxFlags = combinedExtraCxxFlags;
         ldflags = args.ldflags or [];
         linkFlags = publicAggregate.linkFlags;

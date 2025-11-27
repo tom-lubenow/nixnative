@@ -28,9 +28,41 @@
         native = import ./nix/native;
       };
 
-      packages = forAllSystems ({ examples, ... }:
+      packages = forAllSystems ({ pkgs, cpp, examples, ... }:
+        let
+          native = import ./nix/native { inherit pkgs; };
+          isLinux = pkgs.stdenv.hostPlatform.isLinux;
+
+          # Native module demo - builds the api-styles example (Linux only for now)
+          nativeDemo =
+            if isLinux then
+              let
+                mathLib = native.mkStaticLib {
+                  name = "math";
+                  root = ./examples/api-styles;
+                  sources = [ "lib/math.cc" ];
+                  publicIncludeDirs = [ "lib" ];
+                  toolchain = native.toolchains.default;
+                };
+              in
+              native.mkExecutable {
+                name = "native-demo";
+                root = ./examples/api-styles;
+                sources = [ "src/main.cc" ];
+                includeDirs = [ "lib" ];
+                libraries = [ mathLib ];
+                toolchain = native.toolchains.default;
+              }
+            else
+              # On Darwin, just create a placeholder for now
+              pkgs.runCommand "native-demo-darwin-stub" {} ''
+                mkdir -p $out/bin
+                echo "Native demo not yet supported on Darwin" > $out/bin/native-demo
+              '';
+        in
         examples.packages // {
           default = examples.defaults.app;
+          inherit nativeDemo;
         }
       );
 

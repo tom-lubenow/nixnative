@@ -127,7 +127,7 @@ rec {
       # Get Darwin SDK flags if applicable
       getDarwinSDKFlags =
         if targetPlatform.isDarwin && sdkPath != null
-        then [ "-isysroot" sdkPath ]
+        then [ "-isysroot" (builtins.toString sdkPath) ]
         else [];
 
       # Get Darwin deployment target flags
@@ -137,18 +137,16 @@ rec {
         else [];
 
       # Get all platform-specific compile flags
+      # Note: The compiler's defaultCxxFlags already includes -isysroot and -isystem
+      # for Darwin, so we only add deployment target flags here to avoid duplication
       getPlatformCompileFlags =
         let
-          darwinSdk =
-            if targetPlatform.isDarwin && sdkPath != null
-            then [ "-isysroot" sdkPath ]
-            else [];
           darwinDeploy =
             if targetPlatform.isDarwin && deploymentTarget != null
             then [ "-mmacosx-version-min=${deploymentTarget}" ]
             else [];
         in
-        darwinSdk ++ darwinDeploy;
+        darwinDeploy;
     };
 
   # ==========================================================================

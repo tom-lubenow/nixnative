@@ -249,12 +249,17 @@ EOF
 
         cd "$work"
 
+        # Unset Nix wrapper environment variables that interfere with our explicit flags
+        unset NIX_CFLAGS_COMPILE NIX_CFLAGS_COMPILE_FOR_TARGET
+        unset NIX_LDFLAGS NIX_LDFLAGS_FOR_TARGET
+
         # Scan each source file for dependencies
         while IFS= read -r srcFile; do
           test -z "$srcFile" && continue
           depfile="$TMP/$(echo "$srcFile" | tr '/' '_').d"
           ${tc.getCXX} \
             ${concatStringsSep " " (tc.getDefaultCxxFlags)} \
+            ${concatStringsSep " " (tc.getPlatformCompileFlags)} \
             ${concatStringsSep " " combinedCxxFlags} \
             ${concatStringsSep " " includeFlags} \
             ${concatStringsSep " " defineFlags} \

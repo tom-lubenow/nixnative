@@ -77,6 +77,9 @@ in rec {
       } // tc.environment)
       ''
         set -euo pipefail
+        # Unset Nix wrapper environment variables that interfere with our explicit flags
+        unset NIX_CFLAGS_COMPILE NIX_CFLAGS_COMPILE_FOR_TARGET
+        unset NIX_LDFLAGS NIX_LDFLAGS_FOR_TARGET
         mkdir -p "$out/${outputDir}"
         ${tc.getCXX} \
           ${concatStringsSep " " extraFlags} \
