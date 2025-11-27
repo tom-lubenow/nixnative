@@ -25,6 +25,7 @@
     {
       lib = {
         cpp = import ./nix/cpp;
+        native = import ./nix/native;
       };
 
       packages = forAllSystems ({ examples, ... }:
