@@ -2,18 +2,18 @@
   description = "Template: executable + static library with generated sources";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-  inputs.nixclang.url = "path:../..";
+  inputs.nixnative.url = "path:../..";
 
-  outputs = { self, nixpkgs, nixclang }:
+  outputs = { self, nixpkgs, nixnative }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system:
         let
           pkgs = import nixpkgs { inherit system; };
-          cpp = nixclang.lib.cpp { inherit pkgs; };
-          packages = import ./project.nix { inherit pkgs cpp; };
+          native = nixnative.lib.native { inherit pkgs; };
+          packages = import ./project.nix { inherit pkgs native; };
           checks = import ./checks.nix { inherit pkgs; packages = packages; };
-        in f { inherit pkgs cpp packages checks; }
+        in f { inherit pkgs native packages checks; }
       );
     in {
       packages = forAllSystems ({ packages, ... }: packages // {

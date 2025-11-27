@@ -33,6 +33,8 @@ let
 
   utils = import ./utils/utils.nix { inherit pkgs; };
 
+  pkgConfigUtils = import ./utils/pkgconfig.nix { inherit pkgs lib; };
+
   # ==========================================================================
   # Scanner Modules
   # ==========================================================================
@@ -398,6 +400,9 @@ in {
 
   # Utilities (for advanced users)
   inherit utils;
+
+  # pkg-config integration
+  pkgConfig = pkgConfigUtils;
 
   # ==========================================================================
   # Version Info

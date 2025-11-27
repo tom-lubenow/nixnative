@@ -1,8 +1,21 @@
-{ pkgs, lib, utils }:
+# pkg-config integration for nixnative
+#
+# Provides utilities to wrap pkg-config libraries for use with nixnative.
+#
+{ pkgs, lib }:
+
 let
   inherit (lib) concatMap concatStringsSep;
-  inherit (utils) toPathLike;
 
+  # Create a library wrapper from pkg-config modules
+  #
+  # Arguments:
+  #   name     - Library name (for identification)
+  #   packages - Nix packages that provide the library
+  #   modules  - pkg-config module names (defaults to [ name ])
+  #
+  # Returns an attribute set with `public` that can be used as a library dependency.
+  #
   mkPkgConfigLibrary =
     { name
     , packages
@@ -12,7 +25,7 @@ let
       # Build PKG_CONFIG_PATH from provided package roots
       pkgDirs = concatMap
         (pkg:
-          let candidate = toPathLike pkg;
+          let candidate = if builtins.isString pkg then pkg else "${pkg}";
           in map (suffix: "${candidate}/${suffix}")
             [ "lib/pkgconfig" "lib64/pkgconfig" "share/pkgconfig" ]
         )
@@ -114,6 +127,13 @@ PY
       };
     };
 
+  # Create a macOS framework library wrapper
+  #
+  # Arguments:
+  #   name      - Library name
+  #   framework - Framework name (defaults to name)
+  #   sdk       - SDK path (defaults to apple-sdk.sdkroot)
+  #
   mkFrameworkLibrary =
     { name
     , framework ? name
@@ -139,8 +159,10 @@ PY
         inherit framework sdk;
       };
     };
-in
-{
-  mkPkgConfigLibrary = mkPkgConfigLibrary;
-  inherit mkFrameworkLibrary;
+
+in {
+  inherit mkPkgConfigLibrary mkFrameworkLibrary;
+
+  # Convenience alias matching old cpp API
+  makeLibrary = mkPkgConfigLibrary;
 }

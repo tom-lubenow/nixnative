@@ -1,22 +1,25 @@
-{ pkgs, cpp, craneLib }:
+{ pkgs, native, craneLib }:
 
 let
   root = ./.;
   includeDirs = [ "include" ];
   sources = [ "src/main.cc" ];
 
+  # Build Rust library using crane
   crateSrc = craneLib.cleanCargoSource ./rust-crate;
 
   rustStatic = craneLib.buildPackage {
-    pname = "nixclang-rust-crane";
+    pname = "nixnative-rust-crane";
     version = "0.1.0";
     src = crateSrc;
     cargoExtraArgs = "--locked";
   };
 
-  rustLibPath = "${rustStatic}/lib/libnixclang_rust_crane.a";
+  rustLibPath = "${rustStatic}/lib/libnixnative_rust_crane.a";
 
+  # Wrap as a library with public interface
   rustLibrary = {
+    name = "rust-crane-lib";
     drv = rustStatic;
     public = {
       includeDirs = [ ];
@@ -26,7 +29,8 @@ let
     };
   };
 
-  executable = cpp.mkExecutable {
+  # Build executable using high-level API
+  executable = native.executable {
     name = "rust-crane-integration";
     inherit root includeDirs sources;
     libraries = [ rustLibrary ];
