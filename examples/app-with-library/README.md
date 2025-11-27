@@ -17,13 +17,13 @@ nix build .#simple-scanned
 ./result/bin/simple-scanned
 ```
 
-## Updating `.clang-deps.nix`
+## Updating `.deps.nix`
 
 The manifest is generated from the dependency scanner and stored in
-`.clang-deps.nix`. Regenerate it after header changes with:
+`.deps.nix`. Regenerate it after header changes with:
 
 ```sh
-nix run ../..#cpp-sync-manifest -- .#checks.$(nix eval --raw --impure --expr 'builtins.currentSystem').simpleScanManifest ./.clang-deps.nix
+nix run ../..#sync-manifest -- .#checks.$(nix eval --raw --impure --expr 'builtins.currentSystem').simpleScanManifest ./.deps.nix
 ```
 
 (Adjust the flake path `../..` if you copy this template elsewhere.)

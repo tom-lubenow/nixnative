@@ -62,7 +62,7 @@
 Usage: sync-manifest <flake-attr> <destination> [nix build args...]
 
 Example:
-  nix run .#sync-manifest -- .#checks.x86_64-linux.simpleScanManifest examples/app-with-library/.clang-deps.nix
+  nix run .#sync-manifest -- .#checks.x86_64-linux.simpleScanManifest examples/app-with-library/.deps.nix
 USAGE
               }
 

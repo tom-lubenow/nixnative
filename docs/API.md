@@ -161,7 +161,7 @@ Generators allow you to integrate code generation (e.g., Jinja templates, protob
   name = "my-generator";
 
   # Optional: dependency manifest for generated sources
-  manifest = ./generated.clang-deps.nix;
+  manifest = ./generated.deps.nix;
   # Or an inline manifest:
   # manifest = { schema = 1; units = { "gen/file.cc" = { dependencies = [...]; }; }; };
 

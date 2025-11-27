@@ -91,7 +91,7 @@ PY
     name = "math";
     inherit root includeDirs;
     sources = libSources;
-    depsManifest = ./.clang-deps.nix;
+    depsManifest = ./.deps.nix;
     publicIncludeDirs = includeDirs;
   };
 
@@ -100,7 +100,7 @@ PY
     name = "simple-strict";
     inherit root includeDirs;
     sources = appSources;
-    depsManifest = ./.clang-deps.nix;
+    depsManifest = ./.deps.nix;
     libraries = [ mathLib zlibLib ];
     tools = [ buildInfoStrict ];
   };

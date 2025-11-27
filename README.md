@@ -1,16 +1,26 @@
 # nixnative
 
-Incremental, deterministic C/C++ builds driven directly by Nix. This repository experiments with the "one derivation per translation unit" approach supporting multiple compilers (clang, gcc, zig) and linkers (lld, mold, gold, ld64).
+A modular, extensible system for defining minimal, incremental C/C++ build graphs natively in Nix.
 
-## Highlights
+## Why nixnative?
 
-- **Per translation unit derivations.** Each `.cc` file becomes its own derivation that compiles to an object file. Touching a source or header only rebuilds the affected units.
-- **Pluggable toolchains.** Choose your compiler (clang, gcc, zig) and linker (lld, mold, gold, ld64) independently. The default is clang+lld on Linux and clang+ld64 on macOS.
-- **Dependency scanner (automatic).** When you omit a manifest nixnative spins up a dedicated `clang++ -MMD` scanner derivation to discover header/module dependencies. Use it directly (IFD) or materialize the result into `.clang-deps.nix` for strict CI.
-- **`compile_commands.json` passthrough.** Every build target exposes a generated compilation database for editor tooling.
-- **Structured libraries.** `mkStaticLib`, `mkSharedLib`, and `mkHeaderOnly` propagate link flags and public include directories so downstream targets can consume your outputs without manual `-L/-l` churn.
-- **Generator pipeline.** Attach derivations (for example the Jinja renderer shown in `examples/app-with-library/`) that emit headers/sources (plus manifests) to executables or libraries; include paths, defines, and link flags flow through automatically.
-- **Abstract flags.** Use semantic flags like `{ type = "lto"; value = "thin"; }` that translate to the correct CLI flags for each compiler.
+Traditional C++ build systems (CMake, Meson, Bazel) sit outside Nix and fight against it—wrapping them loses granularity and reproducibility. nixnative takes a different approach: **the build graph is pure Nix**. Each source file becomes a derivation, dependencies flow through attribute sets, and toolchains are just composable Nix functions.
+
+This gives you:
+
+- **True incrementality.** Change one file, rebuild one derivation. Nix's content-addressed store does the rest.
+- **Full toolchain control.** Compilers, linkers, and flags are explicit inputs—no hidden state, no "works on my machine."
+- **Composability.** Mix compilers (clang, gcc, zig), linkers (lld, mold, gold), and custom tools in a single project.
+- **Extensibility.** Adding a new compiler or code generator is just writing a Nix function.
+
+## Features
+
+- **Modular toolchains.** Compilers and linkers are independent, composable pieces. Use clang with mold, gcc with lld, or define your own combinations.
+- **Abstract flags.** Write `{ type = "lto"; value = "thin"; }` once—nixnative translates it to the right CLI flags for each compiler.
+- **Automatic dependency scanning.** Omit the manifest and nixnative discovers header dependencies automatically. Or commit a checked-in manifest for CI without IFD.
+- **Tool plugins.** Code generators (protobuf, Jinja templates, etc.) integrate cleanly—generated sources, headers, and link flags flow through automatically.
+- **Structured libraries.** Static, shared, and header-only libraries propagate their public interface (includes, defines, link flags) to dependents.
+- **IDE integration.** Every target exports `compile_commands.json` for clangd/LSP.
 
 ## Repository layout
 
@@ -38,7 +48,7 @@ Each directory under `examples/` contains a self-contained flake template. You c
 
 - `examples/executable` – minimal executable that relies on the dependency scanner.
 - `examples/library` – static library exposing public headers and a smoke-test that links against it.
-- `examples/app-with-library` – executable + internal library + generated sources with a checked-in `.clang-deps.nix` manifest (mirrors `.#simple-strict`/`.#simple-scanned`).
+- `examples/app-with-library` – executable + internal library + generated sources with a checked-in `.deps.nix` manifest (mirrors `.#simple-strict`/`.#simple-scanned`).
 - `examples/rust-integration` – executable that links against a Rust static library built via a minimal `rustc` invocation.
 - `examples/rust-integration-crane` – same idea, but the Rust library is built with `crane` for a Cargo-first workflow.
 - `examples/multi-toolchain` – demonstrates using different compiler/linker combinations and abstract flags.
@@ -56,14 +66,14 @@ Back at the root flake the same packages are exposed as `.#executableExample`, `
 ### Build the example
 
 ```sh
-nix build .#simple-strict           # uses the checked-in .clang-deps.nix
+nix build .#simple-strict           # uses the checked-in .deps.nix
 ./result/bin/simple-strict
 ```
 
 You can also exercise the scanner-based flow:
 
 ```sh
-nix build .#simple-scanned          # runs clang's -MMD scanner via IFD
+nix build .#simple-scanned          # auto-scans dependencies via IFD
 ./result/bin/simple-scanned
 ```
 
@@ -141,11 +151,11 @@ ls -l compile_commands.json
 
 ### Sync dependency manifests
 
-Need to refresh a checked-in `.clang-deps.nix` after a scanner run? Use the helper app:
+Need to refresh a checked-in `.deps.nix` after a scanner run? Use the helper app:
 
 ```sh
 system=$(nix eval --raw --impure --expr 'builtins.currentSystem')
-nix run .#sync-manifest -- .#checks.${system}.simpleScanManifest examples/app-with-library/.clang-deps.nix
+nix run .#sync-manifest -- .#checks.${system}.simpleScanManifest examples/app-with-library/.deps.nix
 ```
 
 Pass any additional `nix build` flags after the destination path (for example `--refresh`).
@@ -154,9 +164,9 @@ Pass any additional `nix build` flags after the destination path (for example `-
 
 You can operate in three complementary modes:
 
-1. **Strict mode (`depsManifest`).** Commit a `.clang-deps.nix` file that mirrors the scanner output. CI avoids IFD while still reusing the per-TU cache. Regenerate with `nix run .#sync-manifest`.
+1. **Strict mode (`depsManifest`).** Commit a `.deps.nix` file that mirrors the scanner output. CI avoids IFD while still reusing the per-TU cache. Regenerate with `nix run .#sync-manifest`.
 2. **Scanner mode (`scanner`).** Omit `depsManifest` (the default) and nixnative will automatically run `mkDependencyScanner` and import the produced manifest via IFD so developers never have to touch the manifest manually. You can still pass your own scanner derivation if you want to reuse the same scan across multiple targets or tweak the invocation.
-3. **Hybrid workflow.** Run the scanner locally, commit the materialized `.clang-deps.nix`, and let developers opt into IFD by pointing their build at the scanner instead of the checked-in file.
+3. **Hybrid workflow.** Run the scanner locally, commit the materialized `.deps.nix`, and let developers opt into IFD by pointing their build at the scanner instead of the checked-in file.
 
 Manifests share a simple schema:
 
@@ -186,9 +196,9 @@ Manifests share a simple schema:
    - Using forward declarations where possible
    - Moving implementation details to `.cc` files
 
-2. **Missing or stale manifest**: If using strict mode, ensure your `.clang-deps.nix` is up to date:
+2. **Missing or stale manifest**: If using strict mode, ensure your `.deps.nix` is up to date:
    ```sh
-   nix run .#sync-manifest -- .#checks.${system}.yourScanManifest path/to/.clang-deps.nix
+   nix run .#sync-manifest -- .#checks.${system}.yourScanManifest path/to/.deps.nix
    ```
 
 3. **Too many translation units**: Each source file becomes a separate derivation. For very large codebases (100+ files), consider grouping related sources.
@@ -259,7 +269,7 @@ Manifests share a simple schema:
 
 ## Current limitations
 
-- Dependency scanning runs `clang++ -MMD`; custom generators or exotic include search paths may need additional hooks.
+- Dependency scanning uses the compiler's `-MMD` flag; custom generators or exotic include search paths may need additional hooks.
 - System libraries: pkg-config is supported via `native.pkgConfig.makeLibrary`; Apple frameworks can be added with `native.pkgConfig.mkFrameworkLibrary`, but other non-pkg-config discovery still needs manual flags (`-L/path`, etc.).
 - We operate on discrete files. Widely used headers still fan out rebuilds; address this by refactoring headers, introducing modules, or grouping TUs.
 - C++20 modules are not yet supported (scanner uses traditional `-MMD` dependency discovery).
