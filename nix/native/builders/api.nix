@@ -20,12 +20,12 @@ let
   # ==========================================================================
 
   # Resolve a compiler specification to a compiler object
-  # Accepts: string name ("clang", "gcc", "zig") or compiler object
+  # Accepts: string name ("clang", "gcc") or compiler object
   resolveCompiler = spec:
     if spec == null then
       compilers.clang
     else if builtins.isString spec then
-      compilers.${spec} or (throw "Unknown compiler: '${spec}'. Available: clang, gcc, zig")
+      compilers.${spec} or (throw "Unknown compiler: '${spec}'. Available: clang, gcc")
     else if builtins.isAttrs spec && spec ? cc then
       spec  # Already a compiler object
     else
@@ -85,7 +85,7 @@ let
   # Build an executable
   #
   # Arguments:
-  #   compiler     - (optional) "clang", "gcc", "zig", or compiler object
+  #   compiler     - (optional) "clang", "gcc", or compiler object
   #   linker       - (optional) "lld", "mold", "gold", "ld", or linker object
   #   toolchain    - (optional) Pre-built toolchain (overrides compiler/linker)
   #   name         - Target name

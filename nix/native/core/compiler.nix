@@ -1,7 +1,7 @@
 # Compiler abstraction for nixnative
 #
 # A compiler is defined by its binaries, capabilities, and flag translators.
-# Different compilers (clang, gcc, zig) implement this interface.
+# Different compilers (clang, gcc) implement this interface.
 #
 { lib, flags }:
 
@@ -11,7 +11,7 @@ rec {
   # ==========================================================================
 
   mkCompiler =
-    { name                    # Identifier: "clang18", "gcc14", "zig"
+    { name                    # Identifier: "clang18", "gcc14"
     , cc                      # Path to C compiler binary
     , cxx                     # Path to C++ compiler binary
     , version ? null          # Version string (for display/capability detection)
@@ -127,25 +127,6 @@ rec {
       if flag.value == "none" then [ "-g0" ]
       else if flag.value == "line-tables" then [ "-g1" ]
       else [ "-g" ];
-  };
-
-  # Zig cc flag translators
-  zigFlagTranslators = commonFlagTranslators // {
-    # Zig handles LTO differently
-    lto = _: [];  # LTO is automatic in release modes
-
-    # Zig optimization uses different syntax internally but accepts -O
-    optimize = flag:
-      let
-        zigLevel = {
-          "0" = "Debug";
-          "1" = "ReleaseSafe";
-          "2" = "ReleaseFast";
-          "3" = "ReleaseFast";
-          "s" = "ReleaseSmall";
-          "z" = "ReleaseSmall";
-        }.${flag.value} or "Debug";
-      in [ "-O${zigLevel}" ];
   };
 
   # ==========================================================================

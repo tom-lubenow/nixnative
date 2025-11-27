@@ -59,11 +59,6 @@ let
     inherit (compilerCore) mkCompiler gccFlagTranslators;
   };
 
-  zigCompilers = import ./compilers/zig.nix {
-    inherit pkgs lib;
-    inherit (compilerCore) mkCompiler zigFlagTranslators;
-  };
-
   # ==========================================================================
   # Linker Implementations
   # ==========================================================================
@@ -117,10 +112,6 @@ let
 
     # GCC variants
     inherit (gccCompilers) gcc gcc12 gcc13 gcc14;
-
-    # Zig CC (C/C++ via Zig)
-    inherit (zigCompilers) zig zigCC;
-    zigCross = zigCompilers.crossTargets;
   };
 
   linkers = {
@@ -172,7 +163,6 @@ let
       # Determine which getBintools helper to use based on compiler name
       bintools =
         if lib.hasPrefix "gcc" compiler.name then gccCompilers.getBintools compiler
-        else if lib.hasPrefix "zig" compiler.name then zigCompilers.getBintools compiler
         else clangCompilers.getBintools compiler;  # Default to clang bintools
 
       targetPlatform = pkgs.stdenv.targetPlatform;
@@ -275,19 +265,6 @@ let
       else null;
 
     # ========================================================================
-    # Zig Toolchains
-    # ========================================================================
-
-    # Zig CC (uses Zig's internal linker)
-    zig-native =
-      if compilers.zig != null
-      then mkToolchain {
-        compiler = compilers.zig;
-        linker = linkers.lld;  # Zig typically uses LLD internally
-      }
-      else null;
-
-    # ========================================================================
     # Default Toolchain
     # ========================================================================
 
@@ -329,7 +306,7 @@ in {
   # ==========================================================================
 
   # Core factories
-  inherit (compilerCore) mkCompiler commonFlagTranslators gccFlagTranslators zigFlagTranslators;
+  inherit (compilerCore) mkCompiler commonFlagTranslators gccFlagTranslators;
   inherit (linkerCore) mkLinker;
   inherit (toolchainCore) validateToolchain getCapabilities toolchainSupports;
 

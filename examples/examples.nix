@@ -41,6 +41,10 @@ let
       { };
   rustCranePackages = materializeSet rustCranePackagesRaw;
 
+  multiToolchainPackagesRaw = import ./multi-toolchain/project.nix { inherit pkgs native; };
+  multiToolchainChecks = import ./multi-toolchain/checks.nix { inherit pkgs native; packages = multiToolchainPackagesRaw; };
+  multiToolchainPackages = materializeSet multiToolchainPackagesRaw;
+
   mergeAttrs = attrsList: pkgs.lib.foldl' (acc: attrs: acc // attrs) { } attrsList;
 
 in {
@@ -50,6 +54,7 @@ in {
     appPackages
     rustPackages
     rustCranePackages
+    multiToolchainPackages
   ];
 
   checks = mergeAttrs [
@@ -58,6 +63,7 @@ in {
     appChecks
     rustChecks
     rustCraneChecks
+    multiToolchainChecks
   ];
 
   defaults = {
