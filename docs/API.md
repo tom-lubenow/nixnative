@@ -91,19 +91,7 @@ mkHeaderOnly {
 }
 ```
 
-### `mkPythonExtension`
-Builds a CPython extension module.
-
-```nix
-mkPythonExtension {
-  name = "my_ext";
-  root = ./.;
-  sources = [ "src/bindings.cc" ];
-  # ... standard build args
-}
-```
-
-## Testing & Documentation
+## Testing
 
 ### `mkTest`
 Runs a test executable during the build.
@@ -115,17 +103,6 @@ mkTest {
   args = [ "--test" ];
   stdin = "input data";
   expectedOutput = "Success";
-}
-```
-
-### `mkDoc`
-Generates documentation using Doxygen.
-
-```nix
-mkDoc {
-  name = "my-docs";
-  root = ./.;
-  sources = [ "src" "include" ];
 }
 ```
 

@@ -21,9 +21,13 @@ Follow this progression to learn nixnative:
        ↓
 2. library/             → Static libraries, public interfaces
        ↓
-3. app-with-library/    → Combining libraries, code generation, manifests
+3. header-only/         → Header-only libraries (no compilation)
        ↓
-4. multi-toolchain/     → Compilers, linkers, optimization flags
+4. library-chain/       → Multi-library dependencies
+       ↓
+5. app-with-library/    → Combining libraries, code generation, manifests
+       ↓
+6. multi-toolchain/     → Compilers, linkers, optimization flags
 ```
 
 Then explore specific features as needed:
@@ -31,7 +35,9 @@ Then explore specific features as needed:
 - **IDE Support**: `devshell/`
 - **Shared Libraries**: `plugins/`, `install/`
 - **Language Interop**: `rust-integration/`, `rust-integration-crane/`, `interop/`
-- **Code Generation**: `protobuf/`, `app-with-library/`
+- **Code Generation**: `protobuf/`, `simple-tool/`, `app-with-library/`
+- **System Libraries**: `pkg-config/`
+- **Mixed Languages**: `c-and-cpp/`
 
 ## Example Index
 
@@ -39,6 +45,8 @@ Then explore specific features as needed:
 |---------|-------------|--------------|
 | [executable](./executable/) | Minimal executable | `native.executable`, auto-scanning |
 | [library](./library/) | Static library | `native.staticLib`, `publicIncludeDirs` |
+| [header-only](./header-only/) | Header-only library | `native.headerOnly`, templates |
+| [library-chain](./library-chain/) | Multi-library deps | Transitive dependencies, layered architecture |
 | [app-with-library](./app-with-library/) | Complete application | Libraries, tools, manifests, pkg-config |
 | [multi-toolchain](./multi-toolchain/) | Compiler/linker variations | Abstract flags, build matrices |
 | [testing](./testing/) | Test infrastructure | `native.test`, edge cases |
@@ -46,6 +54,9 @@ Then explore specific features as needed:
 | [plugins](./plugins/) | Dynamic plugin system | `native.sharedLib`, dlopen |
 | [install](./install/) | Library installation | Static vs shared comparison |
 | [protobuf](./protobuf/) | Protocol Buffers | `native.tools.protobuf`, code generation |
+| [simple-tool](./simple-tool/) | Custom code generator | Generator schema, inline tools |
+| [pkg-config](./pkg-config/) | System libraries | `makeLibrary`, `mkFrameworkLibrary` |
+| [c-and-cpp](./c-and-cpp/) | Mixed C/C++ | `.c` + `.cc` sources, `extern "C"` |
 | [rust-integration](./rust-integration/) | Rust interop (rustc) | Foreign library wrapping |
 | [rust-integration-crane](./rust-integration-crane/) | Rust interop (Cargo) | Crane integration |
 | [interop](./interop/) | Zig interop | C ABI, foreign libraries |
@@ -56,17 +67,20 @@ Then explore specific features as needed:
 |---------|-----------|
 | High-level API (`native.executable`, etc.) | All examples |
 | Low-level API (`native.mkExecutable`, etc.) | `multi-toolchain/` |
-| Static libraries | `library/`, `app-with-library/`, `install/` |
+| Static libraries | `library/`, `library-chain/`, `app-with-library/`, `install/` |
 | Shared libraries | `plugins/`, `install/` |
-| Header-only libraries | `plugins/` |
+| Header-only libraries | `header-only/`, `plugins/` |
 | Abstract flags (LTO, sanitizers, etc.) | `multi-toolchain/`, `testing/` |
 | Custom toolchains | `multi-toolchain/` |
 | Dependency manifests | `app-with-library/` |
-| Code generation tools | `app-with-library/`, `protobuf/` |
-| pkg-config integration | `app-with-library/`, `protobuf/` |
+| Code generation tools | `app-with-library/`, `protobuf/`, `simple-tool/` |
+| pkg-config integration | `pkg-config/`, `app-with-library/`, `protobuf/` |
+| macOS frameworks | `pkg-config/` |
 | Test infrastructure | `testing/`, most examples via `checks.nix` |
 | IDE/LSP integration | `devshell/` |
 | Foreign language interop | `rust-integration/`, `rust-integration-crane/`, `interop/` |
+| Mixed C/C++ sources | `c-and-cpp/` |
+| Multi-library dependencies | `library-chain/` |
 
 ## Running Examples
 
