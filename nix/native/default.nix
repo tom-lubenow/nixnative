@@ -25,6 +25,8 @@ let
 
   platformUtils = import ./core/platform.nix { inherit lib; };
 
+  toolCore = import ./core/tool.nix { inherit lib; };
+
   # ==========================================================================
   # Utility Modules
   # ==========================================================================
@@ -50,6 +52,16 @@ let
     inherit (compilerCore) mkCompiler commonFlagTranslators;
   };
 
+  gccCompilers = import ./compilers/gcc.nix {
+    inherit pkgs lib;
+    inherit (compilerCore) mkCompiler gccFlagTranslators;
+  };
+
+  zigCompilers = import ./compilers/zig.nix {
+    inherit pkgs lib;
+    inherit (compilerCore) mkCompiler zigFlagTranslators;
+  };
+
   # ==========================================================================
   # Linker Implementations
   # ==========================================================================
@@ -64,9 +76,33 @@ let
     inherit (linkerCore) mkLinker moldCapabilities;
   };
 
+  goldLinkers = import ./linkers/gold.nix {
+    inherit pkgs lib;
+    inherit (linkerCore) mkLinker goldCapabilities;
+  };
+
+  gnuLdLinkers = import ./linkers/ld.nix {
+    inherit pkgs lib;
+    inherit (linkerCore) mkLinker ldCapabilities;
+  };
+
   darwinLinkers = import ./linkers/darwin-ld.nix {
     inherit pkgs lib;
     inherit (linkerCore) mkLinker darwinLdCapabilities;
+  };
+
+  # ==========================================================================
+  # Tool Plugins
+  # ==========================================================================
+
+  protobufTool = import ./tools/protobuf.nix {
+    inherit pkgs lib;
+    inherit (toolCore) mkTool;
+  };
+
+  jinjaTool = import ./tools/jinja.nix {
+    inherit pkgs lib;
+    inherit (toolCore) mkTool;
   };
 
   # ==========================================================================
@@ -74,19 +110,49 @@ let
   # ==========================================================================
 
   compilers = {
+    # Clang variants
     inherit (clangCompilers) clang clang17 clang18 clang19;
-    # Future: gcc, zig
+
+    # GCC variants
+    inherit (gccCompilers) gcc gcc12 gcc13 gcc14;
+
+    # Zig CC (C/C++ via Zig)
+    inherit (zigCompilers) zig zigCC;
+    zigCross = zigCompilers.crossTargets;
   };
 
   linkers = {
+    # LLD variants
     inherit (lldLinkers) lld lld17 lld18 lld19;
+
+    # Mold (Linux only, fast)
     inherit (moldLinkers) mold;
+
+    # Gold (Linux only)
+    gold = goldLinkers.gold;
+
+    # GNU ld (Linux only)
+    ld = gnuLdLinkers.ld;
+    gnuLd = gnuLdLinkers.gnuLd;
+    bfd = gnuLdLinkers.bfd;
+
+    # Darwin ld64
     darwinLd = darwinLinkers.darwinLd;
-    # Aliases
+
+    # Default linker for platform
     default =
       if pkgs.stdenv.targetPlatform.isDarwin
       then darwinLinkers.darwinLd
       else lldLinkers.lld;
+  };
+
+  # Assembled tool plugins
+  tools = {
+    # Protobuf code generation
+    inherit (protobufTool) protobuf grpc;
+
+    # Jinja2 template code generation
+    inherit (jinjaTool) jinja configHeader enumGenerator;
   };
 
   # ==========================================================================
@@ -101,8 +167,11 @@ let
         if linker != null then linker
         else linkers.default;
 
-      # Get bintools from clang helper
-      bintools = clangCompilers.getBintools compiler;
+      # Determine which getBintools helper to use based on compiler name
+      bintools =
+        if lib.hasPrefix "gcc" compiler.name then gccCompilers.getBintools compiler
+        else if lib.hasPrefix "zig" compiler.name then zigCompilers.getBintools compiler
+        else clangCompilers.getBintools compiler;  # Default to clang bintools
 
       targetPlatform = pkgs.stdenv.targetPlatform;
 
@@ -126,6 +195,10 @@ let
   # ==========================================================================
 
   toolchains = {
+    # ========================================================================
+    # Clang Toolchains
+    # ========================================================================
+
     # Clang + LLD (Linux default)
     clang-lld = mkToolchain {
       compiler = compilers.clang;
@@ -141,6 +214,15 @@ let
       }
       else null;
 
+    # Clang + Gold
+    clang-gold =
+      if goldLinkers.isAvailable
+      then mkToolchain {
+        compiler = compilers.clang;
+        linker = linkers.gold;
+      }
+      else null;
+
     # Clang + Darwin ld64 (macOS)
     clang-darwin =
       if darwinLinkers.isAvailable
@@ -149,6 +231,63 @@ let
         linker = linkers.darwinLd;
       }
       else null;
+
+    # ========================================================================
+    # GCC Toolchains
+    # ========================================================================
+
+    # GCC + Mold (fast linking)
+    gcc-mold =
+      if moldLinkers.isAvailable && compilers.gcc != null
+      then mkToolchain {
+        compiler = compilers.gcc;
+        linker = linkers.mold;
+      }
+      else null;
+
+    # GCC + Gold
+    gcc-gold =
+      if goldLinkers.isAvailable && compilers.gcc != null
+      then mkToolchain {
+        compiler = compilers.gcc;
+        linker = linkers.gold;
+      }
+      else null;
+
+    # GCC + GNU ld (classic)
+    gcc-ld =
+      if gnuLdLinkers.isAvailable && compilers.gcc != null
+      then mkToolchain {
+        compiler = compilers.gcc;
+        linker = linkers.ld;
+      }
+      else null;
+
+    # GCC + LLD
+    gcc-lld =
+      if compilers.gcc != null
+      then mkToolchain {
+        compiler = compilers.gcc;
+        linker = linkers.lld;
+      }
+      else null;
+
+    # ========================================================================
+    # Zig Toolchains
+    # ========================================================================
+
+    # Zig CC (uses Zig's internal linker)
+    zig-native =
+      if compilers.zig != null
+      then mkToolchain {
+        compiler = compilers.zig;
+        linker = linkers.lld;  # Zig typically uses LLD internally
+      }
+      else null;
+
+    # ========================================================================
+    # Default Toolchain
+    # ========================================================================
 
     # Default toolchain for current platform
     default =
@@ -197,7 +336,10 @@ in {
   platform = platformUtils;
 
   # Assembled collections
-  inherit compilers linkers toolchains;
+  inherit compilers linkers toolchains tools;
+
+  # Tool factory (for custom tools)
+  inherit (toolCore) mkTool;
 
   # Capability presets (for custom linkers)
   linkerCapabilities = {
