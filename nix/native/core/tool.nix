@@ -3,7 +3,13 @@
 # Tools generate code (headers, sources) that integrate into the build.
 # Examples: protobuf, flatbuffers, jinja templates, etc.
 #
-{ lib }:
+# IMPORTANT FOR INCREMENTAL BUILDS:
+# The tool infrastructure automatically captures only the specified input files
+# (not the entire root directory) to ensure changes to unrelated files don't
+# invalidate the tool's output. This is critical for achieving true per-file
+# incremental compilation.
+#
+{ pkgs, lib, utils }:
 
 rec {
   # ==========================================================================
@@ -44,13 +50,36 @@ rec {
       # =======================================================================
 
       # Run the tool with input files
+      #
+      # IMPORTANT: For incremental builds, the tool automatically captures only
+      # the specified input files rather than the entire root directory. This
+      # ensures that changes to other files in the project don't invalidate
+      # the tool's output.
+      #
       run = { inputFiles, root ? ./., config ? {} }:
         let
           mergedConfig = defaultConfig // config;
 
-          # Run the transformation
+          # Normalize input file paths to strings
+          normalizedFiles = map (f:
+            if builtins.isAttrs f && f ? rel then f.rel
+            else if builtins.isString f then f
+            else throw "nixnative/tool: input files must be strings or attrsets with 'rel'"
+          ) inputFiles;
+
+          # Capture only the input files, not the entire root directory.
+          # This is CRITICAL for incremental builds: changes to files not in
+          # inputFiles will not invalidate this derivation.
+          capturedRoot = utils.captureFiles {
+            inherit root;
+            files = normalizedFiles;
+            name = "${name}-inputs";
+          };
+
+          # Run the transformation with the captured (minimal) root
           drv = transform {
-            inherit inputFiles root;
+            inherit inputFiles;
+            root = capturedRoot;
             config = mergedConfig;
           };
 

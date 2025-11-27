@@ -11,8 +11,10 @@ let
   mkBuildInfoTool = mode:
     let
       pythonEnv = pkgs.python3.withPackages (ps: [ ps.jinja2 ]);
-      rootStore = builtins.path { path = root; name = "build-info-root"; };
-      rootStr = builtins.toString rootStore;
+      # Only capture the specific template files needed, not the entire root!
+      # This ensures changes to other files (like math.cc) don't invalidate this tool.
+      hppTemplate = builtins.path { path = root + "/templates/build_info.hpp.j2"; };
+      ccTemplate = builtins.path { path = root + "/templates/build_info.cc.j2"; };
       renderDrv = pkgs.runCommand "build-info-${mode}"
         {
           buildInputs = [ pythonEnv ];
@@ -20,28 +22,28 @@ let
         ''
           set -euo pipefail
           mkdir -p "$out/generated"
-          ${pythonEnv}/bin/python - "$out" ${lib.escapeShellArg mode} ${lib.escapeShellArg rootStr} <<'PY'
+          ${pythonEnv}/bin/python - "$out" ${lib.escapeShellArg mode} ${hppTemplate} ${ccTemplate} <<'PY'
 import pathlib
 import sys
 from jinja2 import Template
 
 out_dir = pathlib.Path(sys.argv[1])
 mode = sys.argv[2]
-root = pathlib.Path(sys.argv[3])
+hpp_template = pathlib.Path(sys.argv[3])
+cc_template = pathlib.Path(sys.argv[4])
 
 project = "nixnative-simple"
 version = {"major": 1, "minor": 0, "patch": 0}
 
-def render(template_rel, output_rel):
-    template_path = root / template_rel
+def render(template_path, output_rel):
     tpl = Template(template_path.read_text())
     rendered = tpl.render(projectName=project, mode=mode, version=version)
     target = out_dir / output_rel
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(rendered)
 
-render("templates/build_info.hpp.j2", pathlib.Path("generated/build_info.hpp"))
-render("templates/build_info.cc.j2", pathlib.Path("generated/build_info.cc"))
+render(hpp_template, pathlib.Path("generated/build_info.hpp"))
+render(cc_template, pathlib.Path("generated/build_info.cc"))
 PY
         '';
       manifest = pkgs.writeText "build-info-${mode}.manifest.json" (builtins.toJSON {

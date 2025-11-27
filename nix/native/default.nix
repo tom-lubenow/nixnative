@@ -12,6 +12,14 @@
 
 let
   # ==========================================================================
+  # Utility Modules (loaded first - needed by other modules)
+  # ==========================================================================
+
+  utils = import ./utils/utils.nix { inherit pkgs; };
+
+  pkgConfigUtils = import ./utils/pkgconfig.nix { inherit pkgs lib; };
+
+  # ==========================================================================
   # Core Modules
   # ==========================================================================
 
@@ -25,15 +33,7 @@ let
 
   platformUtils = import ./core/platform.nix { inherit lib; };
 
-  toolCore = import ./core/tool.nix { inherit lib; };
-
-  # ==========================================================================
-  # Utility Modules
-  # ==========================================================================
-
-  utils = import ./utils/utils.nix { inherit pkgs; };
-
-  pkgConfigUtils = import ./utils/pkgconfig.nix { inherit pkgs lib; };
+  toolCore = import ./core/tool.nix { inherit pkgs lib utils; };
 
   # ==========================================================================
   # Scanner Modules

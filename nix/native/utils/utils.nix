@@ -278,4 +278,79 @@ in rec {
           throw "nixnative: defines must be strings or attrsets with 'name' (and optional 'value'), got ${showValue define}"
       )
       defines;
+
+  # ==========================================================================
+  # File Capture Utilities
+  # ==========================================================================
+
+  # Capture specific files from a directory into a minimal store path.
+  #
+  # IMPORTANT FOR INCREMENTAL BUILDS:
+  # Using `builtins.path { path = root; }` captures the ENTIRE directory,
+  # meaning ANY file change invalidates ALL derivations that depend on it.
+  # This function captures only the specified files, so changes to other
+  # files in the directory do not cause unnecessary rebuilds.
+  #
+  # Arguments:
+  #   root  - The source directory (path)
+  #   files - List of relative file paths to capture
+  #   name  - Optional name for the store path (default: "captured-files")
+  #
+  # Returns:
+  #   A derivation containing only the specified files with their
+  #   relative directory structure preserved.
+  #
+  # Example:
+  #   captureFiles {
+  #     root = ./.;
+  #     files = [ "templates/foo.j2" "templates/bar.j2" ];
+  #   }
+  #   # Returns store path containing only those two files
+  #
+  captureFiles =
+    { root
+    , files
+    , name ? "captured-files"
+    }:
+    let
+      rootStr = builtins.toString root;
+
+      # Capture each file individually (content-addressed)
+      capturedFiles = map (relPath:
+        let
+          absPath = "${rootStr}/${relPath}";
+          # Each file is captured separately - only changes to THIS file
+          # will invalidate THIS store path
+          store = builtins.path { path = absPath; };
+        in
+        { rel = relPath; inherit store; }
+      ) files;
+
+      # Create a derivation that assembles the files into a directory tree
+      assembled = pkgs.runCommand name {} ''
+        set -euo pipefail
+        mkdir -p "$out"
+        ${lib.concatMapStrings (f: ''
+          dst="$out/${f.rel}"
+          mkdir -p "$(dirname "$dst")"
+          cp ${f.store} "$dst"
+        '') capturedFiles}
+      '';
+    in
+    assembled;
+
+  # Capture a single file from a directory.
+  # Convenience wrapper around builtins.path for explicit single-file capture.
+  #
+  # Example:
+  #   captureFile { root = ./.; file = "src/main.cc"; }
+  #
+  captureFile =
+    { root
+    , file
+    }:
+    let
+      rootStr = builtins.toString root;
+    in
+    builtins.path { path = "${rootStr}/${file}"; };
 }

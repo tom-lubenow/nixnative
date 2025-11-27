@@ -279,6 +279,127 @@ All fields must be lists. Invalid types will produce clear error messages.
 
 ---
 
+## Tool Plugins
+
+Tool plugins enable code generation (protobuf, Jinja templates, etc.) that integrates into the build pipeline.
+
+### Built-in Tools
+
+```nix
+# Protobuf code generation
+native.tools.protobuf.run {
+  inputFiles = [ "proto/messages.proto" ];
+  root = ./.;
+  config = {
+    protoPath = "proto";
+  };
+}
+
+# gRPC code generation
+native.tools.grpc.run {
+  inputFiles = [ "proto/service.proto" ];
+  root = ./.;
+}
+
+# Jinja2 template generation
+native.tools.jinja.run {
+  inputFiles = [ "templates/config.h.j2" ];
+  root = ./.;
+  config = {
+    variables = { version = "1.0.0"; };
+  };
+}
+```
+
+### Creating Custom Tools
+
+Use `mkTool` to create reusable tool plugins:
+
+```nix
+myTool = native.mkTool {
+  name = "my-generator";
+
+  # Transform function: produces a derivation from inputs
+  transform = { inputFiles, root, config }:
+    pkgs.runCommand "my-gen" { src = root; } ''
+      # Generate code from inputFiles
+    '';
+
+  # Output schema: describes what the tool produces
+  outputs = { drv, inputFiles, config }: {
+    headers = [ { rel = "gen/output.h"; store = "${drv}/output.h"; } ];
+    sources = [ { rel = "gen/output.cc"; store = "${drv}/output.cc"; } ];
+    includeDirs = [ { path = drv; } ];
+    manifest = { schema = 1; units = {}; };
+  };
+
+  dependencies = [ "-lmylib" ];  # Runtime link dependencies
+  defaultConfig = {};
+};
+```
+
+### Incremental Builds for Tools
+
+**IMPORTANT**: The `mkTool` infrastructure automatically captures only the specified `inputFiles` rather than the entire `root` directory. This is critical for incremental builds:
+
+```nix
+# Good: Only proto files are captured
+native.tools.protobuf.run {
+  inputFiles = [ "proto/a.proto" "proto/b.proto" ];
+  root = ./.;
+}
+# Changing src/main.cc will NOT invalidate this tool's output
+```
+
+For custom tools that don't use `mkTool`, use the `captureFiles` helper:
+
+```nix
+# Capture only specific files (incremental-build safe)
+templateFiles = native.utils.captureFiles {
+  root = ./.;
+  files = [ "templates/foo.j2" "templates/bar.j2" ];
+};
+# Or capture individual files
+singleFile = builtins.path { path = ./templates/config.j2; };
+```
+
+**Anti-pattern** (breaks incremental builds):
+```nix
+# BAD: Captures entire directory - any file change invalidates this
+rootStore = builtins.path { path = root; };
+```
+
+---
+
+## Utilities
+
+### `utils.captureFiles`
+
+Captures specific files from a directory into a minimal store path. Essential for incremental builds.
+
+```nix
+native.utils.captureFiles {
+  root = ./.;
+  files = [ "templates/a.j2" "templates/b.j2" ];
+  name = "my-templates";  # Optional: store path name
+}
+```
+
+**Why this matters**: Using `builtins.path { path = root; }` captures the _entire_ directory, meaning any file change invalidates all derivations that depend on it. `captureFiles` captures only the specified files, so changes to other files don't cause unnecessary rebuilds.
+
+### `utils.captureFile`
+
+Convenience wrapper for capturing a single file:
+
+```nix
+native.utils.captureFile {
+  root = ./.;
+  file = "config/settings.json";
+}
+```
+
+---
+
 ## pkg-config Integration
 
 ### `pkgConfig.mkPkgConfigLibrary`
