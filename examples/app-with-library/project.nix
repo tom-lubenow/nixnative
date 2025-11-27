@@ -1,4 +1,4 @@
-{ pkgs, cpp }:
+{ pkgs, native }:
 
 let
   lib = pkgs.lib;
@@ -7,7 +7,8 @@ let
   appSources = [ "src/main.cc" ];
   libSources = [ "src/math.cc" ];
 
-  mkBuildInfoGenerator = mode:
+  # Custom build-info generator (tool plugin)
+  mkBuildInfoTool = mode:
     let
       pythonEnv = pkgs.python3.withPackages (ps: [ ps.jinja2 ]);
       rootStore = builtins.path { path = root; name = "build-info-root"; };
@@ -28,7 +29,7 @@ out_dir = pathlib.Path(sys.argv[1])
 mode = sys.argv[2]
 root = pathlib.Path(sys.argv[3])
 
-project = "nixclang-simple"
+project = "nixnative-simple"
 version = {"major": 1, "minor": 0, "patch": 0}
 
 def render(template_rel, output_rel):
@@ -75,16 +76,18 @@ PY
       evalInputs = [ renderDrv ];
     };
 
-  buildInfoStrict = mkBuildInfoGenerator "strict";
-  buildInfoScanned = mkBuildInfoGenerator "scanner";
+  buildInfoStrict = mkBuildInfoTool "strict";
+  buildInfoScanned = mkBuildInfoTool "scanner";
 
-  zlibLib = cpp.pkgConfig.makeLibrary {
+  # Wrap zlib via pkg-config
+  zlibLib = native.pkgConfig.makeLibrary {
     name = "zlib";
     packages = [ pkgs.zlib ];
     modules = [ "zlib" ];
   };
 
-  mathLib = cpp.mkStaticLib {
+  # Static library using high-level API
+  mathLib = native.staticLib {
     name = "math";
     inherit root includeDirs;
     sources = libSources;
@@ -92,21 +95,23 @@ PY
     publicIncludeDirs = includeDirs;
   };
 
-  strict = cpp.mkExecutable {
+  # Executable with pre-computed manifest and tools
+  strict = native.executable {
     name = "simple-strict";
     inherit root includeDirs;
     sources = appSources;
     depsManifest = ./.clang-deps.nix;
     libraries = [ mathLib zlibLib ];
-    generators = [ buildInfoStrict ];
+    tools = [ buildInfoStrict ];
   };
 
-  scanned = cpp.mkExecutable {
+  # Executable with auto-scanned dependencies
+  scanned = native.executable {
     name = "simple-scanned";
     inherit root includeDirs;
     sources = appSources;
     libraries = [ mathLib zlibLib ];
-    generators = [ buildInfoScanned ];
+    tools = [ buildInfoScanned ];
   };
 
 in {

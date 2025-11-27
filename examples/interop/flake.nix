@@ -1,12 +1,12 @@
 {
-  description = "Dual-Language Linkage (C++ & Zig) example for nixclang";
+  description = "Dual-Language Linkage (C++ & Zig) example for nixnative";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-    nixclang.url = "path:../../";
+    nixnative.url = "path:../../";
   };
 
-  outputs = { self, nixpkgs, nixclang }:
+  outputs = { self, nixpkgs, nixnative }:
     let
       systems = [ "x86_64-linux" "aarch64-darwin" "aarch64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
@@ -15,8 +15,8 @@
       packages = forAllSystems (system:
         let
           pkgs = import nixpkgs { inherit system; };
-          cpp = nixclang.lib.cpp { inherit pkgs; };
-          
+          native = nixnative.lib.native { inherit pkgs; };
+
           # Build Zig library
           zigLibDrv = pkgs.runCommand "zig-lib" {
             nativeBuildInputs = [ pkgs.zig ];
@@ -30,13 +30,11 @@
             find . -name "*.a" -exec mv {} $out/lib/libmath.a \;
           '';
 
-          # Wrap it as a nixclang library
+          # Wrap as a library with public interface
           zigLib = {
+            name = "zig-math";
             staticLibrary = "${zigLibDrv}/lib/libmath.a";
             includeDirs = [ ./. ]; # header.h is in the root
-            
-            # We might need to link against libc/libunwind if Zig depends on it,
-            # but for this simple example it should be fine or handled by C++ toolchain.
             public = {
               linkFlags = [ "${zigLibDrv}/lib/libmath.a" ];
               cxxFlags = [];
@@ -47,7 +45,7 @@
 
         in
         {
-          default = cpp.mkExecutable {
+          default = native.executable {
             name = "interop-example";
             root = ./.;
             sources = [ "main.cc" ];

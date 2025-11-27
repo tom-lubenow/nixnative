@@ -1,5 +1,5 @@
 {
-  description = "Incremental clang build graph using Nix per translation unit";
+  description = "nixnative: Incremental, multi-compiler C/C++ build system for Nix";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
   inputs.crane.url = "github:ipetkov/crane/v0.16.1";
@@ -12,32 +12,32 @@
         nixpkgs.lib.genAttrs systems (system:
           let
             pkgs = import nixpkgs { inherit system; };
-            cpp = import ./nix/cpp { inherit pkgs; };
+            native = import ./nix/native { inherit pkgs; };
             craneLib = crane.lib.${system};
             examples = import ./examples/examples.nix {
-              inherit pkgs cpp system;
+              inherit pkgs native system;
               inherit craneLib;
             };
           in
-          f { inherit pkgs cpp examples; }
+          f { inherit pkgs native examples; }
         );
     in
     {
       lib = {
-        cpp = import ./nix/cpp;
+        native = import ./nix/native;
       };
 
-      packages = forAllSystems ({ examples, ... }:
+      packages = forAllSystems ({ pkgs, native, examples, ... }:
         examples.packages // {
           default = examples.defaults.app;
         }
       );
 
-      checks = forAllSystems ({ pkgs, cpp, examples, ... }:
+      checks = forAllSystems ({ pkgs, native, examples, ... }:
         examples.checks // {
           pkgconfig-zlib = pkgs.runCommand "pkgconfig-zlib-check" { } ''
             set -euo pipefail
-            drv=${(cpp.pkgConfig.makeLibrary {
+            drv=${(native.pkgConfig.makeLibrary {
               name = "zlib";
               packages = [ pkgs.zlib ];
               modules = [ "zlib" ];
@@ -62,7 +62,7 @@
 Usage: sync-manifest <flake-attr> <destination> [nix build args...]
 
 Example:
-  nix run .#cpp-sync-manifest -- .#checks.x86_64-linux.simpleScanManifest examples/app-with-library/.clang-deps.nix
+  nix run .#sync-manifest -- .#checks.x86_64-linux.simpleScanManifest examples/app-with-library/.clang-deps.nix
 USAGE
               }
 
@@ -139,7 +139,7 @@ PY
           };
         in
         {
-          cpp-sync-manifest = {
+          sync-manifest = {
             type = "app";
             program = "${syncManifest}/bin/sync-manifest";
             meta.description = "Copy a dependency manifest derivation to a workspace file";
@@ -147,9 +147,9 @@ PY
         }
       );
 
-      devShells = forAllSystems ({ pkgs, cpp, examples }:
+      devShells = forAllSystems ({ pkgs, native, examples }:
         {
-          default = cpp.mkDevShell {
+          default = native.devShell {
             target = examples.defaults.app;
             extraPackages = [ pkgs.nix pkgs.git ];
           };

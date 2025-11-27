@@ -3,10 +3,10 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-    nixclang.url = "path:../../";
+    nixnative.url = "path:../../";
   };
 
-  outputs = { self, nixpkgs, nixclang }:
+  outputs = { self, nixpkgs, nixnative }:
     let
       systems = [ "x86_64-linux" "aarch64-darwin" "aarch64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
@@ -15,9 +15,9 @@
       devShells = forAllSystems (system:
         let
           pkgs = import nixpkgs { inherit system; };
-          cpp = nixclang.lib.cpp { inherit pkgs; };
-          
-          app = cpp.mkExecutable {
+          native = nixnative.lib.native { inherit pkgs; };
+
+          app = native.executable {
             name = "app";
             root = ./.;
             sources = [ "main.cc" ];
@@ -25,7 +25,7 @@
 
         in
         {
-          default = cpp.mkDevShell {
+          default = native.devShell {
             target = app;
             includeTools = true;
           };

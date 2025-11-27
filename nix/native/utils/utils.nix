@@ -1,4 +1,10 @@
+# Utility functions for nixnative
+#
+# Common helpers used across the build system.
+# Adapted from nix/cpp/utils.nix with updates for the new architecture.
+#
 { pkgs }:
+
 let
   lib = pkgs.lib;
   inherit (lib)
@@ -15,25 +21,25 @@ let
     mapAttrsToList
     recursiveUpdate
     unique;
-in
-rec {
+
+in rec {
   # ==========================================================================
-  # Validation helpers
+  # Validation Helpers
   # ==========================================================================
 
   # Validates that a value is a list, with a contextual error message
   assertList = { value, name, context }:
     if builtins.isList value then value
-    else throw "nixclang (${context}): '${name}' must be a list, got ${builtins.typeOf value}";
+    else throw "nixnative (${context}): '${name}' must be a list, got ${builtins.typeOf value}";
 
   # Validates the structure of a 'public' attribute set
   validatePublic = { public, context }:
     let
       checkField = field: expected:
         if !(public ? ${field}) then
-          throw "nixclang (${context}): public attribute missing required field '${field}'"
+          throw "nixnative (${context}): public attribute missing required field '${field}'"
         else if expected == "list" && !(builtins.isList public.${field}) then
-          throw "nixclang (${context}): public.${field} must be a list, got ${builtins.typeOf public.${field}}"
+          throw "nixnative (${context}): public.${field} must be a list, got ${builtins.typeOf public.${field}}"
         else
           true;
       _ = checkField "includeDirs" "list";
@@ -53,10 +59,14 @@ rec {
       else "<attrset with keys: ${concatStringsSep ", " (builtins.attrNames value)}>"
     else if builtins.isList value then "<list of ${toString (builtins.length value)} items>"
     else "<${builtins.typeOf value}>";
+
+  # ==========================================================================
+  # Name/Path Sanitization
+  # ==========================================================================
+
   sanitizeName = name:
     let
-      dropExt =
-        file:
+      dropExt = file:
         let
           exts = [ ".cc" ".cpp" ".cxx" ".c" ".C" ];
         in
@@ -75,7 +85,7 @@ rec {
     else if builtins.isString value then value
     else if builtins.isAttrs value && value ? path then toPathLike value.path
     else if builtins.isAttrs value && value ? outPath then value.outPath
-    else throw "nixclang: expected a path-like value (path, string, or attrset with 'path'/'outPath'), got ${showValue value}";
+    else throw "nixnative: expected a path-like value (path, string, or attrset with 'path'/'outPath'), got ${showValue value}";
 
   stripExtension = file: ext:
     if hasSuffix ext file then removeSuffix ext file else file;
@@ -93,6 +103,10 @@ rec {
     in
     builtins.path withName;
 
+  # ==========================================================================
+  # Include Directory Handling
+  # ==========================================================================
+
   normalizeIncludeDir =
     { rootHost
     , dir
@@ -105,35 +119,39 @@ rec {
     else if builtins.isPath dir then dir
     else if builtins.isAttrs dir && dir ? path then builtins.path { path = dir.path; }
     else
-      throw "nixclang: includeDirs entries must be relative strings, paths, or attrsets with 'path', got ${showValue dir}";
+      throw "nixnative: includeDirs entries must be relative strings, paths, or attrsets with 'path', got ${showValue dir}";
 
-  emptyPublic =
-    {
-      includeDirs = [ ];
-      defines = [ ];
-      cxxFlags = [ ];
-      linkFlags = [ ];
-    };
+  # ==========================================================================
+  # Public Attribute Handling
+  # ==========================================================================
 
-  mergePublic = a: b:
-    {
-      includeDirs = a.includeDirs ++ b.includeDirs;
-      defines = a.defines ++ b.defines;
-      cxxFlags = a.cxxFlags ++ b.cxxFlags;
-      linkFlags = a.linkFlags ++ b.linkFlags;
-    };
+  emptyPublic = {
+    includeDirs = [];
+    defines = [];
+    cxxFlags = [];
+    linkFlags = [];
+  };
 
-  libraryPublic =
-    lib:
+  mergePublic = a: b: {
+    includeDirs = a.includeDirs ++ b.includeDirs;
+    defines = a.defines ++ b.defines;
+    cxxFlags = a.cxxFlags ++ b.cxxFlags;
+    linkFlags = a.linkFlags ++ b.linkFlags;
+  };
+
+  libraryPublic = lib:
     if builtins.isAttrs lib && lib ? public then lib.public
     else if builtins.isAttrs lib && lib ? linkFlags then emptyPublic // { linkFlags = ensureList lib.linkFlags; }
     else if builtins.isString lib then emptyPublic // { linkFlags = [ lib ]; }
     else if builtins.isPath lib then emptyPublic // { linkFlags = [ builtins.toString lib ]; }
-    else
-      emptyPublic;
+    else emptyPublic;
 
   collectPublic = libs:
     foldl' mergePublic emptyPublic (map libraryPublic libs);
+
+  # ==========================================================================
+  # Source Normalization
+  # ==========================================================================
 
   normalizeSources =
     { root
@@ -147,7 +165,7 @@ rec {
           rel =
             if builtins.isAttrs source && source ? rel then source.rel
             else if builtins.isString source then source
-            else throw "nixclang: sources must be relative strings or attrsets with 'rel' attribute, got ${showValue source}";
+            else throw "nixnative: sources must be relative strings or attrsets with 'rel' attribute, got ${showValue source}";
           relNorm =
             if hasPrefix "./" rel then removePrefix "./" rel else rel;
           host =
@@ -155,7 +173,7 @@ rec {
             else "${rootHost}/${relNorm}";
           objectName = "${sanitizeName relNorm}.o";
           _ = if builtins.pathExists host then true
-              else throw "nixclang: source '${relNorm}' not found at ${host}. Check that the file exists and the 'root' path is correct.";
+              else throw "nixnative: source '${relNorm}' not found at ${host}. Check that the file exists and the 'root' path is correct.";
         in
         {
           store =
@@ -166,17 +184,21 @@ rec {
     in
     map mkEntry sources;
 
+  # ==========================================================================
+  # Header Set Building
+  # ==========================================================================
+
   headerSet =
     { root
     , manifest
     , tu
-    , overrides ? { }
+    , overrides ? {}
     }:
     let
       rootPath = sanitizePath { path = root; };
       rootHost = builtins.toString rootPath;
       entry = manifest.units.${tu.relNorm} or null;
-      deps = if entry == null then [ ] else entry.dependencies or [ ];
+      deps = if entry == null then [] else entry.dependencies or [];
       mkHeader = path:
         let
           rel = if hasPrefix "./" path then removePrefix "./" path else path;
@@ -189,12 +211,15 @@ rec {
             else "${rootHost}/${rel}";
         in
         {
-          rel = rel;
-          host = host;
+          inherit rel host;
           store = storePath;
         };
     in
     map mkHeader deps;
+
+  # ==========================================================================
+  # Source Tree Building
+  # ==========================================================================
 
   mkSourceTree =
     { tu
@@ -222,6 +247,10 @@ rec {
         ${headerScripts}
       '';
 
+  # ==========================================================================
+  # Flag Generation
+  # ==========================================================================
+
   toIncludeFlags =
     { srcTree
     , includeDirs
@@ -231,7 +260,7 @@ rec {
         if builtins.isString dir then "-I${srcTree}/${dir}"
         else if builtins.isPath dir then "-I${dir}"
         else if builtins.isAttrs dir && dir ? path then "-I${dir.path}"
-        else throw "nixclang: includeDirs entries must be strings, paths, or attrsets with 'path', got ${showValue dir}";
+        else throw "nixnative: includeDirs entries must be strings, paths, or attrsets with 'path', got ${showValue dir}";
     in
     map toFlag includeDirs;
 
@@ -246,7 +275,7 @@ rec {
           if value == "" then "-D${define.name}"
           else "-D${define.name}=${toString value}"
         else
-          throw "nixclang: defines must be strings or attrsets with 'name' (and optional 'value'), got ${showValue define}"
+          throw "nixnative: defines must be strings or attrsets with 'name' (and optional 'value'), got ${showValue define}"
       )
       defines;
 }

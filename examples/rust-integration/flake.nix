@@ -1,21 +1,21 @@
 {
-  description = "Template: C++ executable linking against a Rust static library via nixclang";
+  description = "Template: C++ executable linking against a Rust static library via nixnative";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-  inputs.nixclang.url = "path:../..";
+  inputs.nixnative.url = "path:../..";
 
-  outputs = { self, nixpkgs, nixclang }:
+  outputs = { self, nixpkgs, nixnative }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = f:
         nixpkgs.lib.genAttrs systems (system:
           let
             pkgs = import nixpkgs { inherit system; };
-            cpp = nixclang.lib.cpp { inherit pkgs; };
-            packages = import ./project.nix { inherit pkgs cpp; };
+            native = nixnative.lib.native { inherit pkgs; };
+            packages = import ./project.nix { inherit pkgs native; };
             checks = import ./checks.nix { inherit pkgs packages; };
           in
-          f { inherit pkgs cpp packages checks; }
+          f { inherit pkgs native packages checks; }
         );
     in
     {
