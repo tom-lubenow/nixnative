@@ -27,14 +27,12 @@ jobs:
 
       - uses: DeterminateSystems/magic-nix-cache-action@main
 
+      - uses: nicknovitski/nix-develop@v1
+        with:
+          arguments: --accept-flake-config
+
       - name: Run flake check
         run: nix flake check
 
       - name: Test example flakes
-        run: |
-          for example in examples/*/; do
-            if [ -f "$example/flake.nix" ]; then
-              echo "=== Testing $example ==="
-              nix flake check "./$example"
-            fi
-          done
+        run: nu check-examples.nu

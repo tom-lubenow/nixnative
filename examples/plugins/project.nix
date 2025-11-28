@@ -30,6 +30,6 @@ let
   '';
 
 in {
-  inherit commonLib myPlugin hostApp runScript;
+  inherit myPlugin hostApp runScript;
   pluginsExample = runScript;
 }

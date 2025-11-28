@@ -151,7 +151,7 @@ PY
         {
           default = native.devShell {
             target = examples.defaults.app;
-            extraPackages = [ pkgs.nix pkgs.git ];
+            extraPackages = [ pkgs.nix pkgs.git pkgs.nushell ];
           };
         }
       );
