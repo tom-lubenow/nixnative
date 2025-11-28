@@ -74,3 +74,11 @@ Run the full test suite (builds both variants and runs smoke tests):
 ```sh
 nix flake check
 ```
+
+## On naming
+
+This project is called "Nix Native" to emphasize that the build graphs are written in pure nix, as opposed to delegating to another tool.
+This is an imperfect naming as it could collide with other interpretations of the word "native", however to that end I would stress that
+all are welcome. The initial implementation of this library includes native support for C and C++, however other languages are welcome to
+implement native build graph support as well via PR. The north star is simply "minimal, incremental builds implemented natively in nix"
+and any compilation toolchain that can satisfy that should be welcome.
