@@ -160,8 +160,15 @@ let
   # Create a test runner
   test = helpers.mkTest;
 
+  # Create a static archive (.a) from a static library
+  #
+  # Use when you need an actual archive file for external distribution
+  # or traditional archive link semantics.
+  #
+  archive = helpers.mkArchive;
+
 in {
-  inherit executable staticLib sharedLib headerOnly devShell test;
+  inherit executable staticLib sharedLib headerOnly devShell test archive;
 
   # Also expose resolvers for advanced use
   inherit resolveCompiler resolveLinker;

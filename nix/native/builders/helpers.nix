@@ -64,7 +64,10 @@ in rec {
   # Static Library Builder
   # ==========================================================================
 
-  # Build a static library (.a) from C/C++ sources
+  # Build a static library from C/C++ sources
+  #
+  # Objects are passed directly to the linker for better incrementality.
+  # Use mkArchive if you need an actual .a archive file.
   #
   # Additional arguments:
   #   publicIncludeDirs - Headers to expose to consumers
@@ -88,46 +91,85 @@ in rec {
         map (dir: normalizeIncludeDir { inherit rootHost; inherit dir; })
           (ensureList publicIncludeDirs);
 
-      # Create the archive
+      # Install headers only (no archive - objects are passed directly to linker)
+      installHeaders = concatStringsSep "\n"
+        (map (dir: "cp -r ${dir}/. $out/include/") publicIncludeStores);
+
+      headersDrv =
+        pkgs.runCommand "lib-${name}"
+          {}
+          ''
+            set -euo pipefail
+            mkdir -p "$out/include"
+            ${installHeaders}
+          '';
+
+      # Build public interface - pass object files directly to linker
+      basePublic = {
+        includeDirs = map (dir: { path = dir; }) publicIncludeStores;
+        defines = publicDefines;
+        cxxFlags = publicCxxFlags;
+        linkFlags = objectPaths;
+      };
+
+      combinedPublic = mergePublic publicAggregate basePublic;
+    in
+    headersDrv // {
+      artifactType = "static";
+      inherit name;
+      inherit objectPaths;
+      inherit (ctx) objectInfos compileCommands manifest libraries tools;
+      public = combinedPublic;
+      passthru = (headersDrv.passthru or {}) // ctx;
+    };
+
+  # ==========================================================================
+  # Static Archive Builder
+  # ==========================================================================
+
+  # Create a static archive (.a) from a static library
+  #
+  # Use this when you need an actual .a file for:
+  # - External distribution/installation
+  # - Traditional archive link semantics (selective object inclusion)
+  #
+  # Arguments:
+  #   lib  - A static library from mkStaticLib
+  #   name - (optional) Override archive name
+  #
+  mkArchive =
+    { lib
+    , name ? lib.name
+    }:
+    let
+      tc = lib.passthru.toolchain;
+      objects = lib.objectPaths or lib.passthru.objectPaths;
+
       archiveDrv = createStaticArchive {
-        inherit toolchain name;
-        objects = objectPaths;
+        toolchain = tc;
+        inherit name objects;
       };
 
       archiveName = "lib${sanitizeName name}.a";
 
-      # Install headers
-      installHeaders = concatStringsSep "\n"
-        (map (dir: "cp -r ${dir}/. $out/include/") publicIncludeStores);
-
-      # Combine archive + headers
+      # Combine archive with headers from original lib
       archive =
-        pkgs.runCommand "static-${name}"
+        pkgs.runCommand "archive-${name}"
           {}
           ''
             set -euo pipefail
             mkdir -p "$out/lib" "$out/include"
             cp ${archiveDrv}/lib/${archiveName} "$out/lib/"
-            ${installHeaders}
+            cp -r ${lib}/include/. $out/include/ 2>/dev/null || true
           '';
-
-      # Build public interface
-      basePublic = {
-        includeDirs = map (dir: { path = dir; }) publicIncludeStores;
-        defines = publicDefines;
-        cxxFlags = publicCxxFlags;
-        linkFlags = [ "${archive}/lib/${archiveName}" ];
-      };
-
-      combinedPublic = mergePublic publicAggregate basePublic;
     in
     archive // {
-      artifactType = "static";
+      artifactType = "archive";
       inherit name;
       archivePath = "${archive}/lib/${archiveName}";
-      inherit (ctx) objectInfos compileCommands manifest libraries tools;
-      public = combinedPublic;
-      passthru = (archive.passthru or {}) // ctx;
+      public = lib.public // {
+        linkFlags = [ "${archive}/lib/${archiveName}" ];
+      };
     };
 
   # ==========================================================================

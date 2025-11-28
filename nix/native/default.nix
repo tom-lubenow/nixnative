@@ -350,7 +350,7 @@ in {
   #   native.executable { name = "app"; sources = [...]; }
   #   native.staticLib { compiler = "gcc"; linker = "mold"; ... }
   #
-  inherit (api) executable staticLib sharedLib headerOnly devShell test;
+  inherit (api) executable staticLib sharedLib headerOnly devShell test archive;
 
   # Expose resolvers for advanced use
   inherit (api) resolveCompiler resolveLinker;
@@ -369,7 +369,7 @@ in {
   #     ...
   #   }
   #
-  inherit (helpers) mkExecutable mkStaticLib mkSharedLib mkHeaderOnly;
+  inherit (helpers) mkExecutable mkStaticLib mkSharedLib mkHeaderOnly mkArchive;
   inherit (helpers) mkDevShell mkTest;
 
   # Lower-level builders
