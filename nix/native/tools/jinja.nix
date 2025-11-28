@@ -3,7 +3,11 @@
 # Generates C/C++ code from Jinja2 templates.
 # Useful for generating configuration headers, enum definitions, etc.
 #
-{ pkgs, lib, mkTool }:
+{
+  pkgs,
+  lib,
+  mkTool,
+}:
 
 let
   inherit (lib) concatStringsSep removeSuffix hasSuffix;
@@ -62,16 +66,22 @@ let
   '';
 
   # Jinja transformation
-  jinjaTransform = { inputFiles, root, config }:
+  jinjaTransform =
+    {
+      inputFiles,
+      root,
+      config,
+    }:
     let
-      templates = config.templates or (map (f: {
-        template = if builtins.isAttrs f && f ? rel then f.rel else f;
-        output = removeSuffix ".j2" (removeSuffix ".jinja2" (
-          if builtins.isAttrs f && f ? rel then f.rel else f
-        ));
-      }) inputFiles);
+      templates =
+        config.templates or (map (f: {
+          template = if builtins.isAttrs f && f ? rel then f.rel else f;
+          output = removeSuffix ".j2" (
+            removeSuffix ".jinja2" (if builtins.isAttrs f && f ? rel then f.rel else f)
+          );
+        }) inputFiles);
 
-      variables = config.variables or {};
+      variables = config.variables or { };
 
       # Check if any templates are store paths (from writeText)
       isStorePath = path: lib.hasPrefix "/nix/store/" path;
@@ -79,21 +89,25 @@ let
       localTemplates = builtins.filter (t: !isStorePath t.template) templates;
 
       # Create a derivation that collects all template files into one directory
-      templateInputs = pkgs.runCommand "jinja-inputs" {} (
+      templateInputs = pkgs.runCommand "jinja-inputs" { } (
         ''
           mkdir -p $out
           # Copy store-path templates to output with their basename
-        '' + concatStringsSep "\n" (map (t:
-          let baseName = builtins.baseNameOf t.template;
-          in "cp ${t.template} $out/${baseName}"
-        ) storePathTemplates)
+        ''
+        + concatStringsSep "\n" (
+          map (
+            t:
+            let
+              baseName = builtins.baseNameOf t.template;
+            in
+            "cp ${t.template} $out/${baseName}"
+          ) storePathTemplates
+        )
       );
 
       # Rewrite templates to use basenames for store paths
-      rewrittenTemplates = map (t:
-        if isStorePath t.template
-        then t // { template = builtins.baseNameOf t.template; }
-        else t
+      rewrittenTemplates = map (
+        t: if isStorePath t.template then t // { template = builtins.baseNameOf t.template; } else t
       ) templates;
 
       configJson = builtins.toJSON {
@@ -101,7 +115,7 @@ let
         inherit variables;
       };
 
-      hasStorePathTemplates = storePathTemplates != [];
+      hasStorePathTemplates = storePathTemplates != [ ];
     in
     pkgs.runCommand "jinja-gen"
       {
@@ -129,20 +143,28 @@ let
       '';
 
   # Jinja output schema
-  jinjaOutputs = { drv, inputFiles, config }:
+  jinjaOutputs =
+    {
+      drv,
+      inputFiles,
+      config,
+    }:
     let
-      templates = config.templates or (map (f: {
-        template = if builtins.isAttrs f && f ? rel then f.rel else f;
-        output = removeSuffix ".j2" (removeSuffix ".jinja2" (
-          if builtins.isAttrs f && f ? rel then f.rel else f
-        ));
-      }) inputFiles);
+      templates =
+        config.templates or (map (f: {
+          template = if builtins.isAttrs f && f ? rel then f.rel else f;
+          output = removeSuffix ".j2" (
+            removeSuffix ".jinja2" (if builtins.isAttrs f && f ? rel then f.rel else f)
+          );
+        }) inputFiles);
 
       # Categorize outputs by extension
       isHeader = path: hasSuffix ".h" path || hasSuffix ".hpp" path || hasSuffix ".hxx" path;
-      isSource = path: hasSuffix ".c" path || hasSuffix ".cc" path || hasSuffix ".cpp" path || hasSuffix ".cxx" path;
+      isSource =
+        path: hasSuffix ".c" path || hasSuffix ".cc" path || hasSuffix ".cpp" path || hasSuffix ".cxx" path;
 
-      mkOutput = tmpl:
+      mkOutput =
+        tmpl:
         let
           outPath = tmpl.output;
         in
@@ -158,22 +180,33 @@ let
       sources = builtins.filter (o: o.isSource) outputs;
     in
     {
-      headers = map (o: { rel = o.rel; store = o.store; }) headers;
-      sources = map (o: { rel = o.rel; store = o.store; }) sources;
+      headers = map (o: {
+        rel = o.rel;
+        store = o.store;
+      }) headers;
+      sources = map (o: {
+        rel = o.rel;
+        store = o.store;
+      }) sources;
       includeDirs = [ { path = drv; } ];
       manifest = {
         schema = 1;
-        units = builtins.listToAttrs (map (o: {
-          name = o.rel;
-          value = { dependencies = []; };
-        }) sources);
+        units = builtins.listToAttrs (
+          map (o: {
+            name = o.rel;
+            value = {
+              dependencies = [ ];
+            };
+          }) sources
+        );
       };
-      defines = [];
-      cxxFlags = [];
-      linkFlags = [];
+      defines = [ ];
+      cxxFlags = [ ];
+      linkFlags = [ ];
     };
 
-in rec {
+in
+rec {
   # ==========================================================================
   # Jinja2 Tool
   # ==========================================================================
@@ -185,10 +218,10 @@ in rec {
     outputs = jinjaOutputs;
 
     # No runtime dependencies for Jinja (it's compile-time only)
-    dependencies = [];
+    dependencies = [ ];
 
     defaultConfig = {
-      variables = {};
+      variables = { };
     };
   };
 
@@ -197,7 +230,12 @@ in rec {
   # ==========================================================================
 
   # Helper to run jinja on template files
-  generate = { inputFiles, root ? ./., config ? {} }:
+  generate =
+    {
+      inputFiles,
+      root ? ./.,
+      config ? { },
+    }:
     jinja.run { inherit inputFiles root config; };
 
   # ==========================================================================
@@ -206,10 +244,11 @@ in rec {
 
   # Generate a config header from variables
   configHeader =
-    { name
-    , variables
-    , root ? ./.
-    , templateContent ? null
+    {
+      name,
+      variables,
+      root ? ./.,
+      templateContent ? null,
     }:
     let
       # Default template for config headers
@@ -238,23 +277,28 @@ in rec {
       templateFile = pkgs.writeText "${name}.h.j2" template;
     in
     jinja.run {
-      inputFiles = [];
+      inputFiles = [ ];
       inherit root;
       config = {
-        templates = [{
-          template = builtins.toString templateFile;
-          output = "${name}.h";
-          variables = { config = variables; };
-        }];
+        templates = [
+          {
+            template = builtins.toString templateFile;
+            output = "${name}.h";
+            variables = {
+              config = variables;
+            };
+          }
+        ];
       };
     };
 
   # Generate an enum from a list of values
   enumGenerator =
-    { name
-    , values
-    , root ? ./.
-    , namespace ? null
+    {
+      name,
+      values,
+      root ? ./.,
+      namespace ? null,
     }:
     let
       template = ''
@@ -276,14 +320,16 @@ in rec {
       templateFile = pkgs.writeText "${name}_enum.h.j2" template;
     in
     jinja.run {
-      inputFiles = [];
+      inputFiles = [ ];
       inherit root;
       config = {
-        templates = [{
-          template = builtins.toString templateFile;
-          output = "${name}.h";
-          variables = { inherit name values namespace; };
-        }];
+        templates = [
+          {
+            template = builtins.toString templateFile;
+            output = "${name}.h";
+            variables = { inherit name values namespace; };
+          }
+        ];
       };
     };
 }

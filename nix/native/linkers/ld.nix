@@ -3,7 +3,12 @@
 # The classic GNU linker. Slower than modern alternatives but
 # highly compatible and well-tested.
 #
-{ pkgs, lib, mkLinker, ldCapabilities }:
+{
+  pkgs,
+  lib,
+  mkLinker,
+  ldCapabilities,
+}:
 
 let
   inherit (lib) optionals;
@@ -12,7 +17,8 @@ let
   # GNU ld is available on Linux
   isSupported = targetPlatform.isLinux;
 
-in rec {
+in
+rec {
   # ==========================================================================
   # GNU ld Linker
   # ==========================================================================
@@ -22,20 +28,24 @@ in rec {
       mkLinker {
         name = "ld";
         binary = "${pkgs.binutils}/bin/ld";
-        driverFlag = "-fuse-ld=bfd";  # BFD is the backend name for GNU ld
+        driverFlag = "-fuse-ld=bfd"; # BFD is the backend name for GNU ld
 
         capabilities = ldCapabilities;
 
-        platformFlags = platform:
-          if platform.isLinux then [
-            # GNU ld specific flags if needed
-          ]
-          else [];
+        platformFlags =
+          platform:
+          if platform.isLinux then
+            [
+              # GNU ld specific flags if needed
+            ]
+          else
+            [ ];
 
         runtimeInputs = [ pkgs.binutils ];
-        environment = {};
+        environment = { };
       }
-    else null;
+    else
+      null;
 
   # Alias for clarity
   gnuLd = ld;

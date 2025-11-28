@@ -81,23 +81,27 @@ rec {
   filterByType = type: flags: builtins.filter (isType type) flags;
 
   # Translate a list of abstract flags using a compiler's translators
-  translateFlags = { compiler, flags }:
-    lib.concatMap (flag:
-      if compiler.flagTranslators ? ${flag.type}
-      then compiler.flagTranslators.${flag.type} flag
-      else throw "nixnative: compiler '${compiler.name}' does not support flag type '${flag.type}'"
+  translateFlags =
+    { compiler, flags }:
+    lib.concatMap (
+      flag:
+      if compiler.flagTranslators ? ${flag.type} then
+        compiler.flagTranslators.${flag.type} flag
+      else
+        throw "nixnative: compiler '${compiler.name}' does not support flag type '${flag.type}'"
     ) flags;
 
   # Build abstract flags from builder arguments
   # This converts the ergonomic API (lto = "thin") to abstract flags
-  fromArgs = args:
+  fromArgs =
+    args:
     let
       optionalFlag = cond: flag: if cond then [ flag ] else [ ];
     in
     # LTO
     (optionalFlag (args.lto or false != false) (lto args.lto))
     # Sanitizers
-    ++ (map sanitizer (args.sanitizers or []))
+    ++ (map sanitizer (args.sanitizers or [ ]))
     # Coverage
     ++ (optionalFlag (args.coverage or false) coverage)
     # Optimization (only if explicitly set)
@@ -116,16 +120,17 @@ rec {
   # ==========================================================================
 
   # Check if a compiler supports a specific flag
-  compilerSupports = { compiler, flag }:
+  compilerSupports =
+    { compiler, flag }:
     let
-      cap = compiler.capabilities or {};
+      cap = compiler.capabilities or { };
     in
     if flag.type == "lto" then
-      cap.lto or null != null &&
-      (flag.value == "thin" -> cap.lto.thin or false) &&
-      (flag.value == "full" -> cap.lto.full or false)
+      cap.lto or null != null
+      && (flag.value == "thin" -> cap.lto.thin or false)
+      && (flag.value == "full" -> cap.lto.full or false)
     else if flag.type == "sanitizer" then
-      builtins.elem flag.value (cap.sanitizers or [])
+      builtins.elem flag.value (cap.sanitizers or [ ])
     else if flag.type == "coverage" then
       cap.coverage or false
     else
@@ -133,11 +138,22 @@ rec {
       true;
 
   # Validate all flags against compiler capabilities
-  validateFlags = { compiler, flags }:
+  validateFlags =
+    { compiler, flags }:
     let
-      unsupported = builtins.filter (f: !compilerSupports { inherit compiler; flag = f; }) flags;
+      unsupported = builtins.filter (
+        f:
+        !compilerSupports {
+          inherit compiler;
+          flag = f;
+        }
+      ) flags;
       formatFlag = f: "${f.type}=${toString f.value}";
     in
-    if unsupported == [] then flags
-    else throw "nixnative: compiler '${compiler.name}' does not support flags: ${lib.concatMapStringsSep ", " formatFlag unsupported}";
+    if unsupported == [ ] then
+      flags
+    else
+      throw "nixnative: compiler '${compiler.name}' does not support flags: ${
+        lib.concatMapStringsSep ", " formatFlag unsupported
+      }";
 }

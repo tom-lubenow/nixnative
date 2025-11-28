@@ -8,7 +8,10 @@
 #   in
 #   native.mkExecutable { ... }
 #
-{ pkgs, lib ? pkgs.lib }:
+{
+  pkgs,
+  lib ? pkgs.lib,
+}:
 
 let
   # ==========================================================================
@@ -31,7 +34,10 @@ let
 
   platformUtils = import ./core/platform.nix { inherit lib; };
 
-  toolchainCore = import ./core/toolchain.nix { inherit lib flags; platform = platformUtils; };
+  toolchainCore = import ./core/toolchain.nix {
+    inherit lib flags;
+    platform = platformUtils;
+  };
 
   toolCore = import ./core/tool.nix { inherit pkgs lib utils; };
 
@@ -42,7 +48,12 @@ let
   manifest = import ./scanner/manifest.nix { inherit lib utils; };
 
   scanner = import ./scanner/scanner.nix {
-    inherit pkgs lib utils manifest;
+    inherit
+      pkgs
+      lib
+      utils
+      manifest
+      ;
   };
 
   # ==========================================================================
@@ -114,15 +125,30 @@ let
 
   compilers = {
     # Clang variants
-    inherit (clangCompilers) clang clang17 clang18 clang19;
+    inherit (clangCompilers)
+      clang
+      clang17
+      clang18
+      clang19
+      ;
 
     # GCC variants
-    inherit (gccCompilers) gcc gcc12 gcc13 gcc14;
+    inherit (gccCompilers)
+      gcc
+      gcc12
+      gcc13
+      gcc14
+      ;
   };
 
   linkers = {
     # LLD variants
-    inherit (lldLinkers) lld lld17 lld18 lld19;
+    inherit (lldLinkers)
+      lld
+      lld17
+      lld18
+      lld19
+      ;
 
     # Mold (Linux only, fast)
     inherit (moldLinkers) mold;
@@ -139,10 +165,7 @@ let
     darwinLd = darwinLinkers.darwinLd;
 
     # Default linker for platform
-    default =
-      if pkgs.stdenv.targetPlatform.isDarwin
-      then darwinLinkers.darwinLd
-      else lldLinkers.lld;
+    default = if pkgs.stdenv.targetPlatform.isDarwin then darwinLinkers.darwinLd else lldLinkers.lld;
   };
 
   # Assembled tool plugins
@@ -159,26 +182,43 @@ let
   # ==========================================================================
 
   # Create a toolchain from compiler + linker
-  mkToolchain = { compiler, linker ? null, ... }@args:
+  mkToolchain =
+    {
+      compiler,
+      linker ? null,
+      ...
+    }@args:
     let
       # Use default linker if not specified
-      resolvedLinker =
-        if linker != null then linker
-        else linkers.default;
+      resolvedLinker = if linker != null then linker else linkers.default;
 
       # Determine which getBintools helper to use based on compiler name
       bintools =
-        if lib.hasPrefix "gcc" compiler.name then gccCompilers.getBintools compiler
-        else clangCompilers.getBintools compiler;  # Default to clang bintools
+        if lib.hasPrefix "gcc" compiler.name then
+          gccCompilers.getBintools compiler
+        else
+          clangCompilers.getBintools compiler; # Default to clang bintools
 
       targetPlatform = pkgs.stdenv.targetPlatform;
     in
-    toolchainCore.mkToolchain ({
-      name = toolchainCore.makeToolchainName compiler resolvedLinker;
-      inherit compiler targetPlatform;
-      linker = resolvedLinker;
-      inherit (bintools) ar ranlib nm objcopy strip;
-    } // (builtins.removeAttrs args [ "compiler" "linker" ]));
+    toolchainCore.mkToolchain (
+      {
+        name = toolchainCore.makeToolchainName compiler resolvedLinker;
+        inherit compiler targetPlatform;
+        linker = resolvedLinker;
+        inherit (bintools)
+          ar
+          ranlib
+          nm
+          objcopy
+          strip
+          ;
+      }
+      // (builtins.removeAttrs args [
+        "compiler"
+        "linker"
+      ])
+    );
 
   # ==========================================================================
   # Pre-Built Toolchains
@@ -197,30 +237,33 @@ let
 
     # Clang + Mold (fast linking on Linux)
     clang-mold =
-      if moldLinkers.isAvailable
-      then mkToolchain {
-        compiler = compilers.clang;
-        linker = linkers.mold;
-      }
-      else null;
+      if moldLinkers.isAvailable then
+        mkToolchain {
+          compiler = compilers.clang;
+          linker = linkers.mold;
+        }
+      else
+        null;
 
     # Clang + Gold
     clang-gold =
-      if goldLinkers.isAvailable
-      then mkToolchain {
-        compiler = compilers.clang;
-        linker = linkers.gold;
-      }
-      else null;
+      if goldLinkers.isAvailable then
+        mkToolchain {
+          compiler = compilers.clang;
+          linker = linkers.gold;
+        }
+      else
+        null;
 
     # Clang + Darwin ld64 (macOS)
     clang-darwin =
-      if darwinLinkers.isAvailable
-      then mkToolchain {
-        compiler = compilers.clang;
-        linker = linkers.darwinLd;
-      }
-      else null;
+      if darwinLinkers.isAvailable then
+        mkToolchain {
+          compiler = compilers.clang;
+          linker = linkers.darwinLd;
+        }
+      else
+        null;
 
     # ========================================================================
     # GCC Toolchains
@@ -228,39 +271,43 @@ let
 
     # GCC + Mold (fast linking)
     gcc-mold =
-      if moldLinkers.isAvailable && compilers.gcc != null
-      then mkToolchain {
-        compiler = compilers.gcc;
-        linker = linkers.mold;
-      }
-      else null;
+      if moldLinkers.isAvailable && compilers.gcc != null then
+        mkToolchain {
+          compiler = compilers.gcc;
+          linker = linkers.mold;
+        }
+      else
+        null;
 
     # GCC + Gold
     gcc-gold =
-      if goldLinkers.isAvailable && compilers.gcc != null
-      then mkToolchain {
-        compiler = compilers.gcc;
-        linker = linkers.gold;
-      }
-      else null;
+      if goldLinkers.isAvailable && compilers.gcc != null then
+        mkToolchain {
+          compiler = compilers.gcc;
+          linker = linkers.gold;
+        }
+      else
+        null;
 
     # GCC + GNU ld (classic)
     gcc-ld =
-      if gnuLdLinkers.isAvailable && compilers.gcc != null
-      then mkToolchain {
-        compiler = compilers.gcc;
-        linker = linkers.ld;
-      }
-      else null;
+      if gnuLdLinkers.isAvailable && compilers.gcc != null then
+        mkToolchain {
+          compiler = compilers.gcc;
+          linker = linkers.ld;
+        }
+      else
+        null;
 
     # GCC + LLD
     gcc-lld =
-      if compilers.gcc != null
-      then mkToolchain {
-        compiler = compilers.gcc;
-        linker = linkers.lld;
-      }
-      else null;
+      if compilers.gcc != null then
+        mkToolchain {
+          compiler = compilers.gcc;
+          linker = linkers.lld;
+        }
+      else
+        null;
 
     # ========================================================================
     # Default Toolchain
@@ -268,9 +315,7 @@ let
 
     # Default toolchain for current platform
     default =
-      if pkgs.stdenv.targetPlatform.isDarwin
-      then toolchains.clang-darwin
-      else toolchains.clang-lld;
+      if pkgs.stdenv.targetPlatform.isDarwin then toolchains.clang-darwin else toolchains.clang-lld;
   };
 
   # ==========================================================================
@@ -287,20 +332,40 @@ let
   };
 
   context = import ./builders/context.nix {
-    inherit pkgs lib utils flags compile scanner;
+    inherit
+      pkgs
+      lib
+      utils
+      flags
+      compile
+      scanner
+      ;
   };
 
   helpers = import ./builders/helpers.nix {
-    inherit pkgs lib utils context link;
+    inherit
+      pkgs
+      lib
+      utils
+      context
+      link
+      ;
     platform = platformUtils;
   };
 
   # High-level API (Option B style)
   api = import ./builders/api.nix {
-    inherit lib compilers linkers mkToolchain helpers;
+    inherit
+      lib
+      compilers
+      linkers
+      mkToolchain
+      helpers
+      ;
   };
 
-in {
+in
+{
   # ==========================================================================
   # Public API
   # ==========================================================================
@@ -320,14 +385,24 @@ in {
   platform = platformUtils;
 
   # Assembled collections
-  inherit compilers linkers toolchains tools;
+  inherit
+    compilers
+    linkers
+    toolchains
+    tools
+    ;
 
   # Tool factory (for custom tools)
   inherit (toolCore) mkTool;
 
   # Capability presets (for custom linkers)
   linkerCapabilities = {
-    inherit (linkerCore) lldCapabilities moldCapabilities goldCapabilities ldCapabilities;
+    inherit (linkerCore)
+      lldCapabilities
+      moldCapabilities
+      goldCapabilities
+      ldCapabilities
+      ;
   };
 
   # ==========================================================================
@@ -341,7 +416,15 @@ in {
   #   native.executable { name = "app"; sources = [...]; }
   #   native.staticLib { compiler = "gcc"; linker = "mold"; ... }
   #
-  inherit (api) executable staticLib sharedLib headerOnly devShell test archive;
+  inherit (api)
+    executable
+    staticLib
+    sharedLib
+    headerOnly
+    devShell
+    test
+    archive
+    ;
 
   # Expose resolvers for advanced use
   inherit (api) resolveCompiler resolveLinker;
@@ -360,13 +443,24 @@ in {
   #     ...
   #   }
   #
-  inherit (helpers) mkExecutable mkStaticLib mkSharedLib mkHeaderOnly mkArchive;
+  inherit (helpers)
+    mkExecutable
+    mkStaticLib
+    mkSharedLib
+    mkHeaderOnly
+    mkArchive
+    ;
   inherit (helpers) mkDevShell mkTest;
 
   # Lower-level builders
   inherit (context) mkBuildContext;
   inherit (compile) compileTranslationUnit generateCompileCommands;
-  inherit (link) mkLinkStep linkExecutable linkSharedLibrary createStaticArchive;
+  inherit (link)
+    mkLinkStep
+    linkExecutable
+    linkSharedLibrary
+    createStaticArchive
+    ;
 
   # Scanner and manifest utilities
   inherit (scanner) mkDependencyScanner processTools;

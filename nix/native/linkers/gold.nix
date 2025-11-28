@@ -3,7 +3,12 @@
 # Gold is the GNU linker designed for ELF. It's faster than GNU ld
 # for large C++ projects but has fewer features than LLD or mold.
 #
-{ pkgs, lib, mkLinker, goldCapabilities }:
+{
+  pkgs,
+  lib,
+  mkLinker,
+  goldCapabilities,
+}:
 
 let
   inherit (lib) optionals;
@@ -12,7 +17,8 @@ let
   # Gold is only available on Linux (ELF systems)
   isSupported = targetPlatform.isLinux;
 
-in rec {
+in
+rec {
   # ==========================================================================
   # Gold Linker
   # ==========================================================================
@@ -26,16 +32,20 @@ in rec {
 
         capabilities = goldCapabilities;
 
-        platformFlags = platform:
-          if platform.isLinux then [
-            "-Wl,--enable-new-dtags"
-          ]
-          else [];
+        platformFlags =
+          platform:
+          if platform.isLinux then
+            [
+              "-Wl,--enable-new-dtags"
+            ]
+          else
+            [ ];
 
         runtimeInputs = [ pkgs.binutils ];
-        environment = {};
+        environment = { };
       }
-    else null;
+    else
+      null;
 
   # ==========================================================================
   # Availability Check

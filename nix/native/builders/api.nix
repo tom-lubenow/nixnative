@@ -12,7 +12,13 @@
 # For advanced use cases, pass a pre-built toolchain directly:
 #   native.executable { toolchain = myToolchain; ... }
 #
-{ lib, compilers, linkers, mkToolchain, helpers }:
+{
+  lib,
+  compilers,
+  linkers,
+  mkToolchain,
+  helpers,
+}:
 
 let
   # ==========================================================================
@@ -21,35 +27,38 @@ let
 
   # Resolve a compiler specification to a compiler object
   # Accepts: string name ("clang", "gcc") or compiler object
-  resolveCompiler = spec:
+  resolveCompiler =
+    spec:
     if spec == null then
       compilers.clang
     else if builtins.isString spec then
       compilers.${spec} or (throw "Unknown compiler: '${spec}'. Available: clang, gcc")
     else if builtins.isAttrs spec && spec ? cc then
-      spec  # Already a compiler object
+      spec # Already a compiler object
     else
       throw "compiler must be a string name (e.g., \"clang\") or a compiler object";
 
   # Resolve a linker specification to a linker object
   # Accepts: string name ("lld", "mold", "gold", "ld") or linker object or null
-  resolveLinker = spec:
+  resolveLinker =
+    spec:
     if spec == null then
       linkers.default
     else if builtins.isString spec then
       linkers.${spec} or (throw "Unknown linker: '${spec}'. Available: lld, mold, gold, ld, darwinLd")
     else if builtins.isAttrs spec && spec ? driverFlag then
-      spec  # Already a linker object
+      spec # Already a linker object
     else
       throw "linker must be a string name (e.g., \"lld\") or a linker object";
 
   # Resolve a toolchain specification
   # Accepts: string name ("clang-lld", "gcc-mold") or toolchain object
-  resolveToolchain = spec: toolchains:
+  resolveToolchain =
+    spec: toolchains:
     if builtins.isString spec then
       toolchains.${spec} or (throw "Unknown toolchain: '${spec}'")
     else if builtins.isAttrs spec && spec ? compiler && spec ? linker then
-      spec  # Already a toolchain object
+      spec # Already a toolchain object
     else
       throw "toolchain must be a string name or toolchain object";
 
@@ -59,7 +68,8 @@ let
 
   # Extract toolchain from args, building one if needed
   # Priority: toolchain > compiler/linker > defaults
-  extractToolchain = args:
+  extractToolchain =
+    args:
     if args ? toolchain then
       # Toolchain provided directly - could be string or object
       if builtins.isString args.toolchain then
@@ -75,8 +85,13 @@ let
       mkToolchain { inherit compiler linker; };
 
   # Remove our special params from args before passing to mk* functions
-  cleanArgs = args:
-    builtins.removeAttrs args [ "compiler" "linker" "toolchain" ];
+  cleanArgs =
+    args:
+    builtins.removeAttrs args [
+      "compiler"
+      "linker"
+      "toolchain"
+    ];
 
   # ==========================================================================
   # High-Level Builders
@@ -100,7 +115,8 @@ let
   #   tools        - Tool plugins (protobuf, jinja, etc.)
   #   depsManifest - Pre-computed dependency manifest
   #
-  executable = args:
+  executable =
+    args:
     let
       toolchain = extractToolchain args;
       cleanedArgs = cleanArgs args;
@@ -114,7 +130,8 @@ let
   #   publicDefines     - Defines to propagate to consumers
   #   publicCxxFlags    - C++ flags to propagate to consumers
   #
-  staticLib = args:
+  staticLib =
+    args:
     let
       toolchain = extractToolchain args;
       cleanedArgs = cleanArgs args;
@@ -123,7 +140,8 @@ let
 
   # Build a shared library (.so/.dylib)
   #
-  sharedLib = args:
+  sharedLib =
+    args:
     let
       toolchain = extractToolchain args;
       cleanedArgs = cleanArgs args;
@@ -145,17 +163,15 @@ let
   #   extraPackages   - Additional packages to include
   #   linkCompileCommands - Whether to symlink compile_commands.json
   #
-  devShell = args:
+  devShell =
+    args:
     let
       # For devShell, toolchain is optional - can come from target
       toolchain =
-        if args ? toolchain || args ? compiler || args ? linker then
-          extractToolchain args
-        else
-          null;  # Let mkDevShell extract from target
+        if args ? toolchain || args ? compiler || args ? linker then extractToolchain args else null; # Let mkDevShell extract from target
       cleanedArgs = cleanArgs args;
     in
-    helpers.mkDevShell (cleanedArgs // (if toolchain != null then { inherit toolchain; } else {}));
+    helpers.mkDevShell (cleanedArgs // (if toolchain != null then { inherit toolchain; } else { }));
 
   # Create a test runner
   test = helpers.mkTest;
@@ -167,8 +183,17 @@ let
   #
   archive = helpers.mkArchive;
 
-in {
-  inherit executable staticLib sharedLib headerOnly devShell test archive;
+in
+{
+  inherit
+    executable
+    staticLib
+    sharedLib
+    headerOnly
+    devShell
+    test
+    archive
+    ;
 
   # Also expose resolvers for advanced use
   inherit resolveCompiler resolveLinker;

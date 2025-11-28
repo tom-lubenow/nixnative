@@ -3,7 +3,14 @@
 # A build context aggregates all configuration needed to compile a target:
 # sources, include directories, defines, flags, libraries, tools, etc.
 #
-{ pkgs, lib, utils, flags, compile, scanner }:
+{
+  pkgs,
+  lib,
+  utils,
+  flags,
+  compile,
+  scanner,
+}:
 
 let
   inherit (lib) concatStringsSep;
@@ -15,18 +22,22 @@ let
     collectEvalInputs
     normalizeSources
     headerSet
-    validatePublic;
+    validatePublic
+    ;
   inherit (scanner)
     mkManifest
     emptyManifest
     mergeManifests
     processTools
-    mkDependencyScanner;
+    mkDependencyScanner
+    ;
   inherit (compile)
     compileTranslationUnit
-    generateCompileCommands;
+    generateCompileCommands
+    ;
 
-in rec {
+in
+rec {
   # ==========================================================================
   # Build Context Factory
   # ==========================================================================
@@ -48,19 +59,20 @@ in rec {
   #   scanner      - Custom scanner (if not using auto-scan)
   #
   mkBuildContext =
-    { name
-    , toolchain
-    , root
-    , sources
-    , includeDirs ? []
-    , defines ? []
-    , flags ? []           # Abstract flags from flags.nix
-    , extraCxxFlags ? []   # Raw C++ flags
-    , libraries ? []
-    , tools ? []           # Tool plugins (replaces generators)
-    , depsManifest ? null
-    , scanner ? null
-    , ...
+    {
+      name,
+      toolchain,
+      root,
+      sources,
+      includeDirs ? [ ],
+      defines ? [ ],
+      flags ? [ ], # Abstract flags from flags.nix
+      extraCxxFlags ? [ ], # Raw C++ flags
+      libraries ? [ ],
+      tools ? [ ], # Tool plugins (replaces generators)
+      depsManifest ? null,
+      scanner ? null,
+      ...
     }@args:
     let
       tc = toolchain;
@@ -70,9 +82,15 @@ in rec {
       toolInfo = processTools tools;
 
       # Validate public attributes from libraries
-      _ = map (lib:
-        if lib ? public then validatePublic { public = lib.public; context = "library '${lib.name or "unknown"}'"; }
-        else true
+      _ = map (
+        lib:
+        if lib ? public then
+          validatePublic {
+            public = lib.public;
+            context = "library '${lib.name or "unknown"}'";
+          }
+        else
+          true
       ) libraries;
 
       # Collect public attributes from libraries
@@ -88,25 +106,19 @@ in rec {
       allSources = sources ++ toolInfo.sources;
 
       # Combine include directories
-      combinedIncludeDirs =
-        includeDirs
-        ++ publicAggregate.includeDirs
-        ++ toolInfo.includeDirs;
+      combinedIncludeDirs = includeDirs ++ publicAggregate.includeDirs ++ toolInfo.includeDirs;
 
       # Combine defines
-      combinedDefines =
-        defines
-        ++ publicAggregate.defines
-        ++ toolInfo.defines;
+      combinedDefines = defines ++ publicAggregate.defines ++ toolInfo.defines;
 
       # Combine raw C++ flags
-      combinedExtraCxxFlags =
-        extraCxxFlags
-        ++ publicAggregate.cxxFlags
-        ++ toolInfo.cxxFlags;
+      combinedExtraCxxFlags = extraCxxFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
 
       # Normalize sources to translation units
-      tus = normalizeSources { inherit root; sources = allSources; };
+      tus = normalizeSources {
+        inherit root;
+        sources = allSources;
+      };
 
       # Auto-create scanner if needed
       autoScanner =
@@ -129,49 +141,51 @@ in rec {
 
       # Build dependency manifest
       baseManifest =
-        if depsManifest != null then mkManifest depsManifest
-        else if effectiveScanner != null then mkManifest effectiveScanner
-        else emptyManifest;
+        if depsManifest != null then
+          mkManifest depsManifest
+        else if effectiveScanner != null then
+          mkManifest effectiveScanner
+        else
+          emptyManifest;
 
       manifest = mergeManifests baseManifest toolInfo.manifest;
 
       # Compile all translation units
-      objectInfos =
-        map
-          (tu:
-            let
-              headers = headerSet {
-                inherit root manifest tu;
-                overrides = toolInfo.headerOverrides;
-              };
-            in
-            compileTranslationUnit {
-              inherit root tu headers;
-              toolchain = tc;
-              includeDirs = combinedIncludeDirs;
-              defines = combinedDefines;
-              inherit flags;
-              extraCxxFlags = combinedExtraCxxFlags;
-              extraInputs = toolInfo.evalInputs ++ libsEvalInputs;
-            })
-          tus;
+      objectInfos = map (
+        tu:
+        let
+          headers = headerSet {
+            inherit root manifest tu;
+            overrides = toolInfo.headerOverrides;
+          };
+        in
+        compileTranslationUnit {
+          inherit root tu headers;
+          toolchain = tc;
+          includeDirs = combinedIncludeDirs;
+          defines = combinedDefines;
+          inherit flags;
+          extraCxxFlags = combinedExtraCxxFlags;
+          extraInputs = toolInfo.evalInputs ++ libsEvalInputs;
+        }
+      ) tus;
 
       # Extract object paths for linking
       objectPaths = map (info: info.object) objectInfos;
 
       # Generate compile_commands.json
-      compileCommands =
-        generateCompileCommands {
-          toolchain = tc;
-          root = rootPath;
-          inherit tus;
-          includeDirs = combinedIncludeDirs;
-          defines = combinedDefines;
-          inherit flags;
-          extraCxxFlags = combinedExtraCxxFlags;
-        };
+      compileCommands = generateCompileCommands {
+        toolchain = tc;
+        root = rootPath;
+        inherit tus;
+        includeDirs = combinedIncludeDirs;
+        defines = combinedDefines;
+        inherit flags;
+        extraCxxFlags = combinedExtraCxxFlags;
+      };
 
-    in {
+    in
+    {
       inherit name toolchain rootPath;
       inherit objectInfos objectPaths compileCommands;
       inherit manifest tus;

@@ -3,7 +3,12 @@
 # Mold is a high-performance linker that aims to be faster than all
 # existing Unix linkers. Best used on Linux; limited macOS support.
 #
-{ pkgs, lib, mkLinker, moldCapabilities }:
+{
+  pkgs,
+  lib,
+  mkLinker,
+  moldCapabilities,
+}:
 
 let
   inherit (lib) optionals;
@@ -13,7 +18,8 @@ let
   # sold (macOS port) exists but is commercial
   isSupported = targetPlatform.isLinux;
 
-in rec {
+in
+rec {
   # ==========================================================================
   # Mold Linker
   # ==========================================================================
@@ -27,17 +33,21 @@ in rec {
 
         capabilities = moldCapabilities;
 
-        platformFlags = platform:
-          if platform.isLinux then [
-            # Mold-specific optimizations
-            "-Wl,--enable-new-dtags"
-          ]
-          else [];
+        platformFlags =
+          platform:
+          if platform.isLinux then
+            [
+              # Mold-specific optimizations
+              "-Wl,--enable-new-dtags"
+            ]
+          else
+            [ ];
 
         runtimeInputs = [ pkgs.mold ];
-        environment = {};
+        environment = { };
       }
-    else null;
+    else
+      null;
 
   # ==========================================================================
   # Availability Check

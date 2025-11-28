@@ -11,13 +11,23 @@
     nixnative.url = "path:../../";
   };
 
-  outputs = { self, nixpkgs, nixnative }:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      nixnative,
+    }:
     let
-      systems = [ "x86_64-linux" "aarch64-darwin" "aarch64-linux" ];
+      systems = [
+        "x86_64-linux"
+        "aarch64-darwin"
+        "aarch64-linux"
+      ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
     in
     {
-      packages = forAllSystems (system:
+      packages = forAllSystems (
+        system:
         let
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };
@@ -26,7 +36,8 @@
         packages // { default = packages.mathextPackage; }
       );
 
-      checks = forAllSystems (system:
+      checks = forAllSystems (
+        system:
         let
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };
@@ -35,7 +46,8 @@
         import ./checks.nix { inherit pkgs native packages; }
       );
 
-      devShells = forAllSystems (system:
+      devShells = forAllSystems (
+        system:
         let
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };
@@ -43,7 +55,10 @@
         in
         {
           default = pkgs.mkShell {
-            packages = [ packages.pythonWithMathext pkgs.python3Packages.pytest ];
+            packages = [
+              packages.pythonWithMathext
+              pkgs.python3Packages.pytest
+            ];
             shellHook = ''
               echo "Python extension development shell"
               echo "  python3 -c 'import mathext; print(mathext.add(1, 2))'"

@@ -3,7 +3,8 @@
 let
   exe = packages.executableExample;
 
-in {
+in
+{
   executableExample = pkgs.runCommand "executable-example-check" { } ''
     set -euo pipefail
     output=$(${exe}/bin/executable-example)

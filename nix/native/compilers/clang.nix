@@ -2,11 +2,19 @@
 #
 # Provides clang variants using the mkCompiler factory.
 #
-{ pkgs, mkCompiler, commonFlagTranslators }:
+{
+  pkgs,
+  mkCompiler,
+  commonFlagTranslators,
+}:
 
 let
   # Helper to create a clang compiler for a specific LLVM version
-  mkClang = { llvmPackages, name ? "clang${llvmPackages.release_version}" }:
+  mkClang =
+    {
+      llvmPackages,
+      name ? "clang${llvmPackages.release_version}",
+    }:
     let
       llvm = llvmPackages;
     in
@@ -17,22 +25,30 @@ let
       version = llvm.release_version;
 
       capabilities = {
-        lto = { thin = true; full = true; };
-        sanitizers = [ "address" "thread" "undefined" "leak" "memory" ];
+        lto = {
+          thin = true;
+          full = true;
+        };
+        sanitizers = [
+          "address"
+          "thread"
+          "undefined"
+          "leak"
+          "memory"
+        ];
         coverage = true;
-        modules = false;  # C++20 modules still experimental
+        modules = false; # C++20 modules still experimental
         pch = true;
         colorDiagnostics = true;
       };
 
       flagTranslators = commonFlagTranslators // {
         # Clang-specific overrides if needed
-        colorDiagnostics = flag:
-          if flag.value then [ "-fcolor-diagnostics" ]
-          else [ "-fno-color-diagnostics" ];
+        colorDiagnostics =
+          flag: if flag.value then [ "-fcolor-diagnostics" ] else [ "-fno-color-diagnostics" ];
       };
 
-      defaultCFlags = [];
+      defaultCFlags = [ ];
       defaultCxxFlags = [
         "-std=c++20"
         "-fdiagnostics-color"
@@ -50,7 +66,7 @@ let
         pkgs.gawk
       ];
 
-      environment = {};
+      environment = { };
 
       package = llvm.clang;
 
@@ -58,7 +74,8 @@ let
       cxxRuntimeLibPath = "${pkgs.stdenv.cc.cc.lib}/lib";
     };
 
-in rec {
+in
+rec {
   # ==========================================================================
   # Clang Compiler Variants
   # ==========================================================================
@@ -70,10 +87,7 @@ in rec {
   clang17 = mkClang { llvmPackages = pkgs.llvmPackages_17; };
 
   # LLVM 19 (if available)
-  clang19 =
-    if pkgs ? llvmPackages_19
-    then mkClang { llvmPackages = pkgs.llvmPackages_19; }
-    else null;
+  clang19 = if pkgs ? llvmPackages_19 then mkClang { llvmPackages = pkgs.llvmPackages_19; } else null;
 
   # Default clang (18)
   clang = clang18;
@@ -82,13 +96,15 @@ in rec {
   # Helper: Get bintools for a clang version
   # ==========================================================================
 
-  getBintools = compiler:
+  getBintools =
+    compiler:
     let
       # Extract LLVM version from compiler name
       versionMatch = builtins.match "clang([0-9]+)" compiler.name;
       version = if versionMatch != null then builtins.head versionMatch else "18";
       llvmPkgs = pkgs."llvmPackages_${version}" or pkgs.llvmPackages_18;
-    in {
+    in
+    {
       ar = "${llvmPkgs.bintools}/bin/ar";
       ranlib = "${llvmPkgs.bintools}/bin/ranlib";
       nm = "${llvmPkgs.bintools}/bin/nm";

@@ -16,7 +16,8 @@
 
 let
   # Merge multiple compile_commands.json files into one
-  mergeCompileCommands = name: compileCommandsList:
+  mergeCompileCommands =
+    name: compileCommandsList:
     let
       validCommands = builtins.filter (x: x != null) compileCommandsList;
     in
@@ -25,18 +26,20 @@ let
     else if builtins.length validCommands == 1 then
       builtins.head validCommands
     else
-      pkgs.runCommand "compile_commands-${name}.json" {
-        nativeBuildInputs = [ pkgs.jq ];
-      } ''
-        # Merge all compile_commands.json arrays into one
-        jq -s 'add' ${lib.concatStringsSep " " validCommands} > $out
-      '';
+      pkgs.runCommand "compile_commands-${name}.json"
+        {
+          nativeBuildInputs = [ pkgs.jq ];
+        }
+        ''
+          # Merge all compile_commands.json arrays into one
+          jq -s 'add' ${lib.concatStringsSep " " validCommands} > $out
+        '';
 
   # Extract compile_commands.json from a target
-  extractCompileCommands = target:
-    target.passthru.compileCommands or null;
+  extractCompileCommands = target: target.passthru.compileCommands or null;
 
-in rec {
+in
+rec {
   # Create a clangd configuration for one or more targets
   #
   # Arguments:
@@ -53,17 +56,21 @@ in rec {
   #   }
   #
   mkClangd =
-    { targets ? []
-    , target ? null
-    , symlinkName ? "compile_commands.json"
-    , package ? pkgs.clang-tools
+    {
+      targets ? [ ],
+      target ? null,
+      symlinkName ? "compile_commands.json",
+      package ? pkgs.clang-tools,
     }:
     let
       # Normalize targets to a list
       allTargets =
-        if target != null then [ target ] ++ targets
-        else if builtins.length targets > 0 then targets
-        else throw "mkClangd: must provide at least one target or targets";
+        if target != null then
+          [ target ] ++ targets
+        else if builtins.length targets > 0 then
+          targets
+        else
+          throw "mkClangd: must provide at least one target or targets";
 
       # Extract compile commands from all targets
       allCompileCommands = map extractCompileCommands allTargets;
@@ -84,7 +91,8 @@ in rec {
         else
           "";
 
-    in {
+    in
+    {
       inherit package compileCommands shellHook;
 
       # Convenience: packages list for mkShell

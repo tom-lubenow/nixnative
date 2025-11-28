@@ -18,15 +18,24 @@ let
     sources = [ "src/mathmodule.cc" ];
     libraries = [ pythonLib ];
     ldflags =
-      if pkgs.stdenv.isDarwin
-      then [ "-undefined" "dynamic_lookup" ]
-      else [ ];
-    flags = [ { type = "standard"; value = "c++17"; } ];
+      if pkgs.stdenv.isDarwin then
+        [
+          "-undefined"
+          "dynamic_lookup"
+        ]
+      else
+        [ ];
+    flags = [
+      {
+        type = "standard";
+        value = "c++17";
+      }
+    ];
   };
 
   # Create Python-compatible package
   # Python extension modules always use .so on Unix (including macOS), not .dylib
-  mathextPackage = pkgs.runCommand "mathext-${pythonVersion}" {} ''
+  mathextPackage = pkgs.runCommand "mathext-${pythonVersion}" { } ''
     mkdir -p $out/lib/python${pythonVersion}/site-packages
     cp ${mathextLib.sharedLibrary} $out/lib/python${pythonVersion}/site-packages/mathext.so
   '';
@@ -40,7 +49,13 @@ let
     ${python}/bin/python3 ${./test_math.py}
   '';
 
-in {
-  inherit mathextLib mathextPackage pythonWithMathext testRunner;
+in
+{
+  inherit
+    mathextLib
+    mathextPackage
+    pythonWithMathext
+    testRunner
+    ;
   pythonExtensionExample = mathextPackage;
 }

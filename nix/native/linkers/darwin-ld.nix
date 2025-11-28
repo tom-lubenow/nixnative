@@ -21,7 +21,8 @@ let
     splitDwarf = false;
   };
 
-in rec {
+in
+rec {
   # ==========================================================================
   # Darwin ld64 Linker
   # ==========================================================================
@@ -35,7 +36,7 @@ in rec {
       mkLinker {
         name = "ld64";
         binary = "${pkgs.stdenv.cc.bintools.bintools}/bin/ld";
-        driverFlag = "";  # ld64 is the default on Darwin
+        driverFlag = ""; # ld64 is the default on Darwin
 
         capabilities = darwinLdCapabilities;
 
@@ -58,7 +59,8 @@ in rec {
           MACOSX_DEPLOYMENT_TARGET = deploymentTarget;
         };
       }
-    else null;
+    else
+      null;
 
   # ==========================================================================
   # Availability Check
@@ -71,12 +73,20 @@ in rec {
   # ==========================================================================
 
   # Get framework link flags
-  linkFrameworks = frameworks:
-    builtins.concatMap (f: [ "-framework" f ]) frameworks;
+  linkFrameworks =
+    frameworks:
+    builtins.concatMap (f: [
+      "-framework"
+      f
+    ]) frameworks;
 
   # Get framework search path flags
-  frameworkSearchPaths = paths:
-    builtins.concatMap (p: [ "-F" p ]) paths;
+  frameworkSearchPaths =
+    paths:
+    builtins.concatMap (p: [
+      "-F"
+      p
+    ]) paths;
 
   # Dead code stripping (Darwin-specific)
   deadCodeStripping = [ "-Wl,-dead_strip" ];

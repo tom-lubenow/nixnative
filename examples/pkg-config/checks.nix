@@ -1,4 +1,8 @@
-{ pkgs, native, packages }:
+{
+  pkgs,
+  native,
+  packages,
+}:
 
 {
   pkgConfig = native.test {

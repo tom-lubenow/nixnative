@@ -39,18 +39,20 @@ rec {
   # ==========================================================================
 
   # Get default shared library extension
-  sharedLibExtension = platform:
-    if isDarwin platform then ".dylib"
-    else if isWindows platform then ".dll"
-    else ".so";
+  sharedLibExtension =
+    platform:
+    if isDarwin platform then
+      ".dylib"
+    else if isWindows platform then
+      ".dll"
+    else
+      ".so";
 
   # Get default static library extension
   staticLibExtension = _: ".a";
 
   # Get default executable extension
-  executableExtension = platform:
-    if isWindows platform then ".exe"
-    else "";
+  executableExtension = platform: if isWindows platform then ".exe" else "";
 
   # Get default object file extension
   objectExtension = _: ".o";
@@ -60,17 +62,20 @@ rec {
   # ==========================================================================
 
   # Get default deployment target for Darwin
-  defaultDeploymentTarget = platform:
-    if isDarwin platform then
-      if isAarch64 platform then "11.0"
-      else "10.15"
-    else null;
+  defaultDeploymentTarget =
+    platform: if isDarwin platform then if isAarch64 platform then "11.0" else "10.15" else null;
 
   # Framework search path flag
-  frameworkSearchPath = path: [ "-F" path ];
+  frameworkSearchPath = path: [
+    "-F"
+    path
+  ];
 
   # Link a framework
-  linkFramework = name: [ "-framework" name ];
+  linkFramework = name: [
+    "-framework"
+    name
+  ];
 
   # ==========================================================================
   # Platform-Specific Compiler Flags
@@ -88,63 +93,61 @@ rec {
   # Darwin: Position independence is handled differently via Mach-O format
   # and doesn't require explicit -fPIC for most use cases.
   #
-  defaultCompileFlags = platform:
-    if isLinux platform then [ "-fPIC" ]
-    else [];
+  defaultCompileFlags = platform: if isLinux platform then [ "-fPIC" ] else [ ];
 
   # Get platform-specific flags required for linking (beyond linker defaults)
   # Reserved for future platform-specific link requirements
-  defaultLinkFlags = _platform:
-    [];
+  defaultLinkFlags = _platform: [ ];
 
   # ==========================================================================
   # Linux-Specific Helpers
   # ==========================================================================
 
   # Get rpath flag syntax
-  rpathFlag = platform: path:
-    if isDarwin platform
-    then [ "-Wl,-rpath,${path}" ]
-    else [ "-Wl,-rpath,${path}" ];
+  rpathFlag =
+    platform: path: if isDarwin platform then [ "-Wl,-rpath,${path}" ] else [ "-Wl,-rpath,${path}" ];
 
   # Linux library group flags (for circular dependencies)
-  startLibraryGroup = platform:
-    if isLinux platform then [ "-Wl,--start-group" ]
-    else [];
+  startLibraryGroup = platform: if isLinux platform then [ "-Wl,--start-group" ] else [ ];
 
-  endLibraryGroup = platform:
-    if isLinux platform then [ "-Wl,--end-group" ]
-    else [];
+  endLibraryGroup = platform: if isLinux platform then [ "-Wl,--end-group" ] else [ ];
 
   # ==========================================================================
   # Cross-Compilation Helpers
   # ==========================================================================
 
   # Check if we're cross-compiling
-  isCrossCompiling = buildPlatform: targetPlatform:
-    buildPlatform.system != targetPlatform.system;
+  isCrossCompiling = buildPlatform: targetPlatform: buildPlatform.system != targetPlatform.system;
 
   # Get target triple for compiler
-  getTargetTriple = platform:
-    platform.config or platform.system;
+  getTargetTriple = platform: platform.config or platform.system;
 
   # ==========================================================================
   # Platform Info
   # ==========================================================================
 
   # Get a human-readable platform description
-  describePlatform = platform:
+  describePlatform =
+    platform:
     let
       os =
-        if isDarwin platform then "macOS"
-        else if isLinux platform then "Linux"
-        else if isWindows platform then "Windows"
-        else if isBSD platform then "BSD"
-        else "Unknown";
+        if isDarwin platform then
+          "macOS"
+        else if isLinux platform then
+          "Linux"
+        else if isWindows platform then
+          "Windows"
+        else if isBSD platform then
+          "BSD"
+        else
+          "Unknown";
       arch =
-        if isX86_64 platform then "x86_64"
-        else if isAarch64 platform then "aarch64"
-        else platform.parsed.cpu.name or "unknown";
+        if isX86_64 platform then
+          "x86_64"
+        else if isAarch64 platform then
+          "aarch64"
+        else
+          platform.parsed.cpu.name or "unknown";
     in
     "${os} (${arch})";
 }

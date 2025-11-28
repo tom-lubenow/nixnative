@@ -2,7 +2,11 @@
 #
 # Compiles individual translation units using the toolchain abstraction.
 #
-{ pkgs, lib, utils }:
+{
+  pkgs,
+  lib,
+  utils,
+}:
 
 let
   inherit (lib) concatStringsSep;
@@ -10,9 +14,11 @@ let
     sanitizeName
     mkSourceTree
     toIncludeFlags
-    toDefineFlags;
+    toDefineFlags
+    ;
 
-in rec {
+in
+rec {
   # ==========================================================================
   # Translation Unit Compilation
   # ==========================================================================
@@ -31,15 +37,16 @@ in rec {
   #   extraInputs  - Additional build inputs
   #
   compileTranslationUnit =
-    { toolchain
-    , root
-    , tu
-    , headers
-    , includeDirs
-    , defines
-    , flags ? []           # Abstract flags
-    , extraCxxFlags ? []   # Raw flags
-    , extraInputs ? []
+    {
+      toolchain,
+      root,
+      tu,
+      headers,
+      includeDirs,
+      defines,
+      flags ? [ ], # Abstract flags
+      extraCxxFlags ? [ ], # Raw flags
+      extraInputs ? [ ],
     }:
     let
       tc = toolchain;
@@ -63,24 +70,20 @@ in rec {
       platformFlags = tc.getPlatformCompileFlags;
 
       # Combine all flags
-      allCxxFlags =
-        defaultFlags
-        ++ platformFlags
-        ++ translatedFlags
-        ++ extraCxxFlags;
+      allCxxFlags = defaultFlags ++ platformFlags ++ translatedFlags ++ extraCxxFlags;
 
       # Get linker driver flag (for LTO to work, linker must be specified at compile time too)
-      linkerFlag =
-        if tc.linker.driverFlag != ""
-        then [ tc.linker.driverFlag ]
-        else [];
+      linkerFlag = if tc.linker.driverFlag != "" then [ tc.linker.driverFlag ] else [ ];
 
       # Build the derivation
       drv =
         pkgs.runCommand "${sanitizeName tu.relNorm}.o"
-          ({
-            buildInputs = tc.runtimeInputs ++ extraInputs;
-          } // tc.environment)
+          (
+            {
+              buildInputs = tc.runtimeInputs ++ extraInputs;
+            }
+            // tc.environment
+          )
           ''
             set -euo pipefail
             # Unset Nix wrapper environment variables that interfere with our explicit flags
@@ -99,7 +102,13 @@ in rec {
     {
       derivation = drv;
       object = "${drv}/${tu.objectName}";
-      inherit tu headers srcTree includeFlags defineFlags;
+      inherit
+        tu
+        headers
+        srcTree
+        includeFlags
+        defineFlags
+        ;
       cxxFlags = allCxxFlags;
     };
 
@@ -109,53 +118,54 @@ in rec {
 
   # Generate compile_commands.json for IDE integration
   generateCompileCommands =
-    { toolchain
-    , root
-    , tus
-    , includeDirs
-    , defines
-    , flags ? []
-    , extraCxxFlags ? []
+    {
+      toolchain,
+      root,
+      tus,
+      includeDirs,
+      defines,
+      flags ? [ ],
+      extraCxxFlags ? [ ],
     }:
     let
       tc = toolchain;
 
       # Convert include dirs to flags (simplified for compile_commands)
-      includeFlags =
-        map
-          (dir:
-            if builtins.isString dir then "-I${dir}"
-            else if builtins.isPath dir then "-I${dir}"
-            else if builtins.isAttrs dir && dir ? path then "-I${dir.path}"
-            else throw "compileCommands: unsupported include path value"
-          )
-          includeDirs;
+      includeFlags = map (
+        dir:
+        if builtins.isString dir then
+          "-I${dir}"
+        else if builtins.isPath dir then
+          "-I${dir}"
+        else if builtins.isAttrs dir && dir ? path then
+          "-I${dir.path}"
+        else
+          throw "compileCommands: unsupported include path value"
+      ) includeDirs;
 
       defineFlags = toDefineFlags defines;
       translatedFlags = tc.translateFlags flags;
       defaultFlags = tc.getDefaultCxxFlags;
       platformFlags = tc.getPlatformCompileFlags;
 
-      allCxxFlags =
-        defaultFlags
-        ++ platformFlags
-        ++ translatedFlags
-        ++ extraCxxFlags;
+      allCxxFlags = defaultFlags ++ platformFlags ++ translatedFlags ++ extraCxxFlags;
 
-      entries =
-        map
-          (tu:
-            {
-              directory = builtins.toString root;
-              file = tu.relNorm;
-              command = concatStringsSep " "
-                ([ tc.getCXX ]
-                  ++ allCxxFlags
-                  ++ includeFlags
-                  ++ defineFlags
-                  ++ [ "-c" tu.relNorm "-o" tu.objectName ]);
-            })
-          tus;
+      entries = map (tu: {
+        directory = builtins.toString root;
+        file = tu.relNorm;
+        command = concatStringsSep " " (
+          [ tc.getCXX ]
+          ++ allCxxFlags
+          ++ includeFlags
+          ++ defineFlags
+          ++ [
+            "-c"
+            tu.relNorm
+            "-o"
+            tu.objectName
+          ]
+        );
+      }) tus;
     in
     pkgs.writeText "compile_commands.json" (builtins.toJSON entries);
 }

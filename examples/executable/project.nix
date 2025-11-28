@@ -13,7 +13,10 @@ let
   includeDirs = [ "include" ];
 
   # Source files to compile (relative to root)
-  sources = [ "src/main.cc" "src/hello.cc" ];
+  sources = [
+    "src/main.cc"
+    "src/hello.cc"
+  ];
 
   # Build the executable using the high-level API
   # This automatically:
@@ -32,6 +35,7 @@ let
     # linker = "mold";                    # Override linker (platform default)
   };
 
-in {
+in
+{
   executableExample = executable;
 }

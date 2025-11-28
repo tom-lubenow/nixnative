@@ -10,13 +10,23 @@
     nixnative.url = "path:../../";
   };
 
-  outputs = { self, nixpkgs, nixnative }:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      nixnative,
+    }:
     let
-      systems = [ "x86_64-linux" "aarch64-darwin" "aarch64-linux" ];
+      systems = [
+        "x86_64-linux"
+        "aarch64-darwin"
+        "aarch64-linux"
+      ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
     in
     {
-      packages = forAllSystems (system:
+      packages = forAllSystems (
+        system:
         let
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };
@@ -25,7 +35,8 @@
         packages // { default = packages.demo; }
       );
 
-      checks = forAllSystems (system:
+      checks = forAllSystems (
+        system:
         let
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };

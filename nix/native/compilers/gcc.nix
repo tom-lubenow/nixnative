@@ -2,11 +2,19 @@
 #
 # Provides GCC variants using the mkCompiler factory.
 #
-{ pkgs, mkCompiler, gccFlagTranslators }:
+{
+  pkgs,
+  mkCompiler,
+  gccFlagTranslators,
+}:
 
 let
   # Helper to create a GCC compiler for a specific version
-  mkGCC = { gccPackage, name ? "gcc${gccPackage.version}" }:
+  mkGCC =
+    {
+      gccPackage,
+      name ? "gcc${gccPackage.version}",
+    }:
     let
       gcc = gccPackage;
     in
@@ -17,17 +25,26 @@ let
       version = gcc.version;
 
       capabilities = {
-        lto = { thin = false; full = true; };  # GCC doesn't have thin LTO
-        sanitizers = [ "address" "thread" "undefined" "leak" "memory" ];
+        lto = {
+          thin = false;
+          full = true;
+        }; # GCC doesn't have thin LTO
+        sanitizers = [
+          "address"
+          "thread"
+          "undefined"
+          "leak"
+          "memory"
+        ];
         coverage = true;
-        modules = false;  # GCC modules support is experimental
+        modules = false; # GCC modules support is experimental
         pch = true;
         colorDiagnostics = true;
       };
 
       flagTranslators = gccFlagTranslators;
 
-      defaultCFlags = [];
+      defaultCFlags = [ ];
       defaultCxxFlags = [
         "-std=c++20"
         "-fdiagnostics-color=always"
@@ -44,7 +61,7 @@ let
         pkgs.gawk
       ];
 
-      environment = {};
+      environment = { };
 
       package = gcc;
 
@@ -52,7 +69,8 @@ let
       cxxRuntimeLibPath = "${gcc.cc.lib}/lib";
     };
 
-in rec {
+in
+rec {
   # ==========================================================================
   # GCC Compiler Variants
   # ==========================================================================
@@ -61,10 +79,7 @@ in rec {
   gcc13 = mkGCC { gccPackage = pkgs.gcc13; };
 
   # GCC 14 (if available)
-  gcc14 =
-    if pkgs ? gcc14
-    then mkGCC { gccPackage = pkgs.gcc14; }
-    else null;
+  gcc14 = if pkgs ? gcc14 then mkGCC { gccPackage = pkgs.gcc14; } else null;
 
   # GCC 12
   gcc12 = mkGCC { gccPackage = pkgs.gcc12; };

@@ -19,10 +19,14 @@ let
     name = "pkgconfig-demo";
     root = ./.;
     sources = [ "main.cc" ];
-    libraries = [ zlibLib curlLib ];
+    libraries = [
+      zlibLib
+      curlLib
+    ];
   };
 
-in {
+in
+{
   inherit demo;
   pkgConfigExample = demo;
 }

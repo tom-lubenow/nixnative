@@ -3,12 +3,17 @@
 # Links object files into executables, shared libraries, or static archives.
 # Uses the linker abstraction from the toolchain.
 #
-{ pkgs, lib, platform }:
+{
+  pkgs,
+  lib,
+  platform,
+}:
 
 let
   inherit (lib) concatStringsSep concatMapStrings;
 
-in rec {
+in
+rec {
   # ==========================================================================
   # Link Step (Core)
   # ==========================================================================
@@ -28,17 +33,18 @@ in rec {
   #   extraFlags  - Extra driver flags (e.g., "-shared")
   #
   mkLinkStep =
-    { toolchain
-    , name
-    , objects
-    , flags ? []
-    , extraCxxFlags ? []
-    , ldflags ? []
-    , linkFlags ? []
-    , outputDir ? "bin"
-    , outputName ? name
-    , extraFlags ? []
-    , extraInputs ? []
+    {
+      toolchain,
+      name,
+      objects,
+      flags ? [ ],
+      extraCxxFlags ? [ ],
+      ldflags ? [ ],
+      linkFlags ? [ ],
+      outputDir ? "bin",
+      outputName ? name,
+      extraFlags ? [ ],
+      extraInputs ? [ ],
     }:
     let
       tc = toolchain;
@@ -48,10 +54,7 @@ in rec {
       translatedFlags = tc.translateFlags flags;
 
       # Get linker driver flag (-fuse-ld=lld, etc.)
-      linkerDriverFlag =
-        if tc.linker.driverFlag != ""
-        then [ tc.linker.driverFlag ]
-        else [];
+      linkerDriverFlag = if tc.linker.driverFlag != "" then [ tc.linker.driverFlag ] else [ ];
 
       # Platform-specific linker flags from linker
       platformLinkerFlags = tc.getPlatformLinkerFlags;
@@ -60,29 +63,22 @@ in rec {
       groupedLinkFlags = tc.wrapLibraryFlags linkFlags;
 
       # Add rpath for C++ runtime library (needed on Linux for libstdc++)
-      rpathFlags =
-        if tc.cxxRuntimeLibPath != null
-        then [ "-Wl,-rpath,${tc.cxxRuntimeLibPath}" ]
-        else [];
+      rpathFlags = if tc.cxxRuntimeLibPath != null then [ "-Wl,-rpath,${tc.cxxRuntimeLibPath}" ] else [ ];
 
       # Combine all link flags
-      finalLinkFlags =
-        platformLinkerFlags
-        ++ rpathFlags
-        ++ ldflags
-        ++ groupedLinkFlags;
+      finalLinkFlags = platformLinkerFlags ++ rpathFlags ++ ldflags ++ groupedLinkFlags;
 
       # Combine all C++ flags
       allCxxFlags =
-        tc.getDefaultCxxFlags
-        ++ tc.getPlatformCompileFlags
-        ++ translatedFlags
-        ++ extraCxxFlags;
+        tc.getDefaultCxxFlags ++ tc.getPlatformCompileFlags ++ translatedFlags ++ extraCxxFlags;
     in
     pkgs.runCommand name
-      ({
-        buildInputs = tc.runtimeInputs ++ extraInputs;
-      } // tc.environment)
+      (
+        {
+          buildInputs = tc.runtimeInputs ++ extraInputs;
+        }
+        // tc.environment
+      )
       ''
         set -euo pipefail
         # Unset Nix wrapper environment variables that interfere with our explicit flags
@@ -103,17 +99,27 @@ in rec {
   # ==========================================================================
 
   linkExecutable =
-    { toolchain
-    , name
-    , objects
-    , flags ? []
-    , extraCxxFlags ? []
-    , ldflags ? []
-    , linkFlags ? []
-    , extraInputs ? []
+    {
+      toolchain,
+      name,
+      objects,
+      flags ? [ ],
+      extraCxxFlags ? [ ],
+      ldflags ? [ ],
+      linkFlags ? [ ],
+      extraInputs ? [ ],
     }:
     mkLinkStep {
-      inherit toolchain name objects flags extraCxxFlags ldflags linkFlags extraInputs;
+      inherit
+        toolchain
+        name
+        objects
+        flags
+        extraCxxFlags
+        ldflags
+        linkFlags
+        extraInputs
+        ;
       outputDir = "bin";
     };
 
@@ -122,27 +128,37 @@ in rec {
   # ==========================================================================
 
   linkSharedLibrary =
-    { toolchain
-    , name
-    , objects
-    , flags ? []
-    , extraCxxFlags ? []
-    , ldflags ? []
-    , linkFlags ? []
-    , extraInputs ? []
+    {
+      toolchain,
+      name,
+      objects,
+      flags ? [ ],
+      extraCxxFlags ? [ ],
+      ldflags ? [ ],
+      linkFlags ? [ ],
+      extraInputs ? [ ],
     }:
     let
       targetPlatform = toolchain.targetPlatform;
-      sharedExt = builtins.substring 1 100 (platform.sharedLibExtension targetPlatform);  # Strip leading "."
+      sharedExt = builtins.substring 1 100 (platform.sharedLibExtension targetPlatform); # Strip leading "."
       sharedName = "lib${name}.${sharedExt}";
     in
     mkLinkStep {
-      inherit toolchain objects flags extraCxxFlags ldflags linkFlags extraInputs;
+      inherit
+        toolchain
+        objects
+        flags
+        extraCxxFlags
+        ldflags
+        linkFlags
+        extraInputs
+        ;
       name = "shared-${name}";
       outputDir = "lib";
       outputName = sharedName;
       extraFlags = [ "-shared" ];
-    } // {
+    }
+    // {
       sharedLibraryName = sharedName;
       sharedLibraryExt = sharedExt;
     };
@@ -152,29 +168,33 @@ in rec {
   # ==========================================================================
 
   createStaticArchive =
-    { toolchain
-    , name
-    , objects
+    {
+      toolchain,
+      name,
+      objects,
     }:
     let
       tc = toolchain;
       archiveName = "lib${name}.a";
 
-      archiveScript =
-        concatMapStrings (obj: "${tc.ar} rcs \"${archiveName}\" \"${obj}\"\n") objects;
+      archiveScript = concatMapStrings (obj: "${tc.ar} rcs \"${archiveName}\" \"${obj}\"\n") objects;
     in
     pkgs.runCommand "archive-${name}"
-      ({
-        buildInputs = tc.runtimeInputs;
-      } // tc.environment)
+      (
+        {
+          buildInputs = tc.runtimeInputs;
+        }
+        // tc.environment
+      )
       ''
         set -euo pipefail
         mkdir -p "$out/lib"
         ${archiveScript}
         ${if tc.ranlib != null then "${tc.ranlib} \"${archiveName}\"" else ""}
         mv "${archiveName}" "$out/lib/"
-      '' // {
-        archiveName = archiveName;
-        archivePath = "$out/lib/${archiveName}";
-      };
+      ''
+    // {
+      archiveName = archiveName;
+      archivePath = "$out/lib/${archiveName}";
+    };
 }

@@ -17,7 +17,8 @@
 
 let
   clangdModule = import ./clangd.nix { inherit pkgs lib; };
-in {
+in
+{
   # clangd configuration
   # Creates a properly configured clangd with merged compile_commands.json
   inherit (clangdModule) mkClangd clangd;

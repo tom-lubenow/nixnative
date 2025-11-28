@@ -11,37 +11,47 @@ rec {
   # ==========================================================================
 
   mkLinker =
-    { name                    # Identifier: "lld", "mold", "gold", "ld"
-    , binary                  # Path to linker binary
-    , driverFlag              # How compiler invokes this: "-fuse-ld=lld"
+    {
+      name, # Identifier: "lld", "mold", "gold", "ld"
+      binary, # Path to linker binary
+      driverFlag, # How compiler invokes this: "-fuse-ld=lld"
 
-    # Capability declarations
-    , capabilities ? {
-        lto = false;          # Can do LTO
-        thinLto = false;      # Thin LTO support
+      # Capability declarations
+      capabilities ? {
+        lto = false; # Can do LTO
+        thinLto = false; # Thin LTO support
         parallelLinking = false;
-        icf = false;          # Identical Code Folding
-        splitDwarf = false;   # Split debug info
-      }
+        icf = false; # Identical Code Folding
+        splitDwarf = false; # Split debug info
+      },
 
-    # Platform-specific default flags
-    , platformFlags ? platform: []
+      # Platform-specific default flags
+      platformFlags ? platform: [ ],
 
-    # How to group libraries (Linux needs --start-group/--end-group)
-    , groupFlags ? platform: libs:
-        if platform.isLinux
-        then [ "-Wl,--start-group" ] ++ libs ++ [ "-Wl,--end-group" ]
-        else libs
+      # How to group libraries (Linux needs --start-group/--end-group)
+      groupFlags ?
+        platform: libs:
+        if platform.isLinux then [ "-Wl,--start-group" ] ++ libs ++ [ "-Wl,--end-group" ] else libs,
 
-    # Packages needed at build time
-    , runtimeInputs ? []
+      # Packages needed at build time
+      runtimeInputs ? [ ],
 
-    # Environment variables
-    , environment ? {}
+      # Environment variables
+      environment ? { },
     }:
     {
-      inherit name binary driverFlag capabilities;
-      inherit platformFlags groupFlags runtimeInputs environment;
+      inherit
+        name
+        binary
+        driverFlag
+        capabilities
+        ;
+      inherit
+        platformFlags
+        groupFlags
+        runtimeInputs
+        environment
+        ;
 
       # =======================================================================
       # Methods
@@ -54,8 +64,7 @@ rec {
       getDriverFlag = driverFlag;
 
       # Wrap link flags for this linker/platform
-      wrapLinkFlags = { platform, flags }:
-        groupFlags platform flags;
+      wrapLinkFlags = { platform, flags }: groupFlags platform flags;
     };
 
   # ==========================================================================
@@ -103,19 +112,24 @@ rec {
   # ==========================================================================
 
   # Linux uses --start-group/--end-group for circular deps
-  linuxGroupFlags = _: libs:
-    [ "-Wl,--start-group" ] ++ libs ++ [ "-Wl,--end-group" ];
+  linuxGroupFlags = _: libs: [ "-Wl,--start-group" ] ++ libs ++ [ "-Wl,--end-group" ];
 
   # ==========================================================================
   # Validation Helpers
   # ==========================================================================
 
-  validateLinker = linker:
+  validateLinker =
+    linker:
     let
-      required = [ "name" "binary" "driverFlag" ];
+      required = [
+        "name"
+        "binary"
+        "driverFlag"
+      ];
       missing = builtins.filter (f: !(linker ? ${f})) required;
     in
-    if missing != []
-    then throw "nixnative: linker missing required fields: ${lib.concatStringsSep ", " missing}"
-    else linker;
+    if missing != [ ] then
+      throw "nixnative: linker missing required fields: ${lib.concatStringsSep ", " missing}"
+    else
+      linker;
 }
