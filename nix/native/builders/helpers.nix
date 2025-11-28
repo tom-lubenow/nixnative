@@ -181,7 +181,16 @@ in rec {
   #
   mkSharedLib = args:
     let
-      ctx = mkBuildContext args;
+      # Determine if we need -fPIC (required on Linux for shared libraries)
+      needsPIC = !(args.toolchain.targetPlatform.isDarwin or pkgs.stdenv.hostPlatform.isDarwin);
+      picFlags = if needsPIC then [ "-fPIC" ] else [];
+
+      # Add -fPIC to extraCxxFlags before building context
+      argsWithPIC = args // {
+        extraCxxFlags = (args.extraCxxFlags or []) ++ picFlags;
+      };
+
+      ctx = mkBuildContext argsWithPIC;
       inherit (ctx) toolchain name rootPath publicAggregate objectPaths flags combinedExtraCxxFlags libsEvalInputs;
 
       targetPlatform = toolchain.targetPlatform;
