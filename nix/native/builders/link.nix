@@ -38,6 +38,7 @@ in rec {
     , outputDir ? "bin"
     , outputName ? name
     , extraFlags ? []
+    , extraInputs ? []
     }:
     let
       tc = toolchain;
@@ -80,7 +81,7 @@ in rec {
     in
     pkgs.runCommand name
       ({
-        buildInputs = tc.runtimeInputs;
+        buildInputs = tc.runtimeInputs ++ extraInputs;
       } // tc.environment)
       ''
         set -euo pipefail
@@ -109,9 +110,10 @@ in rec {
     , extraCxxFlags ? []
     , ldflags ? []
     , linkFlags ? []
+    , extraInputs ? []
     }:
     mkLinkStep {
-      inherit toolchain name objects flags extraCxxFlags ldflags linkFlags;
+      inherit toolchain name objects flags extraCxxFlags ldflags linkFlags extraInputs;
       outputDir = "bin";
     };
 
@@ -127,6 +129,7 @@ in rec {
     , extraCxxFlags ? []
     , ldflags ? []
     , linkFlags ? []
+    , extraInputs ? []
     }:
     let
       targetPlatform = toolchain.targetPlatform;
@@ -134,7 +137,7 @@ in rec {
       sharedName = "lib${name}.${sharedExt}";
     in
     mkLinkStep {
-      inherit toolchain objects flags extraCxxFlags ldflags linkFlags;
+      inherit toolchain objects flags extraCxxFlags ldflags linkFlags extraInputs;
       name = "shared-${name}";
       outputDir = "lib";
       outputName = sharedName;

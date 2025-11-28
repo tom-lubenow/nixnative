@@ -43,7 +43,7 @@ in rec {
   mkExecutable = args:
     let
       ctx = mkBuildContext args;
-      inherit (ctx) toolchain name objectPaths flags combinedExtraCxxFlags publicAggregate;
+      inherit (ctx) toolchain name objectPaths flags combinedExtraCxxFlags publicAggregate libsEvalInputs;
 
       drv = linkExecutable {
         inherit toolchain name flags;
@@ -51,6 +51,7 @@ in rec {
         extraCxxFlags = combinedExtraCxxFlags;
         ldflags = args.ldflags or [];
         linkFlags = publicAggregate.linkFlags;
+        extraInputs = libsEvalInputs;
       };
     in
     drv // {
@@ -181,7 +182,7 @@ in rec {
   mkSharedLib = args:
     let
       ctx = mkBuildContext args;
-      inherit (ctx) toolchain name rootPath publicAggregate objectPaths flags combinedExtraCxxFlags;
+      inherit (ctx) toolchain name rootPath publicAggregate objectPaths flags combinedExtraCxxFlags libsEvalInputs;
 
       targetPlatform = toolchain.targetPlatform;
 
@@ -208,6 +209,7 @@ in rec {
         extraCxxFlags = combinedExtraCxxFlags;
         ldflags = args.ldflags or [];
         linkFlags = publicAggregate.linkFlags;
+        extraInputs = libsEvalInputs;
       };
 
       # Install headers

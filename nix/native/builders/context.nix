@@ -179,6 +179,7 @@ in rec {
       inherit publicAggregate;
       inherit libraries tools;
       inherit flags;
+      inherit libsEvalInputs;
       scanner = effectiveScanner;
     };
 }
