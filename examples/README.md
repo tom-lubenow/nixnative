@@ -59,7 +59,7 @@ Then explore specific features as needed:
 | [grpc](./grpc/) | gRPC services | `native.tools.grpc`, server/client |
 | [jinja-templates](./jinja-templates/) | Jinja2 templates | `native.tools.jinja`, config headers |
 | [simple-tool](./simple-tool/) | Custom code generator | Generator schema, inline tools |
-| [pkg-config](./pkg-config/) | System libraries | `makeLibrary`, `mkFrameworkLibrary` |
+| [pkg-config](./pkg-config/) | System libraries | `makeLibrary` |
 | [c-and-cpp](./c-and-cpp/) | Mixed C/C++ | `.c` + `.cc` sources, `extern "C"` |
 | [rust-integration](./rust-integration/) | Rust interop (rustc) | Foreign library wrapping |
 | [rust-integration-crane](./rust-integration-crane/) | Rust interop (Cargo) | Crane integration |

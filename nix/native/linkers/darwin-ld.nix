@@ -3,12 +3,23 @@
 # The macOS system linker (ld64). This is the default and often
 # only option for linking on Darwin.
 #
-{ pkgs, lib, mkLinker, darwinLdCapabilities }:
+# NOTE: This module is the quarantine zone for all Darwin-specific linker logic.
+# No other module should contain Darwin linker configuration.
+#
+{ pkgs, mkLinker }:
 
 let
-  inherit (lib) optionals optionalAttrs;
   targetPlatform = pkgs.stdenv.targetPlatform;
   isDarwin = targetPlatform.isDarwin;
+
+  # Darwin ld64 capabilities (quarantined here)
+  darwinLdCapabilities = {
+    lto = true;
+    thinLto = true;
+    parallelLinking = false;
+    icf = false;
+    splitDwarf = false;
+  };
 
 in rec {
   # ==========================================================================

@@ -50,12 +50,12 @@ let
   # ==========================================================================
 
   clangCompilers = import ./compilers/clang.nix {
-    inherit pkgs lib;
+    inherit pkgs;
     inherit (compilerCore) mkCompiler commonFlagTranslators;
   };
 
   gccCompilers = import ./compilers/gcc.nix {
-    inherit pkgs lib;
+    inherit pkgs;
     inherit (compilerCore) mkCompiler gccFlagTranslators;
   };
 
@@ -84,8 +84,8 @@ let
   };
 
   darwinLinkers = import ./linkers/darwin-ld.nix {
-    inherit pkgs lib;
-    inherit (linkerCore) mkLinker darwinLdCapabilities;
+    inherit pkgs;
+    inherit (linkerCore) mkLinker;
   };
 
   # ==========================================================================
@@ -172,21 +172,13 @@ let
         else clangCompilers.getBintools compiler;  # Default to clang bintools
 
       targetPlatform = pkgs.stdenv.targetPlatform;
-
-      # Darwin-specific configuration
-      darwinConfig =
-        if targetPlatform.isDarwin then {
-          sdkPath = pkgs.apple-sdk.sdkroot;
-          deploymentTarget = targetPlatform.darwinMinVersion or "11.0";
-        }
-        else {};
     in
     toolchainCore.mkToolchain ({
       name = toolchainCore.makeToolchainName compiler resolvedLinker;
       inherit compiler targetPlatform;
       linker = resolvedLinker;
       inherit (bintools) ar ranlib nm objcopy strip;
-    } // darwinConfig // (builtins.removeAttrs args [ "compiler" "linker" ]));
+    } // (builtins.removeAttrs args [ "compiler" "linker" ]));
 
   # ==========================================================================
   # Pre-Built Toolchains
@@ -291,6 +283,7 @@ let
 
   link = import ./builders/link.nix {
     inherit pkgs lib;
+    platform = platformUtils;
   };
 
   context = import ./builders/context.nix {
@@ -299,6 +292,7 @@ let
 
   helpers = import ./builders/helpers.nix {
     inherit pkgs lib utils context link;
+    platform = platformUtils;
   };
 
   # High-level API (Option B style)
@@ -333,11 +327,8 @@ in {
 
   # Capability presets (for custom linkers)
   linkerCapabilities = {
-    inherit (linkerCore) lldCapabilities moldCapabilities goldCapabilities ldCapabilities darwinLdCapabilities;
+    inherit (linkerCore) lldCapabilities moldCapabilities goldCapabilities ldCapabilities;
   };
-
-  # Darwin helpers
-  darwin = darwinLinkers;
 
   # ==========================================================================
   # High-Level API (recommended)

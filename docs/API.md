@@ -68,7 +68,7 @@ mkStaticLib {
 ```
 
 ### `mkSharedLib`
-Builds a shared library (`.so` / `.dylib`) and installs headers.
+Builds a shared library (`.so`) and installs headers.
 
 ```nix
 mkSharedLib {
@@ -388,17 +388,5 @@ native.pkgConfig.mkPkgConfigLibrary {
   name = "zlib";
   packages = [ pkgs.zlib ];   # Nix packages providing pkg-config files
   modules = [ "zlib" ];       # pkg-config module names (defaults to [ name ])
-}
-```
-
-### `pkgConfig.mkFrameworkLibrary`
-
-Creates a library for macOS frameworks:
-
-```nix
-native.pkgConfig.mkFrameworkLibrary {
-  name = "CoreFoundation";
-  framework = "CoreFoundation";  # Framework name (defaults to name)
-  sdk = pkgs.apple-sdk.sdkroot;  # SDK root (auto-detected if omitted)
 }
 ```

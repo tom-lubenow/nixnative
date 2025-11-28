@@ -3,10 +3,10 @@
 # Links object files into executables, shared libraries, or static archives.
 # Uses the linker abstraction from the toolchain.
 #
-{ pkgs, lib }:
+{ pkgs, lib, platform }:
 
 let
-  inherit (lib) concatStringsSep concatMapStrings optional;
+  inherit (lib) concatStringsSep concatMapStrings;
 
 in rec {
   # ==========================================================================
@@ -133,7 +133,7 @@ in rec {
     }:
     let
       targetPlatform = toolchain.targetPlatform;
-      sharedExt = if targetPlatform.isDarwin then "dylib" else "so";
+      sharedExt = builtins.substring 1 100 (platform.sharedLibExtension targetPlatform);  # Strip leading "."
       sharedName = "lib${name}.${sharedExt}";
     in
     mkLinkStep {
@@ -165,9 +165,7 @@ in rec {
     in
     pkgs.runCommand "archive-${name}"
       ({
-        buildInputs =
-          tc.runtimeInputs
-          ++ optional pkgs.stdenv.hostPlatform.isDarwin pkgs.darwin.cctools;
+        buildInputs = tc.runtimeInputs;
       } // tc.environment)
       ''
         set -euo pipefail

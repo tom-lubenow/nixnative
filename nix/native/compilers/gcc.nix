@@ -2,31 +2,13 @@
 #
 # Provides GCC variants using the mkCompiler factory.
 #
-{ pkgs, lib, mkCompiler, gccFlagTranslators }:
+{ pkgs, mkCompiler, gccFlagTranslators }:
 
 let
-  inherit (lib) optionals optionalAttrs;
-
   # Helper to create a GCC compiler for a specific version
   mkGCC = { gccPackage, name ? "gcc${gccPackage.version}" }:
     let
       gcc = gccPackage;
-      targetPlatform = pkgs.stdenv.targetPlatform;
-      isDarwin = targetPlatform.isDarwin;
-
-      # GCC on Darwin needs special handling
-      # Note: GCC on macOS is less common and may have limitations
-      darwinFlags =
-        if isDarwin then [
-          # GCC on Darwin may need explicit stdlib specification
-        ]
-        else [];
-
-      darwinEnv =
-        if isDarwin then {
-          # Darwin-specific environment if needed
-        }
-        else {};
     in
     mkCompiler {
       inherit name;
@@ -36,8 +18,7 @@ let
 
       capabilities = {
         lto = { thin = false; full = true; };  # GCC doesn't have thin LTO
-        sanitizers = [ "address" "thread" "undefined" "leak" ]
-          ++ optionals (!isDarwin) [ "memory" ];
+        sanitizers = [ "address" "thread" "undefined" "leak" "memory" ];
         coverage = true;
         modules = false;  # GCC modules support is experimental
         pch = true;
@@ -52,7 +33,7 @@ let
         "-fdiagnostics-color=always"
         "-Wall"
         "-Wextra"
-      ] ++ darwinFlags;
+      ];
 
       runtimeInputs = [
         gcc
@@ -63,14 +44,12 @@ let
         pkgs.gawk
       ];
 
-      environment = darwinEnv;
+      environment = {};
 
       package = gcc;
 
-      # Path to C++ runtime library (for rpath)
-      cxxRuntimeLibPath =
-        if isDarwin then null  # Darwin uses system libc++
-        else "${gcc.cc.lib}/lib";
+      # Path to C++ runtime library (for rpath on Linux)
+      cxxRuntimeLibPath = "${gcc.cc.lib}/lib";
     };
 
 in rec {

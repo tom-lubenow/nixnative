@@ -1,11 +1,10 @@
 # pkg-config Integration Example
 
-This example demonstrates integrating system libraries using pkg-config and macOS frameworks.
+This example demonstrates integrating system libraries using pkg-config.
 
 ## What This Demonstrates
 
 - Using `native.pkgConfig.makeLibrary` to wrap pkg-config libraries
-- Using `native.pkgConfig.mkFrameworkLibrary` for macOS frameworks
 - Combining multiple system libraries in one executable
 
 ## Project Structure
@@ -66,18 +65,6 @@ This runs `pkg-config --cflags` and `pkg-config --libs` to extract:
 - Preprocessor defines (`-D` flags)
 - Link flags (`-l` and `-L` flags)
 
-### macOS Framework Libraries
-
-```nix
-CoreFoundation = native.pkgConfig.mkFrameworkLibrary {
-  name = "CoreFoundation";
-  # framework defaults to name
-  # sdk auto-detected from apple-sdk
-};
-```
-
-This generates the proper `-framework` flags and SDK paths for macOS.
-
 ### Using in Executables
 
 ```nix
@@ -98,14 +85,6 @@ native.executable {
 | `packages` | Yes | - | Nix packages providing the library |
 | `modules` | No | `[name]` | pkg-config module names |
 
-### `native.pkgConfig.mkFrameworkLibrary`
-
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `name` | Yes | - | Library name |
-| `framework` | No | `name` | Framework name |
-| `sdk` | No | auto-detect | SDK root path |
-
 ## Common pkg-config Libraries
 
 | Library | Package | Module |
@@ -116,24 +95,6 @@ native.executable {
 | SQLite | `pkgs.sqlite` | `sqlite3` |
 | libpng | `pkgs.libpng` | `libpng` |
 | libjpeg | `pkgs.libjpeg` | `libjpeg` |
-
-## Common macOS Frameworks
-
-```nix
-# Core frameworks
-CoreFoundation = native.pkgConfig.mkFrameworkLibrary { name = "CoreFoundation"; };
-Foundation = native.pkgConfig.mkFrameworkLibrary { name = "Foundation"; };
-Security = native.pkgConfig.mkFrameworkLibrary { name = "Security"; };
-
-# Graphics
-Metal = native.pkgConfig.mkFrameworkLibrary { name = "Metal"; };
-QuartzCore = native.pkgConfig.mkFrameworkLibrary { name = "QuartzCore"; };
-Cocoa = native.pkgConfig.mkFrameworkLibrary { name = "Cocoa"; };
-
-# Audio/Video
-AVFoundation = native.pkgConfig.mkFrameworkLibrary { name = "AVFoundation"; };
-AudioToolbox = native.pkgConfig.mkFrameworkLibrary { name = "AudioToolbox"; };
-```
 
 ## Next Steps
 

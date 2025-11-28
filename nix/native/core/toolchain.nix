@@ -25,10 +25,6 @@ rec {
     # Platform configuration
     , targetPlatform          # The platform we're building for
 
-    # Darwin-specific
-    , sdkPath ? null          # macOS SDK path
-    , deploymentTarget ? null # MACOSX_DEPLOYMENT_TARGET
-
     # Additional inputs and environment
     , runtimeInputs ? []      # Additional packages for PATH
     , environment ? {}        # Additional environment variables
@@ -41,28 +37,14 @@ rec {
         ++ runtimeInputs;
 
       # Merge environments (toolchain overrides linker overrides compiler)
-      baseEnvironment =
+      finalEnvironment =
         (compiler.environment or {})
         // (linker.environment or {})
         // environment;
-
-      # Add Darwin-specific environment
-      darwinEnvironment =
-        if targetPlatform.isDarwin then
-          lib.optionalAttrs (sdkPath != null) {
-            SDKROOT = sdkPath;
-          }
-          // lib.optionalAttrs (deploymentTarget != null) {
-            MACOSX_DEPLOYMENT_TARGET = deploymentTarget;
-          }
-        else {};
-
-      finalEnvironment = baseEnvironment // darwinEnvironment;
     in
     {
       inherit name compiler linker targetPlatform;
       inherit ar ranlib nm objcopy strip;
-      inherit sdkPath deploymentTarget;
 
       runtimeInputs = allRuntimeInputs;
       environment = finalEnvironment;
@@ -127,31 +109,9 @@ rec {
         lib.concatStringsSep "\n"
           (lib.mapAttrsToList (k: v: "export ${k}=${lib.escapeShellArg v}") finalEnvironment);
 
-      # Get Darwin SDK flags if applicable
-      getDarwinSDKFlags =
-        if targetPlatform.isDarwin && sdkPath != null
-        then [ "-isysroot" (builtins.toString sdkPath) ]
-        else [];
-
-      # Get Darwin deployment target flags
-      getDarwinDeploymentFlags =
-        if targetPlatform.isDarwin && deploymentTarget != null
-        then [ "-mmacosx-version-min=${deploymentTarget}" ]
-        else [];
-
-      # Get all platform-specific compile flags
-      # Note: The compiler's defaultCxxFlags already includes -isysroot and -isystem
-      # for Darwin, so we only add deployment target flags here to avoid duplication
+      # Get all platform-specific compile flags (e.g., -fPIC on Linux)
       getPlatformCompileFlags =
-        let
-          darwinDeploy =
-            if targetPlatform.isDarwin && deploymentTarget != null
-            then [ "-mmacosx-version-min=${deploymentTarget}" ]
-            else [];
-          # Platform-specific compile flags (e.g., -fPIC on Linux)
-          platformFlags = platform.defaultCompileFlags targetPlatform;
-        in
-        darwinDeploy ++ platformFlags;
+        platform.defaultCompileFlags targetPlatform;
     };
 
   # ==========================================================================

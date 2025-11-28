@@ -144,41 +144,8 @@ PY
       };
     };
 
-  # Create a macOS framework library wrapper
-  #
-  # Arguments:
-  #   name      - Library name
-  #   framework - Framework name (defaults to name)
-  #   sdk       - SDK path (defaults to apple-sdk.sdkroot)
-  #
-  mkFrameworkLibrary =
-    { name
-    , framework ? name
-    , sdk ? (pkgs.apple-sdk.sdkroot or null)
-    }:
-    let
-      frameworkFlag = "-framework ${framework}";
-      frameworkSearch =
-        if sdk != null then "-F${builtins.toString sdk}/System/Library/Frameworks"
-        else null;
-      linkFlags =
-        if frameworkSearch == null then [ frameworkFlag ] else [ frameworkSearch frameworkFlag ];
-    in
-    {
-      inherit name;
-      public = {
-        includeDirs = [ ];
-        defines = [ ];
-        cxxFlags = [ ];
-        linkFlags = linkFlags;
-      };
-      passthru = {
-        inherit framework sdk;
-      };
-    };
-
 in {
-  inherit mkPkgConfigLibrary mkFrameworkLibrary;
+  inherit mkPkgConfigLibrary;
 
   # Convenience alias matching old cpp API
   makeLibrary = mkPkgConfigLibrary;

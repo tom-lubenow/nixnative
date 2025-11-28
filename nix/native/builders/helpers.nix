@@ -3,10 +3,10 @@
 # These functions provide the primary API for building C/C++ targets.
 # They use mkBuildContext internally and produce ready-to-use derivations.
 #
-{ pkgs, lib, utils, context, link }:
+{ pkgs, lib, utils, context, link, platform }:
 
 let
-  inherit (lib) concatStringsSep optional;
+  inherit (lib) concatStringsSep;
   inherit (utils)
     sanitizeName
     normalizeIncludeDir
@@ -177,7 +177,7 @@ in rec {
   # Shared Library Builder
   # ==========================================================================
 
-  # Build a shared library (.so/.dylib) from C/C++ sources
+  # Build a shared library (.so) from C/C++ sources
   #
   mkSharedLib = args:
     let
@@ -199,7 +199,7 @@ in rec {
           (ensureList publicIncludeDirs);
 
       # Determine shared library name
-      sharedExt = if targetPlatform.isDarwin then "dylib" else "so";
+      sharedExt = builtins.substring 1 100 (platform.sharedLibExtension targetPlatform);  # Strip leading "."
       sharedName = "lib${name}.${sharedExt}";
 
       # Link the shared library
@@ -318,7 +318,7 @@ in rec {
       devTools =
         if includeTools then [
           pkgs.clang-tools
-          (if pkgs.stdenv.hostPlatform.isDarwin then pkgs.lldb else pkgs.gdb)
+          pkgs.gdb
         ]
         else [];
 
@@ -375,7 +375,7 @@ in rec {
       {
         nativeBuildInputs = [ pkgs.coreutils pkgs.gnugrep pkgs.findutils ];
         # C++ runtime library must be available in sandbox for dynamically linked executables
-        buildInputs = lib.optional (!pkgs.stdenv.hostPlatform.isDarwin) pkgs.stdenv.cc.cc.lib;
+        buildInputs = [ pkgs.stdenv.cc.cc.lib ];
       }
       ''
         set -euo pipefail

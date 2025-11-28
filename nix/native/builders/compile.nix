@@ -59,7 +59,7 @@ in rec {
       # Get compiler defaults
       defaultFlags = tc.getDefaultCxxFlags;
 
-      # Platform-specific flags (Darwin SDK, etc.)
+      # Platform-specific flags (e.g., -fPIC on Linux)
       platformFlags = tc.getPlatformCompileFlags;
 
       # Combine all flags

@@ -98,21 +98,9 @@ rec {
     splitDwarf = false;
   };
 
-  # Darwin ld64 - macOS system linker
-  darwinLdCapabilities = {
-    lto = true;
-    thinLto = true;
-    parallelLinking = false;
-    icf = false;
-    splitDwarf = false;
-  };
-
   # ==========================================================================
   # Platform-Specific Helpers
   # ==========================================================================
-
-  # Darwin doesn't support --start-group/--end-group
-  darwinGroupFlags = _: libs: libs;
 
   # Linux uses --start-group/--end-group for circular deps
   linuxGroupFlags = _: libs:

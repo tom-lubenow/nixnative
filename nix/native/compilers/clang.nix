@@ -2,65 +2,13 @@
 #
 # Provides clang variants using the mkCompiler factory.
 #
-{ pkgs, lib, mkCompiler, commonFlagTranslators }:
+{ pkgs, mkCompiler, commonFlagTranslators }:
 
 let
-  inherit (lib) optionals optionalAttrs;
-
   # Helper to create a clang compiler for a specific LLVM version
   mkClang = { llvmPackages, name ? "clang${llvmPackages.release_version}" }:
     let
       llvm = llvmPackages;
-      libcxx = llvm.libcxx;
-      libcxxDev = llvm.libcxx.dev;
-      targetPlatform = pkgs.stdenv.targetPlatform;
-      isDarwin = targetPlatform.isDarwin;
-
-      # Darwin SDK setup
-      sdkRoot =
-        if isDarwin then
-          pkgs.apple-sdk.sdkroot
-        else
-          null;
-
-      deploymentTarget =
-        if isDarwin then
-          targetPlatform.darwinMinVersion or "11.0"
-        else
-          null;
-
-      darwinLibcxxInclude =
-        if isDarwin then
-          "${libcxxDev}/include/c++/v1"
-        else
-          null;
-
-      # Darwin-specific C++ flags
-      darwinCxxFlags =
-        if isDarwin then [
-          "-isysroot" (builtins.toString sdkRoot)
-          "-isystem" darwinLibcxxInclude
-        ]
-        else [];
-
-      # Darwin-specific environment
-      darwinEnv =
-        if isDarwin then {
-          SDKROOT = builtins.toString sdkRoot;
-          MACOSX_DEPLOYMENT_TARGET = deploymentTarget;
-        }
-        else {};
-
-      # Darwin-specific runtime inputs
-      darwinRuntimeInputs =
-        if isDarwin then [
-          pkgs.stdenv.cc.bintools.bintools
-          pkgs.darwin.cctools
-          pkgs.apple-sdk
-          libcxx
-          libcxxDev
-        ]
-        else [];
     in
     mkCompiler {
       inherit name;
@@ -70,8 +18,7 @@ let
 
       capabilities = {
         lto = { thin = true; full = true; };
-        sanitizers = [ "address" "thread" "undefined" "leak" ]
-          ++ optionals (!isDarwin) [ "memory" ];  # memory sanitizer not on Darwin
+        sanitizers = [ "address" "thread" "undefined" "leak" "memory" ];
         coverage = true;
         modules = false;  # C++20 modules still experimental
         pch = true;
@@ -91,7 +38,7 @@ let
         "-fdiagnostics-color"
         "-Wall"
         "-Wextra"
-      ] ++ darwinCxxFlags;
+      ];
 
       runtimeInputs = [
         llvm.clang
@@ -101,17 +48,14 @@ let
         pkgs.findutils
         pkgs.gnused
         pkgs.gawk
-      ] ++ darwinRuntimeInputs;
+      ];
 
-      environment = darwinEnv;
+      environment = {};
 
       package = llvm.clang;
 
-      # Path to C++ runtime library (for rpath)
-      # On Darwin, libc++ is handled via SDK; on Linux, clang uses GCC's libstdc++
-      cxxRuntimeLibPath =
-        if isDarwin then null
-        else "${pkgs.stdenv.cc.cc.lib}/lib";
+      # Path to C++ runtime library (for rpath on Linux)
+      cxxRuntimeLibPath = "${pkgs.stdenv.cc.cc.lib}/lib";
     };
 
 in rec {
@@ -152,18 +96,4 @@ in rec {
       strip = "${llvmPkgs.bintools}/bin/strip";
     };
 
-  # ==========================================================================
-  # Darwin-specific linker info
-  # ==========================================================================
-
-  getDarwinLinkerInfo = { compiler }:
-    let
-      isDarwin = pkgs.stdenv.targetPlatform.isDarwin;
-    in
-    if isDarwin then {
-      # On Darwin, use system ld64
-      binary = "${pkgs.stdenv.cc.bintools.bintools}/bin/ld";
-      driverFlag = "";  # No special flag needed, it's the default
-    }
-    else null;
 }

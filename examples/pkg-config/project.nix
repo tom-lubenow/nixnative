@@ -14,20 +14,12 @@ let
     modules = [ "libcurl" ];
   };
 
-  # macOS frameworks (if on Darwin)
-  frameworkLibs =
-    if pkgs.stdenv.isDarwin then [
-      (native.pkgConfig.mkFrameworkLibrary { name = "CoreFoundation"; })
-      (native.pkgConfig.mkFrameworkLibrary { name = "Security"; })
-    ]
-    else [];
-
   # Demo app
   demo = native.executable {
     name = "pkgconfig-demo";
     root = ./.;
     sources = [ "main.cc" ];
-    libraries = [ zlibLib curlLib ] ++ frameworkLibs;
+    libraries = [ zlibLib curlLib ];
   };
 
 in {
