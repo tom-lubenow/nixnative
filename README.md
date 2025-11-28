@@ -10,7 +10,7 @@ This gives you:
 
 - **True incrementality.** Change one file, rebuild one derivation. Nix's content-addressed store does the rest.
 - **Full toolchain control.** Compilers, linkers, and flags are explicit inputs—no hidden state, no "works on my machine."
-- **Composability.** Mix compilers (clang, gcc, zig), linkers (lld, mold, gold), and custom tools in a single project.
+- **Composability.** Mix compilers (clang, gcc), linkers (lld, mold, gold), and integrate foreign libraries (Rust, Zig) in a single project.
 - **Extensibility.** Adding a new compiler or code generator is just writing a Nix function.
 
 ## Features
@@ -21,6 +21,11 @@ This gives you:
 - **Tool plugins.** Code generators (protobuf, Jinja templates, etc.) integrate cleanly—generated sources, headers, and link flags flow through automatically.
 - **Structured libraries.** Static, shared, and header-only libraries propagate their public interface (includes, defines, link flags) to dependents.
 - **IDE integration.** Every target exports `compile_commands.json` for clangd/LSP.
+
+## Platform support
+
+- **Linux** (x86_64, aarch64): Primary supported platform. All features tested in CI.
+- **macOS** (aarch64-darwin): Best-effort support. Core functionality works, but some features may have limitations. Darwin-specific complexity is isolated to avoid impacting Linux development.
 
 ## Repository layout
 

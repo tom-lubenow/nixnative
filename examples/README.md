@@ -39,7 +39,7 @@ Then explore specific features as needed:
 - **Code Generation**: `protobuf/`, `grpc/`, `jinja-templates/`, `simple-tool/`
 - **System Libraries**: `pkg-config/`
 - **Mixed Languages**: `c-and-cpp/`
-- **Cross-Compilation**: `cross-compile/`
+- **Cross-Compilation**: `cross-compile/` (experimental)
 
 ## Example Index
 
@@ -66,7 +66,7 @@ Then explore specific features as needed:
 | [interop](./interop/) | Zig interop | C ABI, foreign libraries |
 | [multi-binary](./multi-binary/) | Multiple executables | Shared libraries, CLI + daemon + tests |
 | [coverage](./coverage/) | Code coverage | `{ type = "coverage"; }`, lcov |
-| [cross-compile](./cross-compile/) | Cross-compilation | Nix cross, Zig targets |
+| [cross-compile](./cross-compile/) | Cross-compilation (experimental) | Nix cross, Zig targets |
 | [python-extension](./python-extension/) | Python C extension | Python C API, shared libraries |
 
 ## Feature Matrix

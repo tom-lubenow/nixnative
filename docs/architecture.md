@@ -1,7 +1,5 @@
 # Architecture Notes
 
-This implementation mirrors the plan outlined in the original discussion:
-
 ## Build graph generation
 
 1. **Translation unit normalization**
@@ -37,7 +35,7 @@ This implementation mirrors the plan outlined in the original discussion:
   - `passthru.manifest`: the manifest JSON used for the build (helpful when comparing scanner output vs. checked-in data).
   - `passthru.public`: propagated compile/link knobs inherited by downstream dependants.
   - `passthru.generators`: the generator attrsets that fed generated headers/sources into the build.
-- The flake also publishes `nix run .#cpp-sync-manifest`, which copies a manifest derivation back into the workspace for strict mode updates.
+- The flake also publishes `nix run .#sync-manifest`, which copies a manifest derivation back into the workspace for strict mode updates.
 
 ## IFD considerations
 
@@ -49,7 +47,7 @@ This implementation mirrors the plan outlined in the original discussion:
 Future features can slot into the same shape:
 
 - **Code generators** plug in via the `generators` array. Supply attrsets with `manifest`, `headers`, `sources`, etc.; the simple example demonstrates a Jinja-based renderer, but any derivation that produces files can participate.
-- **CPython extensions** compile through `mkPythonExtension`, which wraps the shared-library path and site-packages layout so the resulting `.so` can be imported without setuptools.
+- **CPython extensions** can be built using `mkSharedLib` with appropriate Python include paths and link flags. See `examples/python-extension/` for a working example.
 - **Toolchains** are pluggable. All builders accept an optional `toolchain` attribute, so you can swap in a custom clang/LLVM package while keeping the per-TU graph intact.
 - **ThinLTO / PGO**: treat IR bitcode as another per-TU artefact, followed by a final optimization derivation.
 - **Batching**: group translation units by coarse granularity if derivation counts become excessive—`linkFarm` already supports merging multiple files per derivation.
@@ -117,5 +115,5 @@ Changes to headers not in the manifest don't invalidate the TU's compilation.
 ## Known gaps
 
 - Windows/MSVC backend is out-of-scope for this iteration; WSL + clang is the recommended path for now.
-- System library discovery: pkg-config is supported via `cpp.pkgConfig.makeLibrary`, but framework discovery (e.g. macOS `-framework`) still needs manual flags.
+- System library discovery: pkg-config is supported via `native.pkgConfig.makeLibrary`, but framework discovery (e.g. macOS `-framework`) still needs manual flags.
 - Error reporting from the scanner currently surfaces raw clang warnings (e.g., unused linker flags). We can tailor the toolchain wrapper to silence or adjust these diagnostics.

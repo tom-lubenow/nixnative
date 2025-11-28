@@ -260,6 +260,8 @@ All fields must be lists. Invalid types will produce clear error messages.
 
 Tool plugins enable code generation (protobuf, Jinja templates, etc.) that integrates into the build pipeline.
 
+**Note on terminology**: The high-level API (`native.executable`, etc.) accepts a `tools` parameter, while the low-level API (`native.mkExecutable`, etc.) uses `generators`. Both accept the same generator schema objects. The naming difference reflects the user-facing simplicity vs. the internal implementation.
+
 ### Built-in Tools
 
 ```nix
@@ -285,6 +287,23 @@ native.tools.jinja.run {
   config = {
     variables = { version = "1.0.0"; };
   };
+}
+
+# Config header generation (convenience wrapper)
+native.tools.configHeader {
+  name = "app_config";
+  variables = {
+    VERSION = "1.0.0";
+    DEBUG = false;
+    MAX_CONNECTIONS = 100;
+  };
+}
+
+# Enum generation (convenience wrapper)
+native.tools.enumGenerator {
+  name = "Status";
+  namespace = "app";
+  values = [ "OK" "ERROR" "PENDING" ];
 }
 ```
 
