@@ -106,6 +106,12 @@ let
       environment = darwinEnv;
 
       package = llvm.clang;
+
+      # Path to C++ runtime library (for rpath)
+      # On Darwin, libc++ is handled via SDK; on Linux, clang uses GCC's libstdc++
+      cxxRuntimeLibPath =
+        if isDarwin then null
+        else "${pkgs.stdenv.cc.cc.lib}/lib";
     };
 
 in rec {

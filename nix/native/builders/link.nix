@@ -58,9 +58,16 @@ in rec {
       # Wrap library flags for platform (--start-group on Linux)
       groupedLinkFlags = tc.wrapLibraryFlags linkFlags;
 
+      # Add rpath for C++ runtime library (needed on Linux for libstdc++)
+      rpathFlags =
+        if tc.cxxRuntimeLibPath != null
+        then [ "-Wl,-rpath,${tc.cxxRuntimeLibPath}" ]
+        else [];
+
       # Combine all link flags
       finalLinkFlags =
         platformLinkerFlags
+        ++ rpathFlags
         ++ ldflags
         ++ groupedLinkFlags;
 

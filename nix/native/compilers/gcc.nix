@@ -66,6 +66,11 @@ let
       environment = darwinEnv;
 
       package = gcc;
+
+      # Path to C++ runtime library (for rpath)
+      cxxRuntimeLibPath =
+        if isDarwin then null  # Darwin uses system libc++
+        else "${gcc.cc.lib}/lib";
     };
 
 in rec {

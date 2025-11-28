@@ -41,10 +41,14 @@ rec {
 
     # Optional: reference to the compiler package (for dev shells)
     , package ? null
+
+    # Path to C++ runtime library (for rpath on Linux)
+    , cxxRuntimeLibPath ? null
     }:
     {
       inherit name cc cxx version capabilities flagTranslators;
       inherit defaultCFlags defaultCxxFlags runtimeInputs environment package;
+      inherit cxxRuntimeLibPath;
 
       # =======================================================================
       # Methods

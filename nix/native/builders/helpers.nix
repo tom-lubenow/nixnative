@@ -330,6 +330,8 @@ in rec {
     pkgs.runCommand "test-${name}"
       {
         nativeBuildInputs = [ pkgs.coreutils pkgs.gnugrep pkgs.findutils ];
+        # C++ runtime library must be available in sandbox for dynamically linked executables
+        buildInputs = lib.optional (!pkgs.stdenv.hostPlatform.isDarwin) pkgs.stdenv.cc.cc.lib;
       }
       ''
         set -euo pipefail

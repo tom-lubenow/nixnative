@@ -77,6 +77,9 @@ rec {
       # Get the C++ compiler command
       getCXX = compiler.cxx;
 
+      # Get C++ runtime library path (for rpath on Linux)
+      cxxRuntimeLibPath = compiler.cxxRuntimeLibPath or null;
+
       # Get linker driver flag for compiler
       getLinkerFlag = linker.driverFlag;
 
