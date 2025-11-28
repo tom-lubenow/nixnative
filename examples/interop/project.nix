@@ -34,6 +34,6 @@ let
   };
 
 in {
-  inherit zigLibDrv zigLib app;
+  inherit zigLibDrv app;
   interopExample = app;
 }

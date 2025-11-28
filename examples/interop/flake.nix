@@ -23,7 +23,7 @@
           native = nixnative.lib.native { inherit pkgs; };
           packages = import ./project.nix { inherit pkgs native; };
         in
-        { default = packages.app; inherit (packages) app zigLibDrv; }
+        packages // { default = packages.app; }
       );
 
       checks = forAllSystems (system:

@@ -23,7 +23,7 @@
           native = nixnative.lib.native { inherit pkgs; };
           packages = import ./project.nix { inherit pkgs native; };
         in
-        { default = packages.testApp; inherit (packages) testApp vec3Lib; }
+        packages // { default = packages.testApp; }
       );
 
       checks = forAllSystems (system:

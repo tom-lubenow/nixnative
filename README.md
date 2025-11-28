@@ -27,17 +27,9 @@ This gives you:
 ```
 .
 ├── README.md
-├── flake.nix
-├── nix/
-│   └── native/                # core library (compilers, linkers, toolchains, builders)
-├── examples/
-│   ├── app-with-library/      # executable + static lib + generated sources
-│   ├── executable/            # minimal executable target
-│   ├── library/               # reusable static library
-│   ├── rust-integration/      # linking against Rust static libraries
-│   └── multi-toolchain/       # demonstrates compiler/linker combinations
-└── docs/
-    └── ...                    # architectural notes (to be expanded)
+├── flake.nix     # Top level flake used for internal CI and public API
+├── nix/          # core library (compilers, linkers, toolchains, builders)
+└── examples/     # Various examples to demonstrate and test functionality
 ```
 
 ## Quick start

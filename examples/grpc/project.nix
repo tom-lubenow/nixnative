@@ -52,6 +52,6 @@ let
   };
 
 in {
-  inherit grpcGen server client combined;
+  inherit server client combined;
   grpcExample = combined;
 }

@@ -35,6 +35,6 @@ let
   };
 
 in {
-  inherit versionGenerator appInline;
+  inherit appInline;
   simpleToolExample = appInline;
 }

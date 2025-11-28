@@ -16,6 +16,6 @@ let
   };
 
 in {
-  inherit vec3Lib testApp;
+  inherit testApp;
   headerOnlyExample = testApp;
 }

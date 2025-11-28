@@ -23,6 +23,6 @@ let
   };
 
 in {
-  inherit protoGen protobufLib app;
+  inherit app;
   protobufExample = app;
 }

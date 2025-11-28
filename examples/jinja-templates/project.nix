@@ -55,6 +55,6 @@ let
   };
 
 in {
-  inherit templatesGen statusEnum app;
+  inherit app;
   jinjaTemplatesExample = app;
 }

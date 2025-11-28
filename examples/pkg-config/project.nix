@@ -31,6 +31,6 @@ let
   };
 
 in {
-  inherit zlibLib curlLib demo;
+  inherit demo;
   pkgConfigExample = demo;
 }

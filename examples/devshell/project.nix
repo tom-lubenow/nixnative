@@ -14,6 +14,6 @@ let
   };
 
 in {
-  inherit app clangd;
+  inherit app;
   devshellExample = app;
 }

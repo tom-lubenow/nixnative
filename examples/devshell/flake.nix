@@ -43,14 +43,15 @@
           pkgs = import nixpkgs { inherit system; };
           native = nixnative.lib.native { inherit pkgs; };
           packages = import ./project.nix { inherit pkgs native; };
+          clangd = native.lsps.clangd { targets = [ packages.app ]; };
         in
         {
           default = pkgs.mkShell {
-            packages = packages.clangd.packages ++ [
+            packages = clangd.packages ++ [
               (if pkgs.stdenv.hostPlatform.isDarwin then pkgs.lldb else pkgs.gdb)
             ];
             shellHook = ''
-              ${packages.clangd.shellHook}
+              ${clangd.shellHook}
               echo "Development shell ready. clangd configured for: app"
             '';
           };
