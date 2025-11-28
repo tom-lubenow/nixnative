@@ -1,6 +1,6 @@
 # pkg-config integration example for nixnative
 #
-# Demonstrates using system libraries via pkg-config and macOS frameworks.
+# Demonstrates using system libraries via pkg-config.
 
 {
   description = "pkg-config integration example for nixnative";

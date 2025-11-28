@@ -2,35 +2,163 @@
 
 This document describes the public API exposed by `nixnative.lib.native`.
 
-## Core Builders
+## API Overview
 
-### `mkExecutable`
-Builds an executable binary.
+nixnative provides two API levels:
+
+| API Level | Functions | When to Use |
+|-----------|-----------|-------------|
+| **High-level** | `executable`, `staticLib`, `sharedLib`, `headerOnly`, `devShell`, `test` | Most users - automatic toolchain selection |
+| **Low-level** | `mkExecutable`, `mkStaticLib`, `mkSharedLib`, `mkHeaderOnly`, `mkDevShell`, `mkTest` | Advanced users - explicit toolchain control |
+
+**Key differences:**
+
+- High-level API uses `tools` parameter for code generation
+- Low-level API uses `generators` parameter (same schema, different name)
+- High-level API accepts `compiler`/`linker` as strings (e.g., `"gcc"`, `"mold"`)
+- Low-level API requires explicit `toolchain` object
+
+---
+
+## High-Level API (Recommended)
+
+### `executable`
+
+Builds an executable binary with automatic toolchain selection.
 
 ```nix
-mkExecutable {
-  name = "my-app";           # Required: output name
-  root = ./.;                # Required: project root directory
-  sources = [ "src/main.cc" ]; # Required: list of source files (relative to root)
+native.executable {
+  name = "my-app";              # Required: output name
+  root = ./.;                   # Required: project root directory
+  sources = [ "src/main.cc" ];  # Required: list of source files (relative to root)
 
-  # Optional arguments
-  includeDirs = [ "include" ];  # Include directories (relative to root or absolute)
+  # Optional: toolchain selection (defaults to clang + platform linker)
+  compiler = "clang";           # "clang", "gcc", or compiler object
+  linker = "lld";               # "lld", "mold", "gold", "ld", or linker object
+
+  # Optional build configuration
+  includeDirs = [ "include" ];  # Include directories
   defines = [ "DEBUG" ];        # Preprocessor definitions
-  cxxFlags = [ "-O2" ];         # Additional compiler flags
+  extraCxxFlags = [ "-O2" ];    # Additional compiler flags
   ldflags = [ "-lm" ];          # Additional linker flags
-  libraries = [ myLib ];        # Library dependencies (from mkStaticLib, mkSharedLib, etc.)
-  generators = [ myGenerator ]; # Code generators (see Generator Schema below)
-  toolchain = clangToolchain;   # Custom toolchain (defaults to clang18)
+  libraries = [ myLib ];        # Library dependencies
+  tools = [ myTool ];           # Tool plugins (protobuf, jinja, etc.)
 
-  # Optimization options (new)
-  lto = false;                  # Link-time optimization: false, true, "thin", or "full"
-  sanitizers = [ ];             # Sanitizers: [ "address" "undefined" "thread" "memory" "leak" ]
-  coverage = false;             # Enable code coverage instrumentation
+  # Optional optimization flags
+  lto = "thin";                 # false, true, "thin", or "full"
+  sanitizers = [ "address" ];   # [ "address" "undefined" "thread" "memory" "leak" ]
+  coverage = false;             # Enable code coverage
 
   # Dependency manifest (pick one approach)
   depsManifest = ./deps.nix;    # Strict mode: use checked-in manifest
-  scanner = myScanner;          # Or provide a custom scanner derivation
-  # If neither is provided, auto-scanner runs via IFD
+  # If not provided, auto-scanner runs via IFD
+}
+```
+
+### `staticLib`
+
+Builds a static library with public interface.
+
+```nix
+native.staticLib {
+  name = "my-lib";
+  root = ./.;
+  sources = [ "src/lib.cc" ];
+  publicIncludeDirs = [ "include" ];  # Headers exposed to consumers
+  publicDefines = [ "MY_LIB=1" ];     # Defines propagated to consumers
+  # ... same options as executable
+}
+```
+
+### `sharedLib`
+
+Builds a shared library (`.so`/`.dylib`).
+
+```nix
+native.sharedLib {
+  name = "my-lib";
+  root = ./.;
+  sources = [ "src/lib.cc" ];
+  publicIncludeDirs = [ "include" ];
+  # ... same options as staticLib
+}
+```
+
+### `headerOnly`
+
+Defines a header-only library (no compilation).
+
+```nix
+native.headerOnly {
+  name = "my-headers";
+  root = ./.;
+  publicIncludeDirs = [ "include" ];
+  publicDefines = [ "HEADER_ONLY=1" ];
+}
+```
+
+### `devShell`
+
+Creates a development shell with toolchain and IDE support.
+
+```nix
+native.devShell {
+  target = myApp;               # Built target to get toolchain from
+  extraPackages = [ pkgs.gdb ]; # Additional packages
+  includeTools = true;          # Include clang-tools, gdb (default: true)
+}
+```
+
+### `test`
+
+Runs a test executable during the build.
+
+```nix
+native.test {
+  name = "my-test";
+  executable = myApp;
+  args = [ "--verbose" ];
+  expectedOutput = "PASSED";    # Optional: verify output contains this
+}
+```
+
+---
+
+## Low-Level API
+
+For advanced use cases requiring explicit toolchain control.
+
+### `mkExecutable`
+
+Builds an executable binary with explicit toolchain.
+
+```nix
+native.mkExecutable {
+  name = "my-app";
+  root = ./.;
+  sources = [ "src/main.cc" ];
+
+  # Required: explicit toolchain
+  toolchain = native.mkToolchain {
+    compiler = native.compilers.clang;
+    linker = native.linkers.mold;
+  };
+
+  # Optional arguments
+  includeDirs = [ "include" ];
+  defines = [ "DEBUG" ];
+  extraCxxFlags = [ "-O2" ];
+  ldflags = [ "-lm" ];
+  libraries = [ myLib ];
+  generators = [ myGenerator ];  # Note: "generators" not "tools"
+
+  # Optimization options
+  lto = false;
+  sanitizers = [ ];
+  coverage = false;
+
+  # Dependency manifest
+  depsManifest = ./deps.nix;
 }
 ```
 
@@ -41,13 +169,13 @@ mkExecutable {
 | `name` | Yes | - | Output binary name |
 | `root` | Yes | - | Project root directory |
 | `sources` | Yes | - | List of source files (strings relative to root) |
+| `toolchain` | Yes | - | Toolchain from `mkToolchain` |
 | `includeDirs` | No | `[]` | Include directories |
 | `defines` | No | `[]` | Preprocessor definitions (strings or `{ name, value }` attrsets) |
-| `cxxFlags` | No | `[]` | Additional C++ compiler flags |
+| `extraCxxFlags` | No | `[]` | Additional C++ compiler flags |
 | `ldflags` | No | `[]` | Additional linker flags |
 | `libraries` | No | `[]` | Library dependencies |
-| `generators` | No | `[]` | Code generators |
-| `toolchain` | No | `clangToolchain` | Compiler toolchain |
+| `generators` | No | `[]` | Code generators (see Generator Schema) |
 | `lto` | No | `false` | LTO mode: `false`, `true`/`"thin"`, or `"full"` |
 | `sanitizers` | No | `[]` | List of sanitizers to enable |
 | `coverage` | No | `false` | Enable coverage instrumentation |
@@ -55,49 +183,65 @@ mkExecutable {
 | `scanner` | No | `null` | Custom scanner derivation |
 
 ### `mkStaticLib`
-Builds a static library (`.a`) and installs headers.
+
+Builds a static library (`.a`) with explicit toolchain.
 
 ```nix
-mkStaticLib {
+native.mkStaticLib {
   name = "my-lib";
   root = ./.;
   sources = [ "src/lib.cc" ];
-  publicIncludeDirs = [ "include" ]; # Installed to $out/include
-  # ... standard build args
+  toolchain = myToolchain;
+  publicIncludeDirs = [ "include" ];
+  # ... same options as mkExecutable
 }
 ```
 
 ### `mkSharedLib`
-Builds a shared library (`.so`) and installs headers.
+
+Builds a shared library (`.so`/`.dylib`) with explicit toolchain.
 
 ```nix
-mkSharedLib {
+native.mkSharedLib {
   name = "my-lib";
   root = ./.;
   sources = [ "src/lib.cc" ];
+  toolchain = myToolchain;
   publicIncludeDirs = [ "include" ];
-  # ... standard build args
 }
 ```
 
 ### `mkHeaderOnly`
+
 Defines a header-only library interface.
 
 ```nix
-mkHeaderOnly {
+native.mkHeaderOnly {
   name = "my-headers";
+  root = ./.;
   publicIncludeDirs = [ "include" ];
   publicDefines = [ "MY_LIB_ENABLED" ];
 }
 ```
 
-## Testing
+### `mkDevShell`
+
+Creates a development shell with explicit toolchain.
+
+```nix
+native.mkDevShell {
+  target = myApp;
+  toolchain = myToolchain;  # Optional: override target's toolchain
+  includeTools = true;
+}
+```
 
 ### `mkTest`
+
 Runs a test executable during the build.
 
 ```nix
-mkTest {
+native.mkTest {
   name = "my-test";
   executable = myApp;
   args = [ "--test" ];
@@ -106,31 +250,80 @@ mkTest {
 }
 ```
 
-## Development
+---
 
-### `mkDevShell`
-Creates a development shell with tools and environment variables.
+## Abstract Flags
+
+nixnative provides an abstract flag system for compiler-agnostic optimization settings. These flags are translated to the correct CLI arguments for each compiler.
+
+### Ergonomic Syntax (Recommended)
+
+Use these parameters directly on builders:
 
 ```nix
-mkDevShell {
-  target = myApp;
-  includeTools = true; # Adds clang-tools, lldb/gdb
+native.executable {
+  name = "app";
+  sources = [ "main.cc" ];
+  lto = "thin";               # Link-time optimization
+  sanitizers = [ "address" ]; # Runtime sanitizers
+  coverage = true;            # Code coverage
 }
 ```
 
-## Advanced
+### Abstract Flag Objects
+
+For advanced use, pass the `flags` parameter with abstract flag objects:
+
+```nix
+native.executable {
+  name = "app";
+  sources = [ "main.cc" ];
+  flags = [
+    (native.flags.lto "thin")
+    (native.flags.sanitizer "address")
+    native.flags.coverage
+    (native.flags.optimize "2")
+    (native.flags.debug "full")
+    (native.flags.standard "c++20")
+    (native.flags.warnings "extra")
+  ];
+}
+```
+
+### Available Flag Constructors
+
+| Constructor | Arguments | Description |
+|-------------|-----------|-------------|
+| `flags.lto` | `"thin"`, `"full"`, or `true` | Link-time optimization |
+| `flags.sanitizer` | `"address"`, `"thread"`, `"undefined"`, `"memory"`, `"leak"` | Runtime sanitizer |
+| `flags.coverage` | (none) | Code coverage instrumentation |
+| `flags.optimize` | `"0"`, `"1"`, `"2"`, `"3"`, `"s"`, `"z"`, `"fast"` | Optimization level |
+| `flags.debug` | `"none"`, `"line-tables"`, `"full"` | Debug info level |
+| `flags.standard` | `"c++17"`, `"c++20"`, `"c++23"`, `"c11"`, `"c17"` | Language standard |
+| `flags.warnings` | `"none"`, `"default"`, `"all"`, `"extra"`, `"pedantic"` | Warning level |
+| `flags.pic` | (none) | Position-independent code |
+
+---
+
+## Internal Functions
 
 ### `mkDependencyScanner`
+
 Creates a derivation that scans source files for dependencies using `clang -MMD`. Used internally by builders when no manifest is provided.
 
 ### `mkBuildContext`
+
 (Internal) Prepares the build context (sources, flags, headers) for all builder types.
 
 ---
 
 ## Generator Schema
 
-Generators allow you to integrate code generation (e.g., Jinja templates, protobuf, FlatBuffers) into the build pipeline. A generator is an attrset with the following shape:
+Generators (also called "tools" in the high-level API) allow you to integrate code generation (e.g., Jinja templates, protobuf, FlatBuffers) into the build pipeline.
+
+> **Note:** Use the `tools` parameter with the high-level API (`native.executable`, etc.) and `generators` with the low-level API (`native.mkExecutable`, etc.). Both accept the same schema.
+
+A generator is an attrset with the following shape:
 
 ```nix
 {
@@ -258,9 +451,7 @@ All fields must be lists. Invalid types will produce clear error messages.
 
 ## Tool Plugins
 
-Tool plugins enable code generation (protobuf, Jinja templates, etc.) that integrates into the build pipeline.
-
-**Note on terminology**: The high-level API (`native.executable`, etc.) accepts a `tools` parameter, while the low-level API (`native.mkExecutable`, etc.) uses `generators`. Both accept the same generator schema objects. The naming difference reflects the user-facing simplicity vs. the internal implementation.
+Tool plugins enable code generation (protobuf, Jinja templates, etc.) that integrates into the build pipeline. Use these with the `tools` parameter (high-level API) or `generators` parameter (low-level API).
 
 ### Built-in Tools
 

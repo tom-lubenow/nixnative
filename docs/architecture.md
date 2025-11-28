@@ -115,5 +115,5 @@ Changes to headers not in the manifest don't invalidate the TU's compilation.
 ## Known gaps
 
 - Windows/MSVC backend is out-of-scope for this iteration; WSL + clang is the recommended path for now.
-- System library discovery: pkg-config is supported via `native.pkgConfig.makeLibrary`, but framework discovery (e.g. macOS `-framework`) still needs manual flags.
+- System library discovery: pkg-config is supported via `native.pkgConfig.mkPkgConfigLibrary` (or `makeLibrary` alias). macOS framework flags must be added manually when needed.
 - Error reporting from the scanner currently surfaces raw clang warnings (e.g., unused linker flags). We can tailor the toolchain wrapper to silence or adjust these diagnostics.

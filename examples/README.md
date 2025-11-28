@@ -85,7 +85,6 @@ Then explore specific features as needed:
 | Jinja2 templates | `jinja-templates/`, `app-with-library/` |
 | gRPC services | `grpc/` |
 | pkg-config integration | `pkg-config/`, `app-with-library/`, `protobuf/`, `grpc/` |
-| macOS frameworks | `pkg-config/` |
 | Test infrastructure | `testing/`, `coverage/`, most examples via checks |
 | Code coverage | `coverage/` |
 | IDE/LSP integration | `devshell/`, `multi-binary/` |

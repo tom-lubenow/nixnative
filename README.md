@@ -16,7 +16,7 @@ This gives you:
 ## Features
 
 - **Modular toolchains.** Compilers and linkers are independent, composable pieces. Use clang with mold, gcc with lld, or define your own combinations.
-- **Abstract flags.** Write `{ type = "lto"; value = "thin"; }` once—nixnative translates it to the right CLI flags for each compiler.
+- **Abstract flags.** Write `lto = "thin";` once—nixnative translates it to the right CLI flags for each compiler.
 - **Automatic dependency scanning.** Omit the manifest and nixnative discovers header dependencies automatically. Or commit a checked-in manifest for CI without IFD.
 - **Tool plugins.** Code generators (protobuf, Jinja templates, etc.) integrate cleanly—generated sources, headers, and link flags flow through automatically.
 - **Structured libraries.** Static, shared, and header-only libraries propagate their public interface (includes, defines, link flags) to dependents.
