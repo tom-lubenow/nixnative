@@ -21,8 +21,39 @@ def main [
     print $"Found ($examples | length) examples to check"
     print ""
 
+    # Create temp dir for tracking in-flight jobs
+    let pending_dir = (mktemp -d)
+    let monitor_script = ($pending_dir | path join "monitor.sh")
+
+    # Write monitor script that prints still-running jobs every 60s
+    let running_line = "    running=$(ls '" + $pending_dir + "' 2>/dev/null | grep -v monitor.sh | sort)"
+    let script_lines = [
+        "#!/bin/bash"
+        "while true; do"
+        "    sleep 60"
+        $running_line
+        '    if [ -n "$running" ]; then'
+        "        echo ''"
+        "        echo '⏳ Still running:'"
+        ('        echo "$running" | sed ' + "'" + 's/^/   /' + "'")
+        "        echo ''"
+        "    fi"
+        "done"
+    ]
+    $script_lines | str join "\n" | save -f $monitor_script
+    chmod +x $monitor_script
+
+    # Start monitor in background (use bash to handle backgrounding)
+    ^bash -c $"'($monitor_script)' &"
+    sleep 100ms  # Give it time to start
+    let monitor_pid = (^pgrep -nf "monitor.sh" | str trim | into int | default 0)
+
     let results = $examples | par-each --threads $jobs { |dir|
         let name = ($dir | path basename)
+
+        # Mark job as in-flight
+        touch ($pending_dir | path join $name)
+
         let start = (date now)
 
         let nix_args = ["flake" "check" "-j1" "--no-warn-dirty"]
@@ -46,12 +77,21 @@ def main [
         }
         print $output
 
+        # Mark job as complete
+        rm -f ($pending_dir | path join $name)
+
         {
             name: $name
             success: $success
             elapsed_sec: $elapsed
         }
     }
+
+    # Stop the monitor
+    if $monitor_pid > 0 {
+        kill $monitor_pid
+    }
+    rm -rf $pending_dir
 
     print ""
 
