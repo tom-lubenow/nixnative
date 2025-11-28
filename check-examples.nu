@@ -31,30 +31,25 @@ def main [
         let result = do { cd $dir; ^nix ...$nix_args } | complete
 
         let elapsed = ((date now) - $start | into int) / 1_000_000_000
+        let success = ($result.exit_code == 0)
+        let time = $elapsed | math round --precision 1
+
+        # Print progress immediately (single print to avoid interleaving)
+        let status = if $success { $"(ansi green)✓(ansi reset)" } else { $"(ansi red)✗(ansi reset)" }
+        let line = $"($status) ($name) \(($time)s\)"
+        let output = if $success {
+            $line
+        } else {
+            let indent = $"(char newline)  "
+            let errors = $result.stderr | str trim | lines | first 5 | str join $indent
+            $"($line)(char newline)  (ansi yellow)($errors)(ansi reset)"
+        }
+        print $output
 
         {
             name: $name
-            success: ($result.exit_code == 0)
-            exit_code: $result.exit_code
+            success: $success
             elapsed_sec: $elapsed
-            stderr: $result.stderr
-        }
-    }
-
-    # Sort results by name for consistent output
-    let results = $results | sort-by name
-
-    print "Results:"
-    print "--------"
-
-    for r in $results {
-        let status = if $r.success { $"(ansi green)✓(ansi reset)" } else { $"(ansi red)✗(ansi reset)" }
-        let time = $r.elapsed_sec | math round --precision 1
-        print $"($status) ($r.name) \(($time)s\)"
-
-        if not $r.success {
-            let indent = $"  (char newline)  "
-            print $"  (ansi yellow)($r.stderr | str trim | lines | first 5 | str join $indent)(ansi reset)"
         }
     }
 
