@@ -122,6 +122,9 @@ PY
         cxxFlags = info.cxxFlags;
         linkFlags = info.linkFlags;
       };
+      # Expose packages as evalInputs so scanner can add them to buildInputs
+      # This ensures store paths are available in the sandbox
+      evalInputs = packages;
       passthru = {
         inherit packages modules info;
       };

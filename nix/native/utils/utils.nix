@@ -149,6 +149,15 @@ in rec {
   collectPublic = libs:
     foldl' mergePublic emptyPublic (map libraryPublic libs);
 
+  # Extract evalInputs from a library (packages needed in sandbox)
+  libraryEvalInputs = lib:
+    if builtins.isAttrs lib && lib ? evalInputs then ensureList lib.evalInputs
+    else [];
+
+  # Collect all evalInputs from libraries
+  collectEvalInputs = libs:
+    concatMap libraryEvalInputs libs;
+
   # ==========================================================================
   # Source Normalization
   # ==========================================================================

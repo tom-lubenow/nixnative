@@ -15,6 +15,7 @@ let
     emptyPublic
     mergePublic
     collectPublic
+    collectEvalInputs
     showValue
     validatePublic;
   inherit (manifest) mkManifest emptyManifest mergeManifests;
@@ -162,6 +163,9 @@ in rec {
       # Collect tool inputs
       toolInputs = toolInfo.evalInputs;
 
+      # Collect library inputs (packages needed in sandbox for include paths)
+      libraryInputs = collectEvalInputs libraries;
+
       # Header and source overrides from tools
       headerOverrides = toolInfo.headerOverrides;
       sourceOverrides = toolInfo.sourceOverrides;
@@ -197,8 +201,9 @@ in rec {
       # Build define flags
       defineFlags = toDefineFlags combinedDefines;
 
-      # Build inputs
-      buildInputs = tc.runtimeInputs ++ map toPathLike (extraInputs ++ toolInputs);
+      # Build inputs (include library packages so their store paths exist in sandbox)
+      allExtraInputs = extraInputs ++ toolInputs ++ libraryInputs;
+      buildInputs = tc.runtimeInputs ++ map toPathLike allExtraInputs;
       extraInputPaths = map toPathLike (extraInputs ++ toolInputs);
     in
     pkgs.runCommand "${name}.json"
