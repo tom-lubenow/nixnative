@@ -122,9 +122,14 @@ PY
         cxxFlags = info.cxxFlags;
         linkFlags = info.linkFlags;
       };
-      # Expose packages as evalInputs so scanner can add them to buildInputs
-      # This ensures store paths are available in the sandbox
-      evalInputs = packages;
+      # Expose all package outputs as evalInputs so scanner can add them to buildInputs
+      # This ensures store paths (including .dev outputs with headers) are available in the sandbox
+      # pkg.all gives all outputs; fallback to just pkg if .all doesn't exist
+      evalInputs = concatMap (pkg:
+        if pkg ? all then pkg.all
+        else if pkg ? dev then [ pkg pkg.dev ]
+        else [ pkg ]
+      ) packages;
       passthru = {
         inherit packages modules info;
       };
