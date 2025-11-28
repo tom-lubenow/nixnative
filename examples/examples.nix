@@ -54,6 +54,10 @@ let
   testingChecks = import ./testing/checks.nix { inherit pkgs native; packages = testingPackagesRaw; };
   testingPackages = materializeSet testingPackagesRaw;
 
+  testLibrariesPackagesRaw = import ./test-libraries/project.nix { inherit pkgs native; };
+  testLibrariesChecks = import ./test-libraries/checks.nix { inherit pkgs; packages = testLibrariesPackagesRaw; };
+  testLibrariesPackages = materializeSet testLibrariesPackagesRaw;
+
   devshellPackagesRaw = import ./devshell/project.nix { inherit pkgs native; };
   devshellChecks = import ./devshell/checks.nix { inherit pkgs native; packages = devshellPackagesRaw; };
   # Only export derivations (app), not LSP configs (clangd)
@@ -170,6 +174,7 @@ in {
     multiToolchainPackages
     # Testing & Development
     testingPackages
+    testLibrariesPackages
     devshellPackages
     coveragePackages
     # Libraries & Installation
@@ -203,6 +208,7 @@ in {
     multiToolchainChecks
     # Testing & Development
     testingChecks
+    testLibrariesChecks
     devshellChecks
     coverageChecks
     # Libraries & Installation

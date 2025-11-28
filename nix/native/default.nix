@@ -41,6 +41,8 @@ let
 
   toolCore = import ./core/tool.nix { inherit pkgs lib utils; };
 
+  testLibCore = import ./core/testlib.nix { inherit lib; };
+
   # ==========================================================================
   # Scanner Modules
   # ==========================================================================
@@ -114,6 +116,25 @@ let
   };
 
   # ==========================================================================
+  # Test Library Implementations
+  # ==========================================================================
+
+  gtestTestLibs = import ./testlibs/gtest.nix {
+    inherit pkgs lib;
+    inherit (testLibCore) mkTestLib;
+  };
+
+  catch2TestLibs = import ./testlibs/catch2.nix {
+    inherit pkgs lib;
+    inherit (testLibCore) mkTestLib;
+  };
+
+  doctestTestLibs = import ./testlibs/doctest.nix {
+    inherit pkgs lib;
+    inherit (testLibCore) mkTestLib;
+  };
+
+  # ==========================================================================
   # LSP Configurations
   # ==========================================================================
 
@@ -175,6 +196,18 @@ let
 
     # Jinja2 template code generation
     inherit (jinjaTool) jinja configHeader enumGenerator;
+  };
+
+  # Assembled test libraries
+  testLibs = {
+    # GoogleTest
+    inherit (gtestTestLibs) gtest gmock;
+
+    # Catch2
+    inherit (catch2TestLibs) catch2;
+
+    # doctest
+    inherit (doctestTestLibs) doctest;
   };
 
   # ==========================================================================
@@ -390,10 +423,14 @@ in
     linkers
     toolchains
     tools
+    testLibs
     ;
 
   # Tool factory (for custom tools)
   inherit (toolCore) mkTool;
+
+  # Test library factory (for custom test frameworks)
+  inherit (testLibCore) mkTestLib;
 
   # Capability presets (for custom linkers)
   linkerCapabilities = {
