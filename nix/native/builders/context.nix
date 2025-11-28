@@ -12,6 +12,7 @@ let
     emptyPublic
     mergePublic
     collectPublic
+    collectEvalInputs
     normalizeSources
     headerSet
     validatePublic;
@@ -76,6 +77,9 @@ in rec {
 
       # Collect public attributes from libraries
       libsPublic = collectPublic libraries;
+
+      # Collect evalInputs from libraries (packages needed in sandbox for headers)
+      libsEvalInputs = collectEvalInputs libraries;
 
       # Merge library and tool public attributes
       publicAggregate = mergePublic libsPublic toolInfo.public;
@@ -148,7 +152,7 @@ in rec {
               defines = combinedDefines;
               inherit flags;
               extraCxxFlags = combinedExtraCxxFlags;
-              extraInputs = toolInfo.evalInputs;
+              extraInputs = toolInfo.evalInputs ++ libsEvalInputs;
             })
           tus;
 
