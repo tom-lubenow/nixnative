@@ -29,9 +29,9 @@ let
 
   linkerCore = import ./core/linker.nix { inherit lib; };
 
-  toolchainCore = import ./core/toolchain.nix { inherit lib flags; };
-
   platformUtils = import ./core/platform.nix { inherit lib; };
+
+  toolchainCore = import ./core/toolchain.nix { inherit lib flags; platform = platformUtils; };
 
   toolCore = import ./core/tool.nix { inherit pkgs lib utils; };
 

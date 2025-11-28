@@ -73,6 +73,31 @@ rec {
   linkFramework = name: [ "-framework" name ];
 
   # ==========================================================================
+  # Platform-Specific Compiler Flags
+  # ==========================================================================
+
+  # Get platform-specific flags required for compilation
+  #
+  # Linux: -fPIC is required for:
+  #   - Shared libraries (.so files)
+  #   - Static libraries that may be linked into PIE executables
+  #   - Code using dlopen/dlsym
+  # On x86_64, -fPIC has essentially zero performance overhead.
+  # Modern Linux distributions enable PIE by default for security (ASLR).
+  #
+  # Darwin: Position independence is handled differently via Mach-O format
+  # and doesn't require explicit -fPIC for most use cases.
+  #
+  defaultCompileFlags = platform:
+    if isLinux platform then [ "-fPIC" ]
+    else [];
+
+  # Get platform-specific flags required for linking (beyond linker defaults)
+  # Reserved for future platform-specific link requirements
+  defaultLinkFlags = _platform:
+    [];
+
+  # ==========================================================================
   # Linux-Specific Helpers
   # ==========================================================================
 

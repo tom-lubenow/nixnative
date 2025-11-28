@@ -2,13 +2,15 @@
 
 let
   # Build Zig library
+  # Use -OReleaseFast to avoid debug/stack probe symbols, and -fPIC on Linux for PIE compatibility
+  zigFlags = (if pkgs.stdenv.isLinux then "-fPIC " else "") + "-OReleaseFast -fno-stack-check";
   zigLibDrv = pkgs.runCommand "zig-lib" {
     nativeBuildInputs = [ pkgs.zig ];
   } ''
     mkdir -p $out/lib
     export ZIG_GLOBAL_CACHE_DIR=$(mktemp -d)
     export ZIG_LOCAL_CACHE_DIR=$(mktemp -d)
-    zig build-lib ${./lib.zig}
+    zig build-lib ${zigFlags} ${./lib.zig}
     find . -name "*.a" -exec mv {} $out/lib/libmath.a \;
   '';
 

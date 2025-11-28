@@ -3,7 +3,7 @@
 # A toolchain composes a compiler, linker, and binutils into a complete
 # build environment. This is the primary interface for building C/C++ code.
 #
-{ lib, flags }:
+{ lib, flags, platform }:
 
 rec {
   # ==========================================================================
@@ -148,8 +148,10 @@ rec {
             if targetPlatform.isDarwin && deploymentTarget != null
             then [ "-mmacosx-version-min=${deploymentTarget}" ]
             else [];
+          # Platform-specific compile flags (e.g., -fPIC on Linux)
+          platformFlags = platform.defaultCompileFlags targetPlatform;
         in
-        darwinDeploy;
+        darwinDeploy ++ platformFlags;
     };
 
   # ==========================================================================
