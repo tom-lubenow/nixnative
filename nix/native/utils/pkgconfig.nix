@@ -64,11 +64,20 @@ for token in cflags:
         cxx_flags.append(token)
 
 link_flags = []
+rpath_dirs = []
 for token in libs:
-    if token.startswith('-L') or token.startswith('-l') or token.startswith('-Wl'):
+    if token.startswith('-L'):
+        link_flags.append(token)
+        # Extract the directory path and add rpath for runtime library lookup
+        rpath_dirs.append(token[2:])
+    elif token.startswith('-l') or token.startswith('-Wl'):
         link_flags.append(token)
     else:
         link_flags.append(token)
+
+# Add rpath flags for each library directory (needed on Linux for runtime)
+for rpath_dir in rpath_dirs:
+    link_flags.append(f'-Wl,-rpath,{rpath_dir}')
 
 def dedup(seq):
     out = []
