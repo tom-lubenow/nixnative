@@ -201,6 +201,22 @@ in rec {
       # Build define flags
       defineFlags = toDefineFlags combinedDefines;
 
+      # Parallel scanner script - scans one file at a time
+      # Nix interpolates compiler/flags; shell expands $TMP, $1 at runtime
+      scannerScript = ''
+        srcFile="$1"
+        depfile="$TMP/$(echo "$srcFile" | tr '/' '_').d"
+        if ! ${tc.getCXX} \
+            ${concatStringsSep " " (tc.getDefaultCxxFlags)} \
+            ${concatStringsSep " " (tc.getPlatformCompileFlags)} \
+            ${concatStringsSep " " combinedCxxFlags} \
+            ${concatStringsSep " " includeFlags} \
+            ${concatStringsSep " " defineFlags} \
+            -MMD -MF "$depfile" -fsyntax-only "$srcFile" 2>"$depfile.err"; then
+          echo "$srcFile" >> "$TMP/failed"
+        fi
+      '';
+
       # Build inputs (include library packages so their store paths exist in sandbox)
       allExtraInputs = extraInputs ++ toolInputs ++ libraryInputs;
       buildInputs = tc.runtimeInputs ++ map toPathLike allExtraInputs;
@@ -208,10 +224,15 @@ in rec {
     in
     pkgs.runCommand "${name}.json"
       ({
-        buildInputs = buildInputs ++ [ pkgs.python3 ];
+        # Explicit dependencies:
+        # - python3: parse .d files and generate manifest JSON
+        # - findutils: xargs -a (GNU extension for reading args from file)
+        # - coreutils: nproc (GNU extension for CPU count)
+        buildInputs = buildInputs ++ [ pkgs.python3 pkgs.findutils pkgs.coreutils ];
         src = sanitizePath { path = root; name = "scanner-root"; };
-        passAsFile = [ "sourceList" ];
+        passAsFile = [ "sourceList" "scannerScript" ];
         sourceList = concatStringsSep "\n" (map (tu: tu.relNorm) tus) + "\n";
+        inherit scannerScript;
       } // tc.environment)
       ''
         set -euo pipefail
@@ -258,19 +279,22 @@ EOF
         unset NIX_CFLAGS_COMPILE NIX_CFLAGS_COMPILE_FOR_TARGET
         unset NIX_LDFLAGS NIX_LDFLAGS_FOR_TARGET
 
-        # Scan each source file for dependencies
-        while IFS= read -r srcFile; do
-          test -z "$srcFile" && continue
-          depfile="$TMP/$(echo "$srcFile" | tr '/' '_').d"
-          ${tc.getCXX} \
-            ${concatStringsSep " " (tc.getDefaultCxxFlags)} \
-            ${concatStringsSep " " (tc.getPlatformCompileFlags)} \
-            ${concatStringsSep " " combinedCxxFlags} \
-            ${concatStringsSep " " includeFlags} \
-            ${concatStringsSep " " defineFlags} \
-            -MMD -MF "$depfile" \
-            -fsyntax-only "$srcFile"
-        done < "$sourceListPath"
+        # Parallel scanning - uses all available cores
+        cp "$scannerScriptPath" "$TMP/scan-one.sh"
+        chmod +x "$TMP/scan-one.sh"
+
+        xargs -P"$(nproc)" -a "$sourceListPath" -I{} bash "$TMP/scan-one.sh" {}
+
+        # Report any failures with context
+        if [ -s "$TMP/failed" ]; then
+          echo "Scanner failed for the following files:" >&2
+          while IFS= read -r f; do
+            echo "  $f" >&2
+            errfile="$TMP/$(echo "$f" | tr '/' '_').d.err"
+            [ -s "$errfile" ] && sed 's/^/    /' "$errfile" >&2
+          done < "$TMP/failed"
+          exit 1
+        fi
 
         # Parse dependency files and generate manifest
         ${pkgs.python3}/bin/python - "$TMP" "$sourceListPath" "$out" <<'PY'
