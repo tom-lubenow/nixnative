@@ -1,0 +1,10 @@
+Usage: myapp [OPTIONS]
+
+Options:
+  -h, --help     Show this help message
+  -v, --version  Show version information
+  -c, --config   Specify configuration file
+
+Examples:
+  myapp --help
+  myapp -c config.json

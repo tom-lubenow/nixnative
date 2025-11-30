@@ -115,6 +115,11 @@ let
     inherit (toolCore) mkTool;
   };
 
+  binaryBlobTool = import ./tools/binary-blob.nix {
+    inherit pkgs lib;
+    inherit (toolCore) mkTool;
+  };
+
   # ==========================================================================
   # Test Library Implementations
   # ==========================================================================
@@ -196,6 +201,9 @@ let
 
     # Jinja2 template code generation
     inherit (jinjaTool) jinja configHeader enumGenerator;
+
+    # Binary blob embedding (objcopy replacement)
+    inherit (binaryBlobTool) binaryBlob;
   };
 
   # Assembled test libraries

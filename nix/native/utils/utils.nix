@@ -195,6 +195,49 @@ rec {
 
   collectPublic = libs: foldl' mergePublic emptyPublic (map libraryPublic libs);
 
+  # ==========================================================================
+  # Recursive Library Resolution
+  # ==========================================================================
+
+  # Recursively collect all link flags from a library and its transitive dependencies.
+  # This properly handles the case where static libraries don't embed their dependencies'
+  # objects, avoiding duplicate symbol errors.
+  #
+  # Arguments:
+  #   libs - List of library dependencies
+  #
+  # Returns:
+  #   List of unique link flags (object files, archives, shared libs) in dependency order
+  #
+  collectAllLinkFlags =
+    libs:
+    let
+      # Collect from a single library and its dependencies
+      collectFromLib =
+        lib:
+        if !(builtins.isAttrs lib) then
+          # Raw string/path link flag
+          [ (toPathLike lib) ]
+        else
+          let
+            # Get this library's direct link flags
+            directFlags = lib.public.linkFlags or [ ];
+            # Recursively get transitive dependencies' flags
+            transitiveFlags =
+              if lib ? libraries then
+                collectAllLinkFlags lib.libraries
+              else
+                [ ];
+          in
+          # Transitive deps come BEFORE this lib (dependency order for static linking)
+          transitiveFlags ++ directFlags;
+
+      # Collect from all libraries
+      allFlags = concatMap collectFromLib libs;
+    in
+    # Remove duplicates while preserving order (later occurrences kept for link order)
+    unique allFlags;
+
   # Extract evalInputs from a library (packages needed in sandbox)
   libraryEvalInputs =
     lib: if builtins.isAttrs lib && lib ? evalInputs then ensureList lib.evalInputs else [ ];
@@ -205,6 +248,9 @@ rec {
   # ==========================================================================
   # Source Normalization
   # ==========================================================================
+
+  # Check if a value is a derivation (has outPath attribute)
+  isDerivation = x: builtins.isAttrs x && x ? outPath;
 
   normalizeSources =
     {
@@ -219,35 +265,70 @@ rec {
       rootHost = builtins.toString rootPath;
       mkEntry =
         source:
-        let
-          rel =
-            if builtins.isAttrs source && source ? rel then
-              source.rel
-            else if builtins.isString source then
-              source
-            else
-              throw "nixnative: sources must be relative strings or attrsets with 'rel' attribute, got ${showValue source}";
-          relNorm = if hasPrefix "./" rel then removePrefix "./" rel else rel;
-          host =
-            if builtins.isAttrs source && source ? path then
-              builtins.toString source.path
-            else
-              "${rootHost}/${relNorm}";
-          objectName = "${sanitizeName relNorm}.o";
-          _ =
-            if builtins.pathExists host then
-              true
-            else
-              throw "nixnative: source '${relNorm}' not found at ${host}. Check that the file exists and the 'root' path is correct.";
-        in
-        {
-          store =
-            if builtins.isAttrs source && source ? store then
-              toPathLike source.store
-            else
-              builtins.path { path = host; };
-          inherit relNorm host objectName;
-        };
+        # Case 1: Derivation source - { drv, rel } or { drv, rel, file }
+        # Use this for generated sources from pkgs.writeText, tool outputs, etc.
+        if builtins.isAttrs source && source ? drv && isDerivation source.drv then
+          let
+            rel = source.rel or (throw "nixnative: derivation sources must have 'rel' attribute specifying the relative path");
+            relNorm = if hasPrefix "./" rel then removePrefix "./" rel else rel;
+            # If 'file' is specified, the derivation is a directory and we need a specific file
+            # Otherwise, the derivation IS the file (e.g., from pkgs.writeText)
+            store =
+              if source ? file then
+                "${source.drv}/${source.file}"
+              else
+                source.drv.outPath;
+            objectName = "${sanitizeName relNorm}.o";
+          in
+          {
+            inherit store relNorm objectName;
+            host = store; # For error messages
+          }
+        # Case 2: Attrset with 'rel' (and optional 'path'/'store')
+        else if builtins.isAttrs source && source ? rel then
+          let
+            rel = source.rel;
+            relNorm = if hasPrefix "./" rel then removePrefix "./" rel else rel;
+            host =
+              if source ? path then
+                builtins.toString source.path
+              else
+                "${rootHost}/${relNorm}";
+            objectName = "${sanitizeName relNorm}.o";
+            _ =
+              if source ? store then
+                true
+              else if builtins.pathExists host then
+                true
+              else
+                throw "nixnative: source '${relNorm}' not found at ${host}. Check that the file exists and the 'root' path is correct.";
+          in
+          {
+            store =
+              if source ? store then
+                toPathLike source.store
+              else
+                builtins.path { path = host; };
+            inherit relNorm host objectName;
+          }
+        # Case 3: Simple string (relative path)
+        else if builtins.isString source then
+          let
+            relNorm = if hasPrefix "./" source then removePrefix "./" source else source;
+            host = "${rootHost}/${relNorm}";
+            objectName = "${sanitizeName relNorm}.o";
+            _ =
+              if builtins.pathExists host then
+                true
+              else
+                throw "nixnative: source '${relNorm}' not found at ${host}. Check that the file exists and the 'root' path is correct.";
+          in
+          {
+            store = builtins.path { path = host; };
+            inherit relNorm host objectName;
+          }
+        else
+          throw "nixnative: sources must be relative strings, attrsets with 'rel', or derivation sources { drv, rel }, got ${showValue source}";
     in
     map mkEntry sources;
 

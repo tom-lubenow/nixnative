@@ -111,6 +111,12 @@ let
     simpleToolExample = materialize simpleToolPackagesRaw.simpleToolExample;
   };
 
+  binaryBlobPackagesRaw = import ./binary-blob/project.nix { inherit pkgs native; };
+  binaryBlobChecks = import ./binary-blob/checks.nix { inherit pkgs; packages = binaryBlobPackagesRaw; };
+  binaryBlobPackages = {
+    binaryBlobExample = materialize binaryBlobPackagesRaw.binaryBlobExample;
+  };
+
   # ===========================================================================
   # System Integration
   # ===========================================================================
@@ -186,6 +192,7 @@ in {
     grpcPackages
     jinjaTemplatesPackages
     simpleToolPackages
+    binaryBlobPackages
     # System Integration
     pkgConfigPackages
     # Language Interop
@@ -220,6 +227,7 @@ in {
     grpcChecks
     jinjaTemplatesChecks
     simpleToolChecks
+    binaryBlobChecks
     # System Integration
     pkgConfigChecks
     # Language Interop

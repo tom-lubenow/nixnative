@@ -19,6 +19,7 @@ let
     normalizeIncludeDir
     mergePublic
     ensureList
+    collectAllLinkFlags
     ;
   inherit (context) mkBuildContext;
   inherit (link)
@@ -60,16 +61,19 @@ rec {
         objectPaths
         flags
         combinedExtraCxxFlags
-        publicAggregate
+        libraries
         libsEvalInputs
         ;
+
+      # Recursively collect all link flags from libraries and their transitive dependencies
+      allLinkFlags = collectAllLinkFlags libraries;
 
       drv = linkExecutable {
         inherit toolchain name flags;
         objects = objectPaths;
         extraCxxFlags = combinedExtraCxxFlags;
         ldflags = args.ldflags or [ ];
-        linkFlags = publicAggregate.linkFlags;
+        linkFlags = allLinkFlags;
         extraInputs = libsEvalInputs;
       };
     in
@@ -135,6 +139,11 @@ rec {
       '';
 
       # Build public interface - pass object files directly to linker
+      # NOTE: We intentionally do NOT merge transitive linkFlags here.
+      # Static libraries should only expose their own objects in public.linkFlags.
+      # Transitive dependencies are tracked via the 'libraries' attribute and
+      # resolved recursively by executables/shared libs using collectAllLinkFlags.
+      # This prevents duplicate symbol errors when multiple libraries share deps.
       basePublic = {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
@@ -142,7 +151,13 @@ rec {
         linkFlags = objectPaths;
       };
 
-      combinedPublic = mergePublic publicAggregate basePublic;
+      # Merge headers/defines/cxxFlags from dependencies, but NOT linkFlags
+      combinedPublic = {
+        includeDirs = publicAggregate.includeDirs ++ basePublic.includeDirs;
+        defines = publicAggregate.defines ++ basePublic.defines;
+        cxxFlags = publicAggregate.cxxFlags ++ basePublic.cxxFlags;
+        linkFlags = basePublic.linkFlags; # Only this lib's objects
+      };
     in
     headersDrv
     // {
@@ -226,6 +241,7 @@ rec {
         objectPaths
         flags
         combinedExtraCxxFlags
+        libraries
         libsEvalInputs
         ;
 
@@ -251,13 +267,16 @@ rec {
       sharedExt = builtins.substring 1 100 (platform.sharedLibExtension targetPlatform); # Strip leading "."
       sharedName = "lib${name}.${sharedExt}";
 
+      # Recursively collect all link flags from libraries and their transitive dependencies
+      allLinkFlags = collectAllLinkFlags libraries;
+
       # Link the shared library
       linkDrv = linkSharedLibrary {
         inherit toolchain name flags;
         objects = objectPaths;
         extraCxxFlags = combinedExtraCxxFlags;
         ldflags = args.ldflags or [ ];
-        linkFlags = publicAggregate.linkFlags;
+        linkFlags = allLinkFlags;
         extraInputs = libsEvalInputs;
       };
 
@@ -275,6 +294,9 @@ rec {
       '';
 
       # Build public interface
+      # NOTE: Shared libraries only expose their own .so file in linkFlags.
+      # Unlike static libraries, the .so already contains all linked code,
+      # so consumers don't need transitive dependencies.
       basePublic = {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
@@ -282,7 +304,14 @@ rec {
         linkFlags = [ "${sharedDrv}/lib/${sharedName}" ];
       };
 
-      combinedPublic = mergePublic publicAggregate basePublic;
+      # Merge headers/defines/cxxFlags from dependencies, but NOT linkFlags
+      # (consumers only need to link against this .so, not its deps)
+      combinedPublic = {
+        includeDirs = publicAggregate.includeDirs ++ basePublic.includeDirs;
+        defines = publicAggregate.defines ++ basePublic.defines;
+        cxxFlags = publicAggregate.cxxFlags ++ basePublic.cxxFlags;
+        linkFlags = basePublic.linkFlags; # Only this shared lib
+      };
     in
     sharedDrv
     // {
