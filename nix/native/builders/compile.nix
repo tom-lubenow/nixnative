@@ -33,7 +33,7 @@ rec {
   #   includeDirs  - Include directories
   #   defines      - Preprocessor defines
   #   flags        - Abstract flags (from flags.nix)
-  #   extraCxxFlags - Additional raw C++ flags
+  #   extraFlags   - Additional raw compiler flags
   #   extraInputs  - Additional build inputs
   #
   compileTranslationUnit =
@@ -45,11 +45,15 @@ rec {
       includeDirs,
       defines,
       flags ? [ ], # Abstract flags
-      extraCxxFlags ? [ ], # Raw flags
+      extraFlags ? [ ], # Raw flags (language-agnostic)
       extraInputs ? [ ],
     }:
     let
       tc = toolchain;
+
+      # Detect language and get appropriate compiler/flags
+      compiler = tc.getCompilerForFile tu.relNorm;
+      languageDefaultFlags = tc.getDefaultFlagsForFile tu.relNorm;
 
       # Build source tree with headers
       srcTree = mkSourceTree { inherit tu headers; };
@@ -63,14 +67,11 @@ rec {
       # Translate abstract flags to concrete CLI args
       translatedFlags = tc.translateFlags flags;
 
-      # Get compiler defaults
-      defaultFlags = tc.getDefaultCxxFlags;
-
       # Platform-specific flags (e.g., -fPIC on Linux)
       platformFlags = tc.getPlatformCompileFlags;
 
       # Combine all flags
-      allCxxFlags = defaultFlags ++ platformFlags ++ translatedFlags ++ extraCxxFlags;
+      allFlags = languageDefaultFlags ++ platformFlags ++ translatedFlags ++ extraFlags;
 
       # Get linker driver flag (for LTO to work, linker must be specified at compile time too)
       linkerFlag = if tc.linker.driverFlag != "" then [ tc.linker.driverFlag ] else [ ];
@@ -90,8 +91,8 @@ rec {
             unset NIX_CFLAGS_COMPILE NIX_CFLAGS_COMPILE_FOR_TARGET
             unset NIX_LDFLAGS NIX_LDFLAGS_FOR_TARGET
             mkdir -p "$out"
-            ${tc.getCXX} \
-              ${concatStringsSep " " allCxxFlags} \
+            ${compiler} \
+              ${concatStringsSep " " allFlags} \
               ${concatStringsSep " " linkerFlag} \
               ${concatStringsSep " " includeFlags} \
               ${concatStringsSep " " defineFlags} \
@@ -109,7 +110,7 @@ rec {
         includeFlags
         defineFlags
         ;
-      cxxFlags = allCxxFlags;
+      compileFlags = allFlags;
     };
 
   # ==========================================================================
@@ -125,7 +126,7 @@ rec {
       includeDirs,
       defines,
       flags ? [ ],
-      extraCxxFlags ? [ ],
+      extraFlags ? [ ],
     }:
     let
       tc = toolchain;
@@ -145,27 +146,33 @@ rec {
 
       defineFlags = toDefineFlags defines;
       translatedFlags = tc.translateFlags flags;
-      defaultFlags = tc.getDefaultCxxFlags;
       platformFlags = tc.getPlatformCompileFlags;
 
-      allCxxFlags = defaultFlags ++ platformFlags ++ translatedFlags ++ extraCxxFlags;
+      # Generate entry for each translation unit with language-appropriate compiler/flags
+      mkEntry = tu:
+        let
+          compiler = tc.getCompilerForFile tu.relNorm;
+          languageDefaultFlags = tc.getDefaultFlagsForFile tu.relNorm;
+          allFlags = languageDefaultFlags ++ platformFlags ++ translatedFlags ++ extraFlags;
+        in
+        {
+          directory = builtins.toString root;
+          file = tu.relNorm;
+          command = concatStringsSep " " (
+            [ compiler ]
+            ++ allFlags
+            ++ includeFlags
+            ++ defineFlags
+            ++ [
+              "-c"
+              tu.relNorm
+              "-o"
+              tu.objectName
+            ]
+          );
+        };
 
-      entries = map (tu: {
-        directory = builtins.toString root;
-        file = tu.relNorm;
-        command = concatStringsSep " " (
-          [ tc.getCXX ]
-          ++ allCxxFlags
-          ++ includeFlags
-          ++ defineFlags
-          ++ [
-            "-c"
-            tu.relNorm
-            "-o"
-            tu.objectName
-          ]
-        );
-      }) tus;
+      entries = map mkEntry tus;
     in
     pkgs.writeText "compile_commands.json" (builtins.toJSON entries);
 }

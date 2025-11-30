@@ -109,7 +109,7 @@ let
   #   includeDirs  - Include directories
   #   defines      - Preprocessor defines
   #   flags        - Abstract flags (lto, sanitizers, etc.)
-  #   extraCxxFlags - Additional raw C++ flags
+  #   extraFlags   - Additional raw compiler flags (applied to all languages)
   #   ldflags      - Additional linker flags
   #   libraries    - Library dependencies
   #   tools        - Tool plugins (protobuf, jinja, etc.)

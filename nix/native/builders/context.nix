@@ -52,7 +52,7 @@ rec {
   #   includeDirs  - Include directories
   #   defines      - Preprocessor defines
   #   flags        - Abstract flags (lto, sanitizers, etc.)
-  #   extraCxxFlags - Additional raw C++ flags
+  #   extraFlags   - Additional raw compiler flags (applied to all languages)
   #   libraries    - Library dependencies
   #   tools        - Tool plugins (protobuf, jinja, etc.)
   #   depsManifest - Pre-computed dependency manifest
@@ -67,7 +67,7 @@ rec {
       includeDirs ? [ ],
       defines ? [ ],
       flags ? [ ], # Abstract flags from flags.nix
-      extraCxxFlags ? [ ], # Raw C++ flags
+      extraFlags ? [ ], # Raw compiler flags (applied to all languages)
       libraries ? [ ],
       tools ? [ ], # Tool plugins (replaces generators)
       depsManifest ? null,
@@ -111,8 +111,8 @@ rec {
       # Combine defines
       combinedDefines = defines ++ publicAggregate.defines ++ toolInfo.defines;
 
-      # Combine raw C++ flags
-      combinedExtraCxxFlags = extraCxxFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
+      # Combine raw compiler flags (cxxFlags from public interface applied to all languages)
+      combinedExtraFlags = extraFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
 
       # Normalize sources to translation units
       tus = normalizeSources {
@@ -129,7 +129,7 @@ rec {
             sources = allSources;
             includeDirs = combinedIncludeDirs;
             defines = combinedDefines;
-            cxxFlags = combinedExtraCxxFlags;
+            extraFlags = combinedExtraFlags;
             libraries = libraries;
             tools = tools;
             toolchain = tc;
@@ -165,7 +165,7 @@ rec {
           includeDirs = combinedIncludeDirs;
           defines = combinedDefines;
           inherit flags;
-          extraCxxFlags = combinedExtraCxxFlags;
+          extraFlags = combinedExtraFlags;
           extraInputs = toolInfo.evalInputs ++ libsEvalInputs;
         }
       ) tus;
@@ -181,7 +181,7 @@ rec {
         includeDirs = combinedIncludeDirs;
         defines = combinedDefines;
         inherit flags;
-        extraCxxFlags = combinedExtraCxxFlags;
+        extraFlags = combinedExtraFlags;
       };
 
     in
@@ -189,7 +189,7 @@ rec {
       inherit name toolchain rootPath;
       inherit objectInfos objectPaths compileCommands;
       inherit manifest tus;
-      inherit combinedIncludeDirs combinedDefines combinedExtraCxxFlags;
+      inherit combinedIncludeDirs combinedDefines combinedExtraFlags;
       inherit publicAggregate;
       inherit libraries tools;
       inherit flags;

@@ -1,12 +1,14 @@
 # Toolchain abstraction for nixnative
 #
 # A toolchain composes a compiler, linker, and binutils into a complete
-# build environment. This is the primary interface for building C/C++ code.
+# build environment. It supports multiple languages, with each language
+# having its own compiler binary and default flags.
 #
 {
   lib,
   flags,
   platform,
+  language,
 }:
 
 rec {
@@ -41,6 +43,21 @@ rec {
 
       # Merge environments (toolchain overrides linker overrides compiler)
       finalEnvironment = (compiler.environment or { }) // (linker.environment or { }) // environment;
+
+      # Build the languages map from the compiler object
+      # This maps language names to their compilation settings
+      languages = {
+        c = {
+          compiler = compiler.cc;
+          defaultFlags = compiler.defaultCFlags or [ ];
+        };
+        cpp = {
+          compiler = compiler.cxx;
+          defaultFlags = compiler.defaultCxxFlags or [ ];
+        };
+        # Future: additional languages can be added via optional compiler fields
+        # e.g., objc, objcpp, or even external compilers like rustc
+      };
     in
     {
       inherit
@@ -48,6 +65,7 @@ rec {
         compiler
         linker
         targetPlatform
+        languages
         ;
       inherit
         ar
@@ -61,14 +79,45 @@ rec {
       environment = finalEnvironment;
 
       # =======================================================================
-      # Methods
+      # Language-Aware Methods
+      # =======================================================================
+
+      # Get the compiler command for a language
+      getCompilerForLanguage = lang:
+        if languages ? ${lang} then
+          languages.${lang}.compiler
+        else
+          throw "nixnative: toolchain '${name}' does not support language '${lang}'";
+
+      # Get default flags for a language
+      getDefaultFlagsForLanguage = lang:
+        if languages ? ${lang} then
+          languages.${lang}.defaultFlags
+        else
+          throw "nixnative: toolchain '${name}' does not support language '${lang}'";
+
+      # Check if toolchain supports a language
+      supportsLanguage = lang: languages ? ${lang};
+
+      # Detect language from filename and get compiler
+      getCompilerForFile = filename:
+        let lang = language.detectLanguageName filename;
+        in languages.${lang}.compiler;
+
+      # Detect language from filename and get default flags
+      getDefaultFlagsForFile = filename:
+        let lang = language.detectLanguageName filename;
+        in languages.${lang}.defaultFlags;
+
+      # =======================================================================
+      # Legacy Methods (for compatibility during transition)
       # =======================================================================
 
       # Get the C compiler command
-      getCC = compiler.cc;
+      getCC = languages.c.compiler;
 
       # Get the C++ compiler command
-      getCXX = compiler.cxx;
+      getCXX = languages.cpp.compiler;
 
       # Get C++ runtime library path (for rpath on Linux)
       cxxRuntimeLibPath = compiler.cxxRuntimeLibPath or null;
@@ -108,10 +157,10 @@ rec {
       getPlatformLinkerFlags = linker.platformFlags targetPlatform;
 
       # Get all default C flags
-      getDefaultCFlags = compiler.defaultCFlags or [ ];
+      getDefaultCFlags = languages.c.defaultFlags;
 
       # Get all default C++ flags
-      getDefaultCxxFlags = compiler.defaultCxxFlags or [ ];
+      getDefaultCxxFlags = languages.cpp.defaultFlags;
 
       # Build environment variables as shell export string
       getEnvironmentExports = lib.concatStringsSep "\n" (
