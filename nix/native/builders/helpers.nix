@@ -417,7 +417,6 @@ rec {
 
       packages = lib.unique (
         tc.runtimeInputs
-        ++ (if tc.compiler.package != null then [ tc.compiler.package ] else [ ])
         ++ devTools
         ++ extraPackages
       );
@@ -438,8 +437,8 @@ rec {
       inherit packages;
       shellHook = ''
         ${linkHook}
-        export CC="${tc.getCC}"
-        export CXX="${tc.getCXX}"
+        export CC="${tc.getCompilerForLanguage "c"}"
+        export CXX="${tc.getCompilerForLanguage "cpp"}"
         ${envExports}
       '';
     };

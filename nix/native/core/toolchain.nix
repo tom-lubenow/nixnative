@@ -1,8 +1,18 @@
 # Toolchain abstraction for nixnative
 #
-# A toolchain composes a compiler, linker, and binutils into a complete
-# build environment. It supports multiple languages, with each language
-# having its own compiler binary and default flags.
+# A toolchain composes language compilers, a linker, and binutils into a
+# complete build environment. Languages are explicitly specified via a map.
+#
+# Usage:
+#   mkToolchain {
+#     languages = {
+#       c = native.compilers.clang.c;
+#       cpp = native.compilers.clang.cpp;
+#       rust = native.compilers.rustc.rust;
+#     };
+#     linker = native.linkers.lld;
+#     bintools = native.compilers.clang.bintools;
+#   }
 #
 {
   lib,
@@ -18,16 +28,10 @@ rec {
 
   mkToolchain =
     {
-      name, # Identifier: "clang18-lld", "gcc14-mold"
-      compiler, # Compiler object from mkCompiler
+      name ? null, # Optional name (auto-generated if not provided)
+      languages, # Map of language name -> language config
       linker, # Linker object from mkLinker
-
-      # Binutils
-      ar, # Path to archiver (ar)
-      ranlib ? null, # Path to ranlib (optional, some use ar -s)
-      nm ? null, # Path to nm
-      objcopy ? null, # Path to objcopy
-      strip ? null, # Path to strip
+      bintools ? { }, # Bintools (ar, ranlib, nm, etc.)
 
       # Platform configuration
       targetPlatform, # The platform we're building for
@@ -37,46 +41,65 @@ rec {
       environment ? { }, # Additional environment variables
     }:
     let
-      # Merge runtime inputs from compiler, linker, and toolchain
+      # Generate name from languages if not provided
+      generatedName =
+        let
+          langNames = builtins.attrNames languages;
+          firstLang = builtins.head langNames;
+          compilerName = languages.${firstLang}.name or "unknown";
+        in
+        "${compilerName}-${linker.name}";
+
+      finalName = if name != null then name else generatedName;
+
+      # Collect runtime inputs from all language compilers
+      languageRuntimeInputs = lib.flatten (
+        lib.mapAttrsToList (_: lang: lang.runtimeInputs or [ ]) languages
+      );
+
+      # Merge runtime inputs from all sources
       allRuntimeInputs =
-        (compiler.runtimeInputs or [ ]) ++ (linker.runtimeInputs or [ ]) ++ runtimeInputs;
+        languageRuntimeInputs
+        ++ (linker.runtimeInputs or [ ])
+        ++ runtimeInputs;
 
-      # Merge environments (toolchain overrides linker overrides compiler)
-      finalEnvironment = (compiler.environment or { }) // (linker.environment or { }) // environment;
+      # Merge environments from all language compilers
+      languageEnvironments = lib.foldl' (acc: lang: acc // (lang.environment or { })) { } (
+        builtins.attrValues languages
+      );
 
-      # Build the languages map from the compiler object
-      # This maps language names to their compilation settings
-      languages = {
-        c = {
-          compiler = compiler.cc;
-          defaultFlags = compiler.defaultCFlags or [ ];
-        };
-        cpp = {
-          compiler = compiler.cxx;
-          defaultFlags = compiler.defaultCxxFlags or [ ];
-        };
-        # Future: additional languages can be added via optional compiler fields
-        # e.g., objc, objcpp, or even external compilers like rustc
-      };
+      finalEnvironment =
+        languageEnvironments
+        // (linker.environment or { })
+        // environment;
+
+      # Extract cxxRuntimeLibPath from cpp language if present
+      cxxRuntimeLibPath =
+        if languages ? cpp then
+          languages.cpp.cxxRuntimeLibPath or null
+        else
+          null;
     in
     {
+      name = finalName;
       inherit
-        name
-        compiler
-        linker
-        targetPlatform
         languages
+        linker
+        bintools
+        targetPlatform
         ;
-      inherit
-        ar
-        ranlib
-        nm
-        objcopy
-        strip
-        ;
+
+      # Bintools accessors (for convenience)
+      ar = bintools.ar or null;
+      ranlib = bintools.ranlib or null;
+      nm = bintools.nm or null;
+      objcopy = bintools.objcopy or null;
+      strip = bintools.strip or null;
 
       runtimeInputs = allRuntimeInputs;
       environment = finalEnvironment;
+
+      inherit cxxRuntimeLibPath;
 
       # =======================================================================
       # Language-Aware Methods
@@ -87,14 +110,14 @@ rec {
         if languages ? ${lang} then
           languages.${lang}.compiler
         else
-          throw "nixnative: toolchain '${name}' does not support language '${lang}'";
+          throw "nixnative: toolchain '${finalName}' does not support language '${lang}'";
 
       # Get default flags for a language
       getDefaultFlagsForLanguage = lang:
         if languages ? ${lang} then
           languages.${lang}.defaultFlags
         else
-          throw "nixnative: toolchain '${name}' does not support language '${lang}'";
+          throw "nixnative: toolchain '${finalName}' does not support language '${lang}'";
 
       # Check if toolchain supports a language
       supportsLanguage = lang: languages ? ${lang};
@@ -102,48 +125,61 @@ rec {
       # Detect language from filename and get compiler
       getCompilerForFile = filename:
         let lang = language.detectLanguageName filename;
-        in languages.${lang}.compiler;
+        in
+        if languages ? ${lang} then
+          languages.${lang}.compiler
+        else
+          throw "nixnative: toolchain '${finalName}' does not support language '${lang}' (detected from '${filename}')";
 
       # Detect language from filename and get default flags
       getDefaultFlagsForFile = filename:
         let lang = language.detectLanguageName filename;
-        in languages.${lang}.defaultFlags;
+        in
+        if languages ? ${lang} then
+          languages.${lang}.defaultFlags
+        else
+          throw "nixnative: toolchain '${finalName}' does not support language '${lang}' (detected from '${filename}')";
+
+      # Get the full language config for a file
+      getLanguageConfigForFile = filename:
+        let lang = language.detectLanguageName filename;
+        in
+        if languages ? ${lang} then
+          languages.${lang}
+        else
+          throw "nixnative: toolchain '${finalName}' does not support language '${lang}' (detected from '${filename}')";
 
       # =======================================================================
-      # Legacy Methods (for compatibility during transition)
+      # Convenience Accessors
       # =======================================================================
 
-      # Get the C compiler command
-      getCC = languages.c.compiler;
+      # Check if specific languages are available
+      hasC = languages ? c;
+      hasCpp = languages ? cpp;
+      hasRust = languages ? rust;
 
-      # Get the C++ compiler command
-      getCXX = languages.cpp.compiler;
+      # Get language configs (throws if not present)
+      getCConfig =
+        if languages ? c then languages.c
+        else throw "nixnative: toolchain '${finalName}' does not have C support";
 
-      # Get C++ runtime library path (for rpath on Linux)
-      cxxRuntimeLibPath = compiler.cxxRuntimeLibPath or null;
+      getCppConfig =
+        if languages ? cpp then languages.cpp
+        else throw "nixnative: toolchain '${finalName}' does not have C++ support";
+
+      getRustConfig =
+        if languages ? rust then languages.rust
+        else throw "nixnative: toolchain '${finalName}' does not have Rust support";
+
+      # =======================================================================
+      # Linker Methods
+      # =======================================================================
 
       # Get linker driver flag for compiler
       getLinkerFlag = linker.driverFlag;
 
-      # Translate abstract flags to concrete CLI args
-      translateFlags = flagList: compiler.translateFlags flagList;
-
-      # Check if compiler supports a capability
-      compilerHas = cap: compiler.hasCapability cap;
-
       # Check if linker supports a capability
       linkerHas = cap: linker.hasCapability cap;
-
-      # Check if both compiler and linker support LTO
-      supportsLTO = compiler.hasCapability "lto" && linker.hasCapability "lto";
-
-      # Check if toolchain supports thin LTO specifically
-      supportsThinLTO =
-        let
-          compilerLTO = compiler.capabilities.lto or null;
-          linkerThinLTO = linker.capabilities.thinLto or false;
-        in
-        compilerLTO != null && (compilerLTO.thin or false) && linkerThinLTO;
 
       # Wrap library flags for linking (handles --start-group on Linux)
       wrapLibraryFlags =
@@ -156,11 +192,23 @@ rec {
       # Get platform-specific linker flags
       getPlatformLinkerFlags = linker.platformFlags targetPlatform;
 
-      # Get all default C flags
-      getDefaultCFlags = languages.c.defaultFlags;
+      # =======================================================================
+      # Flag Translation
+      # =======================================================================
 
-      # Get all default C++ flags
-      getDefaultCxxFlags = languages.cpp.defaultFlags;
+      # Translate abstract flags using the first available C/C++ compiler
+      translateFlags = flagList:
+        let
+          lang =
+            if languages ? cpp then languages.cpp
+            else if languages ? c then languages.c
+            else throw "nixnative: toolchain '${finalName}' has no C/C++ compiler for flag translation";
+        in
+        flags.translateFlags { compiler = lang; flags = flagList; };
+
+      # =======================================================================
+      # Environment
+      # =======================================================================
 
       # Build environment variables as shell export string
       getEnvironmentExports = lib.concatStringsSep "\n" (
@@ -172,29 +220,24 @@ rec {
     };
 
   # ==========================================================================
-  # Toolchain Composition Helpers
+  # Toolchain Validation
   # ==========================================================================
 
-  # Create a toolchain name from compiler and linker
-  makeToolchainName = compiler: linker: "${compiler.name}-${linker.name}";
-
-  # Validate that compiler and linker are compatible
   validateToolchain =
     toolchain:
     let
       required = [
         "name"
-        "compiler"
+        "languages"
         "linker"
-        "ar"
         "targetPlatform"
       ];
       missing = builtins.filter (f: !(toolchain ? ${f})) required;
     in
     if missing != [ ] then
       throw "nixnative: toolchain missing required fields: ${lib.concatStringsSep ", " missing}"
-    else if !(toolchain.compiler ? cc) then
-      throw "nixnative: toolchain compiler is missing 'cc' field"
+    else if toolchain.languages == { } then
+      throw "nixnative: toolchain must have at least one language"
     else if !(toolchain.linker ? driverFlag) then
       throw "nixnative: toolchain linker is missing 'driverFlag' field"
     else
@@ -208,26 +251,30 @@ rec {
   getCapabilities =
     toolchain:
     let
-      compilerCaps = toolchain.compiler.capabilities or { };
+      # Get capabilities from first C/C++ language
+      langCaps =
+        if toolchain.languages ? cpp then toolchain.languages.cpp.capabilities or { }
+        else if toolchain.languages ? c then toolchain.languages.c.capabilities or { }
+        else { };
       linkerCaps = toolchain.linker.capabilities or { };
     in
     {
       # LTO requires both compiler and linker support
       lto =
-        if compilerCaps.lto or null == null then
+        if langCaps.lto or null == null then
           null
         else if !(linkerCaps.lto or false) then
           null
         else
-          compilerCaps.lto;
+          langCaps.lto;
 
-      thinLto = (compilerCaps.lto.thin or false) && (linkerCaps.thinLto or false);
+      thinLto = (langCaps.lto.thin or false) && (linkerCaps.thinLto or false);
 
       # Sanitizers come from compiler
-      sanitizers = compilerCaps.sanitizers or [ ];
+      sanitizers = langCaps.sanitizers or [ ];
 
       # Coverage comes from compiler
-      coverage = compilerCaps.coverage or false;
+      coverage = langCaps.coverage or false;
 
       # ICF comes from linker
       icf = linkerCaps.icf or false;
@@ -236,16 +283,16 @@ rec {
       parallelLinking = linkerCaps.parallelLinking or false;
 
       # Split DWARF requires both
-      splitDwarf = (compilerCaps.splitDwarf or false) && (linkerCaps.splitDwarf or false);
+      splitDwarf = (langCaps.splitDwarf or false) && (linkerCaps.splitDwarf or false);
 
       # Color diagnostics from compiler
-      colorDiagnostics = compilerCaps.colorDiagnostics or false;
+      colorDiagnostics = langCaps.colorDiagnostics or false;
 
       # C++20 modules from compiler
-      modules = compilerCaps.modules or false;
+      modules = langCaps.modules or false;
 
       # PCH from compiler
-      pch = compilerCaps.pch or false;
+      pch = langCaps.pch or false;
     };
 
   # Check if a specific feature is supported by the toolchain

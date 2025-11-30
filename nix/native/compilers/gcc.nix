@@ -1,6 +1,8 @@
 # GCC compiler implementation for nixnative
 #
-# Provides GCC variants using the mkCompiler factory.
+# Exports language configs for use in toolchains:
+#   native.compilers.gcc.c   - C compiler
+#   native.compilers.gcc.cpp - C++ compiler
 #
 {
   pkgs,
@@ -9,7 +11,7 @@
 }:
 
 let
-  # Helper to create a GCC compiler for a specific version
+  # Helper to create GCC language configs for a specific version
   mkGCC =
     {
       gccPackage,
@@ -17,42 +19,8 @@ let
     }:
     let
       gcc = gccPackage;
-    in
-    mkCompiler {
-      inherit name;
-      cc = "${gcc}/bin/gcc";
-      cxx = "${gcc}/bin/g++";
-      version = gcc.version;
 
-      capabilities = {
-        lto = {
-          thin = false;
-          full = true;
-        }; # GCC doesn't have thin LTO
-        sanitizers = [
-          "address"
-          "thread"
-          "undefined"
-          "leak"
-          "memory"
-        ];
-        coverage = true;
-        modules = false; # GCC modules support is experimental
-        pch = true;
-        colorDiagnostics = true;
-      };
-
-      flagTranslators = gccFlagTranslators;
-
-      defaultCFlags = [ ];
-      defaultCxxFlags = [
-        "-std=c++20"
-        "-fdiagnostics-color=always"
-        "-Wall"
-        "-Wextra"
-      ];
-
-      runtimeInputs = [
+      sharedRuntimeInputs = [
         gcc
         pkgs.binutils
         pkgs.coreutils
@@ -61,20 +29,70 @@ let
         pkgs.gawk
       ];
 
-      environment = { };
-
+      capabilities = {
+        lto = {
+          thin = false;
+          full = true;
+        };
+        sanitizers = [
+          "address"
+          "thread"
+          "undefined"
+          "leak"
+          "memory"
+        ];
+        coverage = true;
+        modules = false;
+        pch = true;
+        colorDiagnostics = true;
+      };
+    in
+    {
+      inherit name;
+      version = gcc.version;
       package = gcc;
 
-      # Path to C++ runtime library (for rpath on Linux)
-      cxxRuntimeLibPath = "${gcc.cc.lib}/lib";
+      # Language configs
+      c = {
+        name = "${name}-c";
+        language = "c";
+        compiler = "${gcc}/bin/gcc";
+        defaultFlags = [ ];
+        runtimeInputs = sharedRuntimeInputs;
+        environment = { };
+        inherit capabilities;
+        flagTranslators = gccFlagTranslators;
+      };
+
+      cpp = {
+        name = "${name}-cpp";
+        language = "cpp";
+        compiler = "${gcc}/bin/g++";
+        defaultFlags = [
+          "-std=c++20"
+          "-fdiagnostics-color=always"
+          "-Wall"
+          "-Wextra"
+        ];
+        runtimeInputs = sharedRuntimeInputs;
+        environment = { };
+        inherit capabilities;
+        flagTranslators = gccFlagTranslators;
+        cxxRuntimeLibPath = "${gcc.cc.lib}/lib";
+      };
+
+      # Bintools for this compiler
+      bintools = {
+        ar = "${pkgs.binutils}/bin/ar";
+        ranlib = "${pkgs.binutils}/bin/ranlib";
+        nm = "${pkgs.binutils}/bin/nm";
+        objcopy = "${pkgs.binutils}/bin/objcopy";
+        strip = "${pkgs.binutils}/bin/strip";
+      };
     };
 
 in
 rec {
-  # ==========================================================================
-  # GCC Compiler Variants
-  # ==========================================================================
-
   # GCC 13
   gcc13 = mkGCC { gccPackage = pkgs.gcc13; };
 
@@ -86,16 +104,4 @@ rec {
 
   # Default GCC (13)
   gcc = gcc13;
-
-  # ==========================================================================
-  # Helper: Get bintools for GCC
-  # ==========================================================================
-
-  getBintools = compiler: {
-    ar = "${pkgs.binutils}/bin/ar";
-    ranlib = "${pkgs.binutils}/bin/ranlib";
-    nm = "${pkgs.binutils}/bin/nm";
-    objcopy = "${pkgs.binutils}/bin/objcopy";
-    strip = "${pkgs.binutils}/bin/strip";
-  };
 }
