@@ -200,10 +200,40 @@ rec {
 
       # Header and source overrides from tools
       headerOverrides = toolInfo.headerOverrides;
-      sourceOverrides = toolInfo.sourceOverrides;
 
       # All sources (user + tool-generated)
       allSources = sources ++ toolInfo.sources;
+
+      # Normalize sources to translation units
+      tus = normalizeSources {
+        inherit root;
+        sources = allSources;
+      };
+
+      # Build source overrides: combine tool overrides with derivation sources
+      # Derivation sources have store paths that point outside the root
+      rootPath = sanitizePath { path = root; name = "scanner-root-check"; };
+      rootStr = builtins.toString rootPath;
+
+      # Extract derivation source overrides from translation units
+      # A TU is a derivation source if its store path doesn't start with the root
+      derivationSourceOverrides = builtins.listToAttrs (
+        lib.filter (x: x != null) (
+          map (tu:
+            let
+              storeStr = builtins.toString tu.store;
+            in
+            # If the store path doesn't start with the root path, it's a derivation source
+            if !(lib.hasPrefix rootStr storeStr) then
+              { name = tu.relNorm; value = tu.store; }
+            else
+              null
+          ) tus
+        )
+      );
+
+      # Merge tool source overrides with derivation source overrides
+      sourceOverrides = toolInfo.sourceOverrides // derivationSourceOverrides;
 
       # Generate override lines for shell script
       headerOverrideLines = map (name: "${name}=${headerOverrides.${name}}") (
@@ -213,12 +243,6 @@ rec {
       sourceOverrideLines = map (name: "${name}=${sourceOverrides.${name}}") (
         builtins.attrNames sourceOverrides
       );
-
-      # Normalize sources to translation units
-      tus = normalizeSources {
-        inherit root;
-        sources = allSources;
-      };
 
       # Build include flags
       includeFlags = map (

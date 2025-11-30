@@ -112,7 +112,7 @@ rec {
         ;
 
       # Public interface for consumers
-      publicIncludeDirs = args.publicIncludeDirs or args.includeDirs or [ ];
+      publicIncludeDirs = args.publicIncludeDirs or [ ];
       publicDefines = args.publicDefines or [ ];
       publicCxxFlags = args.publicCxxFlags or [ ];
 
@@ -248,7 +248,7 @@ rec {
       targetPlatform = toolchain.targetPlatform;
 
       # Public interface for consumers
-      publicIncludeDirs = args.publicIncludeDirs or args.includeDirs or [ ];
+      publicIncludeDirs = args.publicIncludeDirs or [ ];
       publicDefines = args.publicDefines or [ ];
       publicCxxFlags = args.publicCxxFlags or [ ];
 
@@ -343,7 +343,7 @@ rec {
       defines ? [ ],
       cxxFlags ? [ ],
       libraries ? [ ],
-      publicIncludeDirs ? includeDirs,
+      publicIncludeDirs ? [ ],
       publicDefines ? [ ],
       publicCxxFlags ? [ ],
       tools ? [ ],
