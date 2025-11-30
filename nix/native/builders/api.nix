@@ -107,8 +107,6 @@ let
   #   defines      - Preprocessor defines
   #   flags        - Abstract flags (lto, sanitizers, etc.)
   #   compileFlags - Raw compile flags (all languages)
-  #   cFlags       - Raw compile flags (C only)
-  #   cppFlags     - Raw compile flags (C++ only)
   #   langFlags    - Per-language raw flags { c = [...]; cpp = [...]; }
   #   ldflags      - Additional linker flags
   #   libraries    - Library dependencies
@@ -126,10 +124,6 @@ let
   # Build a static library (.a)
   #
   # Additional arguments (in addition to executable args):
-  #   compileFlags      - Raw compile flags (all languages)
-  #   cFlags            - Raw compile flags (C only)
-  #   cppFlags          - Raw compile flags (C++ only)
-  #   langFlags         - Per-language raw flags { c = [...]; cpp = [...]; }
   #   publicIncludeDirs - Headers to expose to consumers
   #   publicDefines     - Defines to propagate to consumers
   #   publicCxxFlags    - C++ flags to propagate to consumers

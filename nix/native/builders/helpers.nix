@@ -45,8 +45,6 @@ rec {
   #   defines      - Preprocessor defines
   #   flags        - Abstract flags (lto, sanitizers, etc.)
   #   compileFlags - Raw compile flags (all languages)
-  #   cFlags       - Raw compile flags (C only)
-  #   cppFlags     - Raw compile flags (C++ only)
   #   langFlags    - Per-language raw flags { c = [...]; cpp = [...]; }
   #   ldflags      - Additional linker flags
   #   libraries    - Library dependencies
@@ -57,16 +55,7 @@ rec {
   mkExecutable =
     args:
     let
-      # Build langFlags from convenience params
-      cFlags = args.cFlags or [ ];
-      cppFlags = args.cppFlags or [ ];
-      userLangFlags = args.langFlags or { };
-      langFlags = {
-        c = (userLangFlags.c or [ ]) ++ cFlags;
-        cpp = (userLangFlags.cpp or [ ]) ++ cppFlags;
-      } // (builtins.removeAttrs userLangFlags [ "c" "cpp" ]);
-
-      ctx = mkBuildContext (args // { inherit langFlags; });
+      ctx = mkBuildContext args;
       inherit (ctx)
         toolchain
         name
@@ -106,8 +95,6 @@ rec {
   #
   # Additional arguments:
   #   compileFlags      - Raw compile flags (all languages)
-  #   cFlags            - Raw compile flags (C only)
-  #   cppFlags          - Raw compile flags (C++ only)
   #   langFlags         - Per-language raw flags { c = [...]; cpp = [...]; }
   #   publicIncludeDirs - Headers to expose to consumers
   #   publicDefines     - Defines to propagate to consumers
@@ -116,16 +103,7 @@ rec {
   mkStaticLib =
     args:
     let
-      # Build langFlags from convenience params
-      cFlags = args.cFlags or [ ];
-      cppFlags = args.cppFlags or [ ];
-      userLangFlags = args.langFlags or { };
-      langFlags = {
-        c = (userLangFlags.c or [ ]) ++ cFlags;
-        cpp = (userLangFlags.cpp or [ ]) ++ cppFlags;
-      } // (builtins.removeAttrs userLangFlags [ "c" "cpp" ]);
-
-      ctx = mkBuildContext (args // { inherit langFlags; });
+      ctx = mkBuildContext args;
       inherit (ctx)
         toolchain
         name
@@ -254,24 +232,13 @@ rec {
   #
   # Arguments:
   #   compileFlags - Raw compile flags (all languages)
-  #   cFlags       - Raw compile flags (C only)
-  #   cppFlags     - Raw compile flags (C++ only)
   #   langFlags    - Per-language raw flags { c = [...]; cpp = [...]; }
   #   ldflags      - Additional linker flags
   #
   mkSharedLib =
     args:
     let
-      # Build langFlags from convenience params
-      cFlags = args.cFlags or [ ];
-      cppFlags = args.cppFlags or [ ];
-      userLangFlags = args.langFlags or { };
-      langFlags = {
-        c = (userLangFlags.c or [ ]) ++ cFlags;
-        cpp = (userLangFlags.cpp or [ ]) ++ cppFlags;
-      } // (builtins.removeAttrs userLangFlags [ "c" "cpp" ]);
-
-      ctx = mkBuildContext (args // { inherit langFlags; });
+      ctx = mkBuildContext args;
       inherit (ctx)
         toolchain
         name
