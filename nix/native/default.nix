@@ -74,6 +74,10 @@ let
     inherit (compilerCore) mkCompiler gccFlagTranslators;
   };
 
+  rustCompilers = import ./compilers/rustc.nix {
+    inherit pkgs lib;
+  };
+
   # ==========================================================================
   # Linker Implementations
   # ==========================================================================
@@ -152,7 +156,7 @@ let
   # ==========================================================================
 
   compilers = {
-    # Clang variants
+    # Clang variants (each has .c, .cpp, .bintools)
     inherit (clangCompilers)
       clang
       clang17
@@ -160,12 +164,18 @@ let
       clang19
       ;
 
-    # GCC variants
+    # GCC variants (each has .c, .cpp, .bintools)
     inherit (gccCompilers)
       gcc
       gcc12
       gcc13
       gcc14
+      ;
+
+    # Rust compiler (has .rust)
+    inherit (rustCompilers)
+      rustc
+      mkRustc
       ;
   };
 
@@ -224,42 +234,49 @@ let
   # Toolchain Factory
   # ==========================================================================
 
-  # Create a toolchain from compiler + linker
+  # Create a toolchain from languages map + linker
+  #
+  # Usage:
+  #   mkToolchain {
+  #     languages = {
+  #       c = native.compilers.clang.c;
+  #       cpp = native.compilers.clang.cpp;
+  #     };
+  #     linker = native.linkers.lld;
+  #     bintools = native.compilers.clang.bintools;
+  #   }
+  #
   mkToolchain =
     {
-      compiler,
+      languages,
       linker ? null,
+      bintools ? null,
       ...
     }@args:
     let
       # Use default linker if not specified
       resolvedLinker = if linker != null then linker else linkers.default;
 
-      # Determine which getBintools helper to use based on compiler name
-      bintools =
-        if lib.hasPrefix "gcc" compiler.name then
-          gccCompilers.getBintools compiler
+      # Try to infer bintools from the first language's parent compiler
+      # (users can override by passing bintools explicitly)
+      inferredBintools =
+        if bintools != null then bintools
         else
-          clangCompilers.getBintools compiler; # Default to clang bintools
+          # Default to clang bintools
+          clangCompilers.clang.bintools;
 
       targetPlatform = pkgs.stdenv.targetPlatform;
     in
     toolchainCore.mkToolchain (
       {
-        name = toolchainCore.makeToolchainName compiler resolvedLinker;
-        inherit compiler targetPlatform;
+        inherit languages targetPlatform;
         linker = resolvedLinker;
-        inherit (bintools)
-          ar
-          ranlib
-          nm
-          objcopy
-          strip
-          ;
+        bintools = inferredBintools;
       }
       // (builtins.removeAttrs args [
-        "compiler"
+        "languages"
         "linker"
+        "bintools"
       ])
     );
 
@@ -274,16 +291,24 @@ let
 
     # Clang + LLD (Linux default)
     clang-lld = mkToolchain {
-      compiler = compilers.clang;
+      languages = {
+        c = compilers.clang.c;
+        cpp = compilers.clang.cpp;
+      };
       linker = linkers.lld;
+      bintools = compilers.clang.bintools;
     };
 
     # Clang + Mold (fast linking on Linux)
     clang-mold =
       if moldLinkers.isAvailable then
         mkToolchain {
-          compiler = compilers.clang;
+          languages = {
+            c = compilers.clang.c;
+            cpp = compilers.clang.cpp;
+          };
           linker = linkers.mold;
+          bintools = compilers.clang.bintools;
         }
       else
         null;
@@ -292,8 +317,12 @@ let
     clang-gold =
       if goldLinkers.isAvailable then
         mkToolchain {
-          compiler = compilers.clang;
+          languages = {
+            c = compilers.clang.c;
+            cpp = compilers.clang.cpp;
+          };
           linker = linkers.gold;
+          bintools = compilers.clang.bintools;
         }
       else
         null;
@@ -302,8 +331,12 @@ let
     clang-darwin =
       if darwinLinkers.isAvailable then
         mkToolchain {
-          compiler = compilers.clang;
+          languages = {
+            c = compilers.clang.c;
+            cpp = compilers.clang.cpp;
+          };
           linker = linkers.darwinLd;
+          bintools = compilers.clang.bintools;
         }
       else
         null;
@@ -316,8 +349,12 @@ let
     gcc-mold =
       if moldLinkers.isAvailable && compilers.gcc != null then
         mkToolchain {
-          compiler = compilers.gcc;
+          languages = {
+            c = compilers.gcc.c;
+            cpp = compilers.gcc.cpp;
+          };
           linker = linkers.mold;
+          bintools = compilers.gcc.bintools;
         }
       else
         null;
@@ -326,8 +363,12 @@ let
     gcc-gold =
       if goldLinkers.isAvailable && compilers.gcc != null then
         mkToolchain {
-          compiler = compilers.gcc;
+          languages = {
+            c = compilers.gcc.c;
+            cpp = compilers.gcc.cpp;
+          };
           linker = linkers.gold;
+          bintools = compilers.gcc.bintools;
         }
       else
         null;
@@ -336,8 +377,12 @@ let
     gcc-ld =
       if gnuLdLinkers.isAvailable && compilers.gcc != null then
         mkToolchain {
-          compiler = compilers.gcc;
+          languages = {
+            c = compilers.gcc.c;
+            cpp = compilers.gcc.cpp;
+          };
           linker = linkers.ld;
+          bintools = compilers.gcc.bintools;
         }
       else
         null;
@@ -346,8 +391,12 @@ let
     gcc-lld =
       if compilers.gcc != null then
         mkToolchain {
-          compiler = compilers.gcc;
+          languages = {
+            c = compilers.gcc.c;
+            cpp = compilers.gcc.cpp;
+          };
           linker = linkers.lld;
+          bintools = compilers.gcc.bintools;
         }
       else
         null;
@@ -405,6 +454,12 @@ let
       mkToolchain
       helpers
       ;
+  };
+
+  # Rust builders
+  rustBuilders = import ./builders/rust.nix {
+    inherit pkgs lib utils;
+    platform = platformUtils;
   };
 
 in
@@ -501,6 +556,15 @@ in
     mkArchive
     ;
   inherit (helpers) mkDevShell mkTest;
+
+  # Rust builders
+  inherit (rustBuilders)
+    mkRustCrate
+    mkRustExecutable
+    mkRustLib
+    mkRustStaticLib
+    mkRustDylib
+    ;
 
   # Lower-level builders
   inherit (context) mkBuildContext;

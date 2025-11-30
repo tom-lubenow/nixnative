@@ -110,8 +110,12 @@ let
 
   lowLevelCustom = native.mkExecutable {
     toolchain = native.mkToolchain {
-      compiler = native.compilers.clang;
+      languages = {
+        c = native.compilers.clang.c;
+        cpp = native.compilers.clang.cpp;
+      };
       linker = native.linkers.lld;
+      bintools = native.compilers.clang.bintools;
     };
     name = "demo-lowlevel-custom";
     inherit root sources;

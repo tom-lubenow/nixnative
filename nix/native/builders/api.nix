@@ -25,18 +25,19 @@ let
   # Resolvers
   # ==========================================================================
 
-  # Resolve a compiler specification to a compiler object
-  # Accepts: string name ("clang", "gcc") or compiler object
+  # Resolve a compiler specification to a compiler family object
+  # Accepts: string name ("clang", "gcc") or compiler family object
+  # Returns: compiler family with .c, .cpp, .bintools
   resolveCompiler =
     spec:
     if spec == null then
       compilers.clang
     else if builtins.isString spec then
       compilers.${spec} or (throw "Unknown compiler: '${spec}'. Available: clang, gcc")
-    else if builtins.isAttrs spec && spec ? cc then
-      spec # Already a compiler object
+    else if builtins.isAttrs spec && spec ? c && spec ? cpp then
+      spec # Already a compiler family object
     else
-      throw "compiler must be a string name (e.g., \"clang\") or a compiler object";
+      throw "compiler must be a string name (e.g., \"clang\") or a compiler family object";
 
   # Resolve a linker specification to a linker object
   # Accepts: string name ("lld", "mold", "gold", "ld") or linker object or null
@@ -50,17 +51,6 @@ let
       spec # Already a linker object
     else
       throw "linker must be a string name (e.g., \"lld\") or a linker object";
-
-  # Resolve a toolchain specification
-  # Accepts: string name ("clang-lld", "gcc-mold") or toolchain object
-  resolveToolchain =
-    spec: toolchains:
-    if builtins.isString spec then
-      toolchains.${spec} or (throw "Unknown toolchain: '${spec}'")
-    else if builtins.isAttrs spec && spec ? compiler && spec ? linker then
-      spec # Already a toolchain object
-    else
-      throw "toolchain must be a string name or toolchain object";
 
   # ==========================================================================
   # Argument Processing
@@ -79,10 +69,17 @@ let
     else
       # Build toolchain from compiler/linker
       let
-        compiler = resolveCompiler (args.compiler or null);
+        compilerFamily = resolveCompiler (args.compiler or null);
         linker = resolveLinker (args.linker or null);
       in
-      mkToolchain { inherit compiler linker; };
+      mkToolchain {
+        languages = {
+          c = compilerFamily.c;
+          cpp = compilerFamily.cpp;
+        };
+        inherit linker;
+        bintools = compilerFamily.bintools;
+      };
 
   # Remove our special params from args before passing to mk* functions
   cleanArgs =
@@ -100,7 +97,7 @@ let
   # Build an executable
   #
   # Arguments:
-  #   compiler     - (optional) "clang", "gcc", or compiler object
+  #   compiler     - (optional) "clang", "gcc", or compiler family object
   #   linker       - (optional) "lld", "mold", "gold", "ld", or linker object
   #   toolchain    - (optional) Pre-built toolchain (overrides compiler/linker)
   #   name         - Target name

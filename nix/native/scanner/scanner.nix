@@ -242,8 +242,8 @@ rec {
       scannerScript = ''
         srcFile="$1"
         depfile="$TMP/$(echo "$srcFile" | tr '/' '_').d"
-        if ! ${tc.getCXX} \
-            ${concatStringsSep " " (tc.getDefaultCxxFlags)} \
+        if ! ${tc.getCompilerForLanguage "cpp"} \
+            ${concatStringsSep " " (tc.getDefaultFlagsForLanguage "cpp")} \
             ${concatStringsSep " " (tc.getPlatformCompileFlags)} \
             ${concatStringsSep " " combinedExtraFlags} \
             ${concatStringsSep " " includeFlags} \

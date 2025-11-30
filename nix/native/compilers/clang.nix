@@ -1,6 +1,8 @@
 # Clang compiler implementation for nixnative
 #
-# Provides clang variants using the mkCompiler factory.
+# Exports language configs for use in toolchains:
+#   native.compilers.clang.c   - C compiler
+#   native.compilers.clang.cpp - C++ compiler
 #
 {
   pkgs,
@@ -9,7 +11,7 @@
 }:
 
 let
-  # Helper to create a clang compiler for a specific LLVM version
+  # Helper to create clang language configs for a specific LLVM version
   mkClang =
     {
       llvmPackages,
@@ -17,12 +19,16 @@ let
     }:
     let
       llvm = llvmPackages;
-    in
-    mkCompiler {
-      inherit name;
-      cc = "${llvm.clang}/bin/clang";
-      cxx = "${llvm.clang}/bin/clang++";
-      version = llvm.release_version;
+
+      sharedRuntimeInputs = [
+        llvm.clang
+        llvm.lld
+        llvm.bintools
+        pkgs.coreutils
+        pkgs.findutils
+        pkgs.gnused
+        pkgs.gawk
+      ];
 
       capabilities = {
         lto = {
@@ -37,49 +43,60 @@ let
           "memory"
         ];
         coverage = true;
-        modules = false; # C++20 modules still experimental
+        modules = false;
         pch = true;
         colorDiagnostics = true;
       };
 
       flagTranslators = commonFlagTranslators // {
-        # Clang-specific overrides if needed
         colorDiagnostics =
           flag: if flag.value then [ "-fcolor-diagnostics" ] else [ "-fno-color-diagnostics" ];
       };
-
-      defaultCFlags = [ ];
-      defaultCxxFlags = [
-        "-std=c++20"
-        "-fdiagnostics-color"
-        "-Wall"
-        "-Wextra"
-      ];
-
-      runtimeInputs = [
-        llvm.clang
-        llvm.lld
-        llvm.bintools
-        pkgs.coreutils
-        pkgs.findutils
-        pkgs.gnused
-        pkgs.gawk
-      ];
-
-      environment = { };
-
+    in
+    {
+      inherit name;
+      version = llvm.release_version;
       package = llvm.clang;
 
-      # Path to C++ runtime library (for rpath on Linux)
-      cxxRuntimeLibPath = "${pkgs.stdenv.cc.cc.lib}/lib";
+      # Language configs
+      c = {
+        name = "${name}-c";
+        language = "c";
+        compiler = "${llvm.clang}/bin/clang";
+        defaultFlags = [ ];
+        runtimeInputs = sharedRuntimeInputs;
+        environment = { };
+        inherit capabilities flagTranslators;
+      };
+
+      cpp = {
+        name = "${name}-cpp";
+        language = "cpp";
+        compiler = "${llvm.clang}/bin/clang++";
+        defaultFlags = [
+          "-std=c++20"
+          "-fdiagnostics-color"
+          "-Wall"
+          "-Wextra"
+        ];
+        runtimeInputs = sharedRuntimeInputs;
+        environment = { };
+        inherit capabilities flagTranslators;
+        cxxRuntimeLibPath = "${pkgs.stdenv.cc.cc.lib}/lib";
+      };
+
+      # Bintools for this compiler
+      bintools = {
+        ar = "${llvm.bintools}/bin/ar";
+        ranlib = "${llvm.bintools}/bin/ranlib";
+        nm = "${llvm.bintools}/bin/nm";
+        objcopy = "${llvm.bintools}/bin/objcopy";
+        strip = "${llvm.bintools}/bin/strip";
+      };
     };
 
 in
 rec {
-  # ==========================================================================
-  # Clang Compiler Variants
-  # ==========================================================================
-
   # LLVM 18 (recommended)
   clang18 = mkClang { llvmPackages = pkgs.llvmPackages_18; };
 
@@ -91,25 +108,4 @@ rec {
 
   # Default clang (18)
   clang = clang18;
-
-  # ==========================================================================
-  # Helper: Get bintools for a clang version
-  # ==========================================================================
-
-  getBintools =
-    compiler:
-    let
-      # Extract LLVM version from compiler name
-      versionMatch = builtins.match "clang([0-9]+)" compiler.name;
-      version = if versionMatch != null then builtins.head versionMatch else "18";
-      llvmPkgs = pkgs."llvmPackages_${version}" or pkgs.llvmPackages_18;
-    in
-    {
-      ar = "${llvmPkgs.bintools}/bin/ar";
-      ranlib = "${llvmPkgs.bintools}/bin/ranlib";
-      nm = "${llvmPkgs.bintools}/bin/nm";
-      objcopy = "${llvmPkgs.bintools}/bin/objcopy";
-      strip = "${llvmPkgs.bintools}/bin/strip";
-    };
-
 }

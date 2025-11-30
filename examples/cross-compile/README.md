@@ -177,7 +177,11 @@ nixnative aims to provide:
 1. **Seamless cross-toolchain selection**:
    ```nix
    native.mkToolchain {
-     compiler = native.compilers.clang;
+     languages = {
+       c = native.compilers.clang.c;
+       cpp = native.compilers.clang.cpp;
+     };
+     linker = native.linkers.lld;
      target = "aarch64-linux-gnu";
    };
    ```

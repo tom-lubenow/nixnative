@@ -161,6 +161,19 @@ let
   pythonExtensionChecks = import ./python-extension/checks.nix { inherit pkgs native; packages = pythonExtensionPackagesRaw; };
   pythonExtensionPackages = materializeSet pythonExtensionPackagesRaw;
 
+  rustNativePackagesRaw = import ./rust-native/project.nix { inherit pkgs native; };
+  rustNativeChecks = import ./rust-native/checks.nix { inherit pkgs native; };
+  rustNativePackages = {
+    rustNativeExample = materialize rustNativePackagesRaw.app;
+    rustNativeLib = materialize rustNativePackagesRaw.mylib;
+  };
+
+  mixedCCppRustPackagesRaw = import ./mixed-c-cpp-rust/project.nix { inherit pkgs native; };
+  mixedCCppRustChecks = import ./mixed-c-cpp-rust/checks.nix { inherit pkgs native; };
+  mixedCCppRustPackages = {
+    mixedCCppRustExample = materialize mixedCCppRustPackagesRaw.app;
+  };
+
   # ===========================================================================
   # Cross-Compilation
   # ===========================================================================
@@ -201,6 +214,8 @@ in {
     rustCranePackages
     interopPackages
     pythonExtensionPackages
+    rustNativePackages
+    mixedCCppRustPackages
     # Cross-Compilation
     crossCompilePackages
   ];
@@ -236,6 +251,8 @@ in {
     rustCraneChecks
     interopChecks
     pythonExtensionChecks
+    rustNativeChecks
+    mixedCCppRustChecks
     # Cross-Compilation
     crossCompileChecks
   ];

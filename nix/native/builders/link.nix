@@ -70,7 +70,7 @@ rec {
 
       # Combine all C++ flags
       allCxxFlags =
-        tc.getDefaultCxxFlags ++ tc.getPlatformCompileFlags ++ translatedFlags ++ extraCxxFlags;
+        (tc.getDefaultFlagsForLanguage "cpp") ++ tc.getPlatformCompileFlags ++ translatedFlags ++ extraCxxFlags;
     in
     pkgs.runCommand name
       (
@@ -85,7 +85,7 @@ rec {
         unset NIX_CFLAGS_COMPILE NIX_CFLAGS_COMPILE_FOR_TARGET
         unset NIX_LDFLAGS NIX_LDFLAGS_FOR_TARGET
         mkdir -p "$out/${outputDir}"
-        ${tc.getCXX} \
+        ${tc.getCompilerForLanguage "cpp"} \
           ${concatStringsSep " " extraFlags} \
           ${concatStringsSep " " linkerDriverFlag} \
           ${concatStringsSep " " allCxxFlags} \

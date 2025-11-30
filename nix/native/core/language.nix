@@ -32,6 +32,11 @@ rec {
     extensions = [ ".cc" ".cpp" ".cxx" ".C" ];
   };
 
+  rust = {
+    name = "rust";
+    extensions = [ ".rs" ];
+  };
+
   # Future languages can be added here:
   # objc = {
   #   name = "objc";
@@ -41,11 +46,6 @@ rec {
   # objcpp = {
   #   name = "objcpp";
   #   extensions = [ ".mm" ];
-  # };
-  #
-  # rust = {
-  #   name = "rust";
-  #   extensions = [ ".rs" ];
   # };
   #
   # zig = {
@@ -63,7 +63,7 @@ rec {
   # ==========================================================================
 
   # All known languages
-  all = [ c cpp ];
+  all = [ c cpp rust ];
 
   # ==========================================================================
   # Language Detection
