@@ -155,6 +155,11 @@ rec {
 
   # Scan sources for header dependencies using -MMD
   #
+  # NOTE: Currently uses C++ compiler for all files. This works because
+  # we're only parsing headers (-fsyntax-only), not generating code.
+  # For most projects this is fine. Future enhancement: per-file language
+  # detection for scanning.
+  #
   mkDependencyScanner =
     {
       name ? "deps",
@@ -162,7 +167,7 @@ rec {
       sources,
       toolchain,
       includeDirs ? [ ],
-      cxxFlags ? [ ],
+      extraFlags ? [ ],
       defines ? [ ],
       extraInputs ? [ ],
       libraries ? [ ],
@@ -184,8 +189,8 @@ rec {
       # Combine all defines
       combinedDefines = defines ++ toolInfo.defines ++ publicAggregate.defines;
 
-      # Combine all C++ flags
-      combinedCxxFlags = cxxFlags ++ toolInfo.cxxFlags ++ publicAggregate.cxxFlags;
+      # Combine all extra flags (applied during scanning)
+      combinedExtraFlags = extraFlags ++ toolInfo.cxxFlags ++ publicAggregate.cxxFlags;
 
       # Collect tool inputs
       toolInputs = toolInfo.evalInputs;
@@ -233,13 +238,14 @@ rec {
 
       # Parallel scanner script - scans one file at a time
       # Nix interpolates compiler/flags; shell expands $TMP, $1 at runtime
+      # NOTE: Uses C++ compiler for all files (see comment at mkDependencyScanner)
       scannerScript = ''
         srcFile="$1"
         depfile="$TMP/$(echo "$srcFile" | tr '/' '_').d"
         if ! ${tc.getCXX} \
             ${concatStringsSep " " (tc.getDefaultCxxFlags)} \
             ${concatStringsSep " " (tc.getPlatformCompileFlags)} \
-            ${concatStringsSep " " combinedCxxFlags} \
+            ${concatStringsSep " " combinedExtraFlags} \
             ${concatStringsSep " " includeFlags} \
             ${concatStringsSep " " defineFlags} \
             -MMD -MF "$depfile" -fsyntax-only "$srcFile" 2>"$depfile.err"; then

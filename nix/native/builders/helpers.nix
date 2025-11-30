@@ -44,7 +44,7 @@ rec {
   #   includeDirs  - Include directories
   #   defines      - Preprocessor defines
   #   flags        - Abstract flags (lto, sanitizers, etc.)
-  #   extraCxxFlags - Additional raw C++ flags
+  #   extraFlags   - Additional raw compiler flags
   #   ldflags      - Additional linker flags
   #   libraries    - Library dependencies
   #   tools        - Tool plugins
@@ -60,7 +60,7 @@ rec {
         name
         objectPaths
         flags
-        combinedExtraCxxFlags
+        combinedExtraFlags
         libraries
         libsEvalInputs
         ;
@@ -71,7 +71,7 @@ rec {
       drv = linkExecutable {
         inherit toolchain name flags;
         objects = objectPaths;
-        extraCxxFlags = combinedExtraCxxFlags;
+        extraCxxFlags = combinedExtraFlags;
         ldflags = args.ldflags or [ ];
         linkFlags = allLinkFlags;
         extraInputs = libsEvalInputs;
@@ -240,7 +240,7 @@ rec {
         publicAggregate
         objectPaths
         flags
-        combinedExtraCxxFlags
+        combinedExtraFlags
         libraries
         libsEvalInputs
         ;
@@ -274,7 +274,7 @@ rec {
       linkDrv = linkSharedLibrary {
         inherit toolchain name flags;
         objects = objectPaths;
-        extraCxxFlags = combinedExtraCxxFlags;
+        extraCxxFlags = combinedExtraFlags;
         ldflags = args.ldflags or [ ];
         linkFlags = allLinkFlags;
         extraInputs = libsEvalInputs;

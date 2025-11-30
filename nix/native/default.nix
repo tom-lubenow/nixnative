@@ -34,8 +34,10 @@ let
 
   platformUtils = import ./core/platform.nix { inherit lib; };
 
+  language = import ./core/language.nix { inherit lib; };
+
   toolchainCore = import ./core/toolchain.nix {
-    inherit lib flags;
+    inherit lib flags language;
     platform = platformUtils;
   };
 
@@ -424,6 +426,9 @@ in
 
   # Platform utilities
   platform = platformUtils;
+
+  # Language detection and registry
+  inherit language;
 
   # Assembled collections
   inherit
