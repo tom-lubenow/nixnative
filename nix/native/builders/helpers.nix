@@ -44,7 +44,10 @@ rec {
   #   includeDirs  - Include directories
   #   defines      - Preprocessor defines
   #   flags        - Abstract flags (lto, sanitizers, etc.)
-  #   extraFlags   - Additional raw compiler flags
+  #   compileFlags - Raw compile flags (all languages)
+  #   cFlags       - Raw compile flags (C only)
+  #   cppFlags     - Raw compile flags (C++ only)
+  #   langFlags    - Per-language raw flags { c = [...]; cpp = [...]; }
   #   ldflags      - Additional linker flags
   #   libraries    - Library dependencies
   #   tools        - Tool plugins
@@ -54,13 +57,21 @@ rec {
   mkExecutable =
     args:
     let
-      ctx = mkBuildContext args;
+      # Build langFlags from convenience params
+      cFlags = args.cFlags or [ ];
+      cppFlags = args.cppFlags or [ ];
+      userLangFlags = args.langFlags or { };
+      langFlags = {
+        c = (userLangFlags.c or [ ]) ++ cFlags;
+        cpp = (userLangFlags.cpp or [ ]) ++ cppFlags;
+      } // (builtins.removeAttrs userLangFlags [ "c" "cpp" ]);
+
+      ctx = mkBuildContext (args // { inherit langFlags; });
       inherit (ctx)
         toolchain
         name
         objectPaths
         flags
-        combinedExtraFlags
         libraries
         libsEvalInputs
         ;
@@ -71,7 +82,6 @@ rec {
       drv = linkExecutable {
         inherit toolchain name flags;
         objects = objectPaths;
-        extraCxxFlags = combinedExtraFlags;
         ldflags = args.ldflags or [ ];
         linkFlags = allLinkFlags;
         extraInputs = libsEvalInputs;
@@ -95,6 +105,10 @@ rec {
   # Use mkArchive if you need an actual .a archive file.
   #
   # Additional arguments:
+  #   compileFlags      - Raw compile flags (all languages)
+  #   cFlags            - Raw compile flags (C only)
+  #   cppFlags          - Raw compile flags (C++ only)
+  #   langFlags         - Per-language raw flags { c = [...]; cpp = [...]; }
   #   publicIncludeDirs - Headers to expose to consumers
   #   publicDefines     - Defines to propagate to consumers
   #   publicCxxFlags    - C++ flags to propagate to consumers
@@ -102,7 +116,16 @@ rec {
   mkStaticLib =
     args:
     let
-      ctx = mkBuildContext args;
+      # Build langFlags from convenience params
+      cFlags = args.cFlags or [ ];
+      cppFlags = args.cppFlags or [ ];
+      userLangFlags = args.langFlags or { };
+      langFlags = {
+        c = (userLangFlags.c or [ ]) ++ cFlags;
+        cpp = (userLangFlags.cpp or [ ]) ++ cppFlags;
+      } // (builtins.removeAttrs userLangFlags [ "c" "cpp" ]);
+
+      ctx = mkBuildContext (args // { inherit langFlags; });
       inherit (ctx)
         toolchain
         name
@@ -229,10 +252,26 @@ rec {
 
   # Build a shared library (.so) from C/C++ sources
   #
+  # Arguments:
+  #   compileFlags - Raw compile flags (all languages)
+  #   cFlags       - Raw compile flags (C only)
+  #   cppFlags     - Raw compile flags (C++ only)
+  #   langFlags    - Per-language raw flags { c = [...]; cpp = [...]; }
+  #   ldflags      - Additional linker flags
+  #
   mkSharedLib =
     args:
     let
-      ctx = mkBuildContext args;
+      # Build langFlags from convenience params
+      cFlags = args.cFlags or [ ];
+      cppFlags = args.cppFlags or [ ];
+      userLangFlags = args.langFlags or { };
+      langFlags = {
+        c = (userLangFlags.c or [ ]) ++ cFlags;
+        cpp = (userLangFlags.cpp or [ ]) ++ cppFlags;
+      } // (builtins.removeAttrs userLangFlags [ "c" "cpp" ]);
+
+      ctx = mkBuildContext (args // { inherit langFlags; });
       inherit (ctx)
         toolchain
         name
@@ -240,7 +279,6 @@ rec {
         publicAggregate
         objectPaths
         flags
-        combinedExtraFlags
         libraries
         libsEvalInputs
         ;
@@ -274,7 +312,6 @@ rec {
       linkDrv = linkSharedLibrary {
         inherit toolchain name flags;
         objects = objectPaths;
-        extraCxxFlags = combinedExtraFlags;
         ldflags = args.ldflags or [ ];
         linkFlags = allLinkFlags;
         extraInputs = libsEvalInputs;

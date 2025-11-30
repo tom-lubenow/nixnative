@@ -33,7 +33,8 @@ rec {
   #   includeDirs  - Include directories
   #   defines      - Preprocessor defines
   #   flags        - Abstract flags (from flags.nix)
-  #   extraFlags   - Additional raw compiler flags
+  #   compileFlags - Raw compile flags (all languages)
+  #   langFlags    - Per-language raw flags { c = [...]; cpp = [...]; }
   #   extraInputs  - Additional build inputs
   #
   compileTranslationUnit =
@@ -45,13 +46,15 @@ rec {
       includeDirs,
       defines,
       flags ? [ ], # Abstract flags
-      extraFlags ? [ ], # Raw flags (language-agnostic)
+      compileFlags ? [ ], # Raw flags (all languages)
+      langFlags ? { }, # Per-language raw flags
       extraInputs ? [ ],
     }:
     let
       tc = toolchain;
 
       # Detect language and get appropriate compiler/flags
+      langName = tc.getLanguageNameForFile tu.relNorm;
       compiler = tc.getCompilerForFile tu.relNorm;
       languageDefaultFlags = tc.getDefaultFlagsForFile tu.relNorm;
 
@@ -70,8 +73,11 @@ rec {
       # Platform-specific flags (e.g., -fPIC on Linux)
       platformFlags = tc.getPlatformCompileFlags;
 
+      # Per-language raw flags (lookup in map, default to empty)
+      perLangFlags = langFlags.${langName} or [ ];
+
       # Combine all flags
-      allFlags = languageDefaultFlags ++ platformFlags ++ translatedFlags ++ extraFlags;
+      allFlags = languageDefaultFlags ++ platformFlags ++ translatedFlags ++ compileFlags ++ perLangFlags;
 
       # Get linker driver flag (for LTO to work, linker must be specified at compile time too)
       linkerFlag = if tc.linker.driverFlag != "" then [ tc.linker.driverFlag ] else [ ];
@@ -126,7 +132,8 @@ rec {
       includeDirs,
       defines,
       flags ? [ ],
-      extraFlags ? [ ],
+      compileFlags ? [ ],
+      langFlags ? { },
     }:
     let
       tc = toolchain;
@@ -151,9 +158,11 @@ rec {
       # Generate entry for each translation unit with language-appropriate compiler/flags
       mkEntry = tu:
         let
+          langName = tc.getLanguageNameForFile tu.relNorm;
           compiler = tc.getCompilerForFile tu.relNorm;
           languageDefaultFlags = tc.getDefaultFlagsForFile tu.relNorm;
-          allFlags = languageDefaultFlags ++ platformFlags ++ translatedFlags ++ extraFlags;
+          perLangFlags = langFlags.${langName} or [ ];
+          allFlags = languageDefaultFlags ++ platformFlags ++ translatedFlags ++ compileFlags ++ perLangFlags;
         in
         {
           directory = builtins.toString root;

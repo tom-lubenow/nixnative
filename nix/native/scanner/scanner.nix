@@ -8,10 +8,11 @@
   lib,
   utils,
   manifest,
+  language,
 }:
 
 let
-  inherit (lib) concatStringsSep unique foldl';
+  inherit (lib) concatStringsSep unique foldl' groupBy;
   inherit (utils)
     sanitizePath
     toPathLike
@@ -25,6 +26,7 @@ let
     validatePublic
     ;
   inherit (manifest) mkManifest emptyManifest mergeManifests;
+  inherit (language) detectLanguageName;
 
 in
 rec {
@@ -260,27 +262,127 @@ rec {
       # Build define flags
       defineFlags = toDefineFlags combinedDefines;
 
-      # Parallel scanner script - scans one file at a time
-      # Nix interpolates compiler/flags; shell expands $TMP, $1 at runtime
-      # NOTE: Uses C++ compiler for all files (see comment at mkDependencyScanner)
-      scannerScript = ''
-        srcFile="$1"
-        depfile="$TMP/$(echo "$srcFile" | tr '/' '_').d"
-        if ! ${tc.getCompilerForLanguage "cpp"} \
-            ${concatStringsSep " " (tc.getDefaultFlagsForLanguage "cpp")} \
-            ${concatStringsSep " " (tc.getPlatformCompileFlags)} \
-            ${concatStringsSep " " combinedExtraFlags} \
-            ${concatStringsSep " " includeFlags} \
-            ${concatStringsSep " " defineFlags} \
-            -MMD -MF "$depfile" -fsyntax-only "$srcFile" 2>"$depfile.err"; then
-          echo "$srcFile" >> "$TMP/failed"
-        fi
-      '';
+      # Common flags for all languages
+      commonFlags = concatStringsSep " " (
+        tc.getPlatformCompileFlags
+        ++ combinedExtraFlags
+        ++ includeFlags
+        ++ defineFlags
+      );
+
+      # Group translation units by language for per-language scanning
+      # Uses language detection based on file extension
+      tusByLang = groupBy (tu:
+        let
+          lang = language.detectLanguage tu.relNorm;
+        in
+        if lang == null then "unknown" else lang.name
+      ) tus;
+
+      # Get the list of languages we need to scan (that the toolchain supports)
+      supportedLangs = lib.filter (lang: tc.supportsLanguage lang) (builtins.attrNames tusByLang);
+
+      # For unsupported languages, fall back to C++ (maintains backward compat)
+      unsupportedLangs = lib.filter (lang: !(tc.supportsLanguage lang)) (builtins.attrNames tusByLang);
+
+      # Generate scanner script for a specific language
+      mkScannerScript = lang:
+        let
+          compiler = tc.getCompilerForLanguage lang;
+          defaultFlags = concatStringsSep " " (tc.getDefaultFlagsForLanguage lang);
+        in
+        ''
+          srcFile="$1"
+          depfile="$TMP/$(echo "$srcFile" | tr '/' '_').d"
+          if ! ${compiler} \
+              ${defaultFlags} \
+              ${commonFlags} \
+              -MMD -MF "$depfile" -fsyntax-only "$srcFile" 2>"$depfile.err"; then
+            echo "$srcFile" >> "$TMP/failed"
+          fi
+        '';
+
+      # Generate source list for a language
+      mkSourceList = lang:
+        let
+          langTus = tusByLang.${lang} or [];
+        in
+        concatStringsSep "\n" (map (tu: tu.relNorm) langTus) + "\n";
+
+      # Scanner scripts per language (only for supported languages)
+      scannerScripts = lib.listToAttrs (map (lang: {
+        name = lang;
+        value = mkScannerScript lang;
+      }) supportedLangs);
+
+      # Source lists per language
+      sourceLists = lib.listToAttrs (map (lang: {
+        name = lang;
+        value = mkSourceList lang;
+      }) supportedLangs);
+
+      # For unsupported languages, use C++ as fallback
+      fallbackLangs = unsupportedLangs;
+      fallbackScannerScript = if fallbackLangs != [] && tc.supportsLanguage "cpp"
+        then mkScannerScript "cpp"
+        else "";
+      fallbackSourceList = if fallbackLangs != []
+        then concatStringsSep "\n" (lib.concatMap (lang: map (tu: tu.relNorm) (tusByLang.${lang} or [])) fallbackLangs) + "\n"
+        else "";
 
       # Build inputs (include library packages so their store paths exist in sandbox)
       allExtraInputs = extraInputs ++ toolInputs ++ libraryInputs;
       buildInputs = tc.runtimeInputs ++ map toPathLike allExtraInputs;
       extraInputPaths = map toPathLike (extraInputs ++ toolInputs);
+
+      # Build passAsFile entries for all languages
+      langPassAsFile = lib.concatMap (lang: [
+        "sourceList_${lang}"
+        "scannerScript_${lang}"
+      ]) supportedLangs;
+
+      # Build env vars for all languages
+      langEnvVars = lib.listToAttrs (lib.concatMap (lang: [
+        { name = "sourceList_${lang}"; value = sourceLists.${lang}; }
+        { name = "scannerScript_${lang}"; value = scannerScripts.${lang}; }
+      ]) supportedLangs);
+
+      # Fallback env vars (for unknown language extensions)
+      fallbackEnvVars = if fallbackSourceList != "" then {
+        sourceList_fallback = fallbackSourceList;
+        scannerScript_fallback = fallbackScannerScript;
+      } else {};
+
+      fallbackPassAsFile = if fallbackSourceList != "" then [
+        "sourceList_fallback"
+        "scannerScript_fallback"
+      ] else [];
+
+      # Shell code to scan each language
+      # Note: We generate the variable names at Nix eval time so shell can reference them
+      scanCommands = concatStringsSep "\n" (map (lang:
+        let
+          srcListVar = "sourceList_${lang}Path";
+          scriptVar = "scannerScript_${lang}Path";
+        in ''
+        if [ -s "''$${srcListVar}" ]; then
+          cp "''$${scriptVar}" "$TMP/scan-${lang}.sh"
+          chmod +x "$TMP/scan-${lang}.sh"
+          xargs -P"$(nproc)" -a "''$${srcListVar}" -I{} bash "$TMP/scan-${lang}.sh" {}
+        fi
+      '') supportedLangs);
+
+      fallbackScanCommand = if fallbackSourceList != "" then ''
+        if [ -s "$sourceList_fallbackPath" ]; then
+          cp "$scannerScript_fallbackPath" "$TMP/scan-fallback.sh"
+          chmod +x "$TMP/scan-fallback.sh"
+          xargs -P"$(nproc)" -a "$sourceList_fallbackPath" -I{} bash "$TMP/scan-fallback.sh" {}
+        fi
+      '' else "";
+
+      # Full source list for the Python script (combines all languages)
+      fullSourceList = concatStringsSep "\n" (map (tu: tu.relNorm) tus) + "\n";
+
     in
     pkgs.runCommand "${name}.json"
       (
@@ -298,13 +400,11 @@ rec {
             path = root;
             name = "scanner-root";
           };
-          passAsFile = [
-            "sourceList"
-            "scannerScript"
-          ];
-          sourceList = concatStringsSep "\n" (map (tu: tu.relNorm) tus) + "\n";
-          inherit scannerScript;
+          passAsFile = [ "fullSourceList" ] ++ langPassAsFile ++ fallbackPassAsFile;
+          inherit fullSourceList;
         }
+        // langEnvVars
+        // fallbackEnvVars
         // tc.environment
       )
       ''
@@ -352,11 +452,9 @@ rec {
                 unset NIX_CFLAGS_COMPILE NIX_CFLAGS_COMPILE_FOR_TARGET
                 unset NIX_LDFLAGS NIX_LDFLAGS_FOR_TARGET
 
-                # Parallel scanning - uses all available cores
-                cp "$scannerScriptPath" "$TMP/scan-one.sh"
-                chmod +x "$TMP/scan-one.sh"
-
-                xargs -P"$(nproc)" -a "$sourceListPath" -I{} bash "$TMP/scan-one.sh" {}
+                # Scan each language with its appropriate compiler
+                ${scanCommands}
+                ${fallbackScanCommand}
 
                 # Report any failures with context
                 if [ -s "$TMP/failed" ]; then
@@ -370,7 +468,7 @@ rec {
                 fi
 
                 # Parse dependency files and generate manifest
-                ${pkgs.python3}/bin/python - "$TMP" "$sourceListPath" "$out" <<'PY'
+                ${pkgs.python3}/bin/python - "$TMP" "$fullSourceListPath" "$out" <<'PY'
         import json
         import os
         import pathlib

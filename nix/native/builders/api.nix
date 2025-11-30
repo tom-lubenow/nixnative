@@ -106,7 +106,10 @@ let
   #   includeDirs  - Include directories
   #   defines      - Preprocessor defines
   #   flags        - Abstract flags (lto, sanitizers, etc.)
-  #   extraFlags   - Additional raw compiler flags (applied to all languages)
+  #   compileFlags - Raw compile flags (all languages)
+  #   cFlags       - Raw compile flags (C only)
+  #   cppFlags     - Raw compile flags (C++ only)
+  #   langFlags    - Per-language raw flags { c = [...]; cpp = [...]; }
   #   ldflags      - Additional linker flags
   #   libraries    - Library dependencies
   #   tools        - Tool plugins (protobuf, jinja, etc.)
@@ -122,7 +125,11 @@ let
 
   # Build a static library (.a)
   #
-  # Additional arguments:
+  # Additional arguments (in addition to executable args):
+  #   compileFlags      - Raw compile flags (all languages)
+  #   cFlags            - Raw compile flags (C only)
+  #   cppFlags          - Raw compile flags (C++ only)
+  #   langFlags         - Per-language raw flags { c = [...]; cpp = [...]; }
   #   publicIncludeDirs - Headers to expose to consumers
   #   publicDefines     - Defines to propagate to consumers
   #   publicCxxFlags    - C++ flags to propagate to consumers
@@ -136,6 +143,9 @@ let
     helpers.mkStaticLib (cleanedArgs // { inherit toolchain; });
 
   # Build a shared library (.so/.dylib)
+  #
+  # Arguments same as staticLib, plus:
+  #   ldflags - Additional linker flags
   #
   sharedLib =
     args:

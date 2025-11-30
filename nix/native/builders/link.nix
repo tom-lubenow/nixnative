@@ -25,7 +25,6 @@ rec {
   #   name        - Output name
   #   objects     - List of object file paths
   #   flags       - Abstract flags (for LTO, etc.)
-  #   extraCxxFlags - Additional C++ flags passed to driver
   #   ldflags     - Additional linker flags
   #   linkFlags   - Library link flags (gets grouped on Linux)
   #   outputDir   - Output subdirectory (default: "bin")
@@ -38,7 +37,6 @@ rec {
       name,
       objects,
       flags ? [ ],
-      extraCxxFlags ? [ ],
       ldflags ? [ ],
       linkFlags ? [ ],
       outputDir ? "bin",
@@ -68,9 +66,10 @@ rec {
       # Combine all link flags
       finalLinkFlags = platformLinkerFlags ++ rpathFlags ++ ldflags ++ groupedLinkFlags;
 
-      # Combine all C++ flags
-      allCxxFlags =
-        (tc.getDefaultFlagsForLanguage "cpp") ++ tc.getPlatformCompileFlags ++ translatedFlags ++ extraCxxFlags;
+      # Driver flags for the link step (language defaults + translated abstract flags)
+      # Note: compile-only flags (cFlags, cppFlags, compileFlags) are NOT passed here
+      driverFlags =
+        (tc.getDefaultFlagsForLanguage "cpp") ++ tc.getPlatformCompileFlags ++ translatedFlags;
     in
     pkgs.runCommand name
       (
@@ -88,7 +87,7 @@ rec {
         ${tc.getCompilerForLanguage "cpp"} \
           ${concatStringsSep " " extraFlags} \
           ${concatStringsSep " " linkerDriverFlag} \
-          ${concatStringsSep " " allCxxFlags} \
+          ${concatStringsSep " " driverFlags} \
           ${concatStringsSep " " objects} \
           ${concatStringsSep " " finalLinkFlags} \
           -o "$out/${outputDir}/${outputName}"
@@ -104,7 +103,6 @@ rec {
       name,
       objects,
       flags ? [ ],
-      extraCxxFlags ? [ ],
       ldflags ? [ ],
       linkFlags ? [ ],
       extraInputs ? [ ],
@@ -115,7 +113,6 @@ rec {
         name
         objects
         flags
-        extraCxxFlags
         ldflags
         linkFlags
         extraInputs
@@ -133,7 +130,6 @@ rec {
       name,
       objects,
       flags ? [ ],
-      extraCxxFlags ? [ ],
       ldflags ? [ ],
       linkFlags ? [ ],
       extraInputs ? [ ],
@@ -148,7 +144,6 @@ rec {
         toolchain
         objects
         flags
-        extraCxxFlags
         ldflags
         linkFlags
         extraInputs

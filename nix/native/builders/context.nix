@@ -52,7 +52,8 @@ rec {
   #   includeDirs  - Include directories
   #   defines      - Preprocessor defines
   #   flags        - Abstract flags (lto, sanitizers, etc.)
-  #   extraFlags   - Additional raw compiler flags (applied to all languages)
+  #   compileFlags - Raw compile-only flags (all languages)
+  #   langFlags    - Per-language raw flags { c = [...]; cpp = [...]; }
   #   libraries    - Library dependencies
   #   tools        - Tool plugins (protobuf, jinja, etc.)
   #   depsManifest - Pre-computed dependency manifest
@@ -67,7 +68,8 @@ rec {
       includeDirs ? [ ],
       defines ? [ ],
       flags ? [ ], # Abstract flags from flags.nix
-      extraFlags ? [ ], # Raw compiler flags (applied to all languages)
+      compileFlags ? [ ], # Raw compile-only flags (all languages)
+      langFlags ? { }, # Per-language raw flags
       libraries ? [ ],
       tools ? [ ], # Tool plugins (replaces generators)
       depsManifest ? null,
@@ -111,8 +113,11 @@ rec {
       # Combine defines
       combinedDefines = defines ++ publicAggregate.defines ++ toolInfo.defines;
 
-      # Combine raw compiler flags (cxxFlags from public interface applied to all languages)
-      combinedExtraFlags = extraFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
+      # Combine compile-only flags (all languages)
+      combinedCompileFlags = compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
+
+      # Per-language compile flags (merge user langFlags with tool/lib cxxFlags into cpp)
+      combinedLangFlags = langFlags;
 
       # Normalize sources to translation units
       tus = normalizeSources {
@@ -129,7 +134,7 @@ rec {
             sources = allSources;
             includeDirs = combinedIncludeDirs;
             defines = combinedDefines;
-            extraFlags = combinedExtraFlags;
+            extraFlags = combinedCompileFlags;
             libraries = libraries;
             tools = tools;
             toolchain = tc;
@@ -165,7 +170,8 @@ rec {
           includeDirs = combinedIncludeDirs;
           defines = combinedDefines;
           inherit flags;
-          extraFlags = combinedExtraFlags;
+          compileFlags = combinedCompileFlags;
+          langFlags = combinedLangFlags;
           extraInputs = toolInfo.evalInputs ++ libsEvalInputs;
         }
       ) tus;
@@ -181,7 +187,8 @@ rec {
         includeDirs = combinedIncludeDirs;
         defines = combinedDefines;
         inherit flags;
-        extraFlags = combinedExtraFlags;
+        compileFlags = combinedCompileFlags;
+        langFlags = combinedLangFlags;
       };
 
     in
@@ -189,7 +196,8 @@ rec {
       inherit name toolchain rootPath;
       inherit objectInfos objectPaths compileCommands;
       inherit manifest tus;
-      inherit combinedIncludeDirs combinedDefines combinedExtraFlags;
+      inherit combinedIncludeDirs combinedDefines;
+      inherit combinedCompileFlags combinedLangFlags;
       inherit publicAggregate;
       inherit libraries tools;
       inherit flags;

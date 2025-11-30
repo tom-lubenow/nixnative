@@ -57,6 +57,7 @@ let
       lib
       utils
       manifest
+      language
       ;
   };
 

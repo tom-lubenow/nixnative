@@ -122,6 +122,10 @@ rec {
       # Check if toolchain supports a language
       supportsLanguage = lang: languages ? ${lang};
 
+      # Detect language name from filename
+      getLanguageNameForFile = filename:
+        language.detectLanguageName filename;
+
       # Detect language from filename and get compiler
       getCompilerForFile = filename:
         let lang = language.detectLanguageName filename;
