@@ -1,7 +1,7 @@
 { pkgs, native }:
 
 let
-  sources = [ "src/main.cc" "src/calculator.cc" ];
+  sources = [ "src/*.cc" ];  # Glob pattern matches all .cc files in src/
   includeDirs = [ "src" ];
 
   # Coverage build

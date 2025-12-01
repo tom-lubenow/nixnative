@@ -246,6 +246,146 @@ rec {
   collectEvalInputs = libs: concatMap libraryEvalInputs libs;
 
   # ==========================================================================
+  # Glob Pattern Expansion
+  # ==========================================================================
+
+  # Check if a string contains glob characters
+  isGlob = s: builtins.isString s && (lib.hasInfix "*" s);
+
+  # Check if a filename matches a simple pattern like "*.cc" or "foo*.h"
+  # Supports only single * at one position in the pattern
+  matchPattern = pattern: filename:
+    let
+      parts = lib.splitString "*" pattern;
+    in
+    if builtins.length parts == 1 then
+      # No wildcard, exact match
+      pattern == filename
+    else if builtins.length parts == 2 then
+      # Single wildcard: check prefix and suffix
+      let
+        prefix = builtins.elemAt parts 0;
+        suffix = builtins.elemAt parts 1;
+        prefixLen = builtins.stringLength prefix;
+        suffixLen = builtins.stringLength suffix;
+        filenameLen = builtins.stringLength filename;
+      in
+      filenameLen >= prefixLen + suffixLen
+      && (prefix == "" || hasPrefix prefix filename)
+      && (suffix == "" || hasSuffix suffix filename)
+    else
+      # Multiple wildcards - not supported in simple matching
+      false;
+
+  # List files in a directory (non-recursive)
+  listFiles = dir:
+    let
+      entries = builtins.readDir dir;
+      files = lib.filterAttrs (_: type: type == "regular") entries;
+    in
+    builtins.attrNames files;
+
+  # List subdirectories in a directory
+  listDirs = dir:
+    let
+      entries = builtins.readDir dir;
+      dirs = lib.filterAttrs (_: type: type == "directory") entries;
+    in
+    builtins.attrNames dirs;
+
+  # Recursively list all files under a directory
+  listFilesRecursive = dir:
+    let
+      entries = builtins.readDir dir;
+      processEntry = name: type:
+        if type == "regular" then
+          [ name ]
+        else if type == "directory" then
+          map (f: "${name}/${f}") (listFilesRecursive "${dir}/${name}")
+        else
+          [];
+    in
+    concatMap (name: processEntry name entries.${name}) (builtins.attrNames entries);
+
+  # Expand a glob pattern relative to a root directory
+  # Supports:
+  #   - "*.cc" - files matching pattern in current dir
+  #   - "src/*.cc" - files matching pattern in src/
+  #   - "**/*.cc" - recursive: all matching files in any subdirectory
+  #   - "src/**/*.cc" - recursive under src/
+  expandGlob = { root, pattern }:
+    let
+      rootStr = builtins.toString root;
+
+      # Check if pattern is recursive (contains **)
+      isRecursive = lib.hasInfix "**" pattern;
+
+      # Split pattern into directory prefix and file pattern
+      # e.g., "src/foo/*.cc" -> { dir = "src/foo"; filePattern = "*.cc"; }
+      # e.g., "src/**/*.cc" -> { dir = "src"; filePattern = "*.cc"; recursive = true; }
+      parsePattern = pat:
+        let
+          # Handle recursive patterns
+          recursiveParts = lib.splitString "/**/" pat;
+          hasRecursiveMid = builtins.length recursiveParts == 2;
+
+          # Handle patterns starting with **/
+          startsWithRecursive = hasPrefix "**/" pat;
+          patAfterStart = if startsWithRecursive then removePrefix "**/" pat else pat;
+
+          # For non-recursive, split on last /
+          lastSlash = lastIndexOf "/" pat;
+          nonRecursiveDir = if lastSlash == -1 then "." else builtins.substring 0 lastSlash pat;
+          nonRecursiveFile = if lastSlash == -1 then pat else builtins.substring (lastSlash + 1) (builtins.stringLength pat) pat;
+        in
+        if hasRecursiveMid then
+          { dir = builtins.elemAt recursiveParts 0; filePattern = builtins.elemAt recursiveParts 1; recursive = true; }
+        else if startsWithRecursive then
+          { dir = "."; filePattern = patAfterStart; recursive = true; }
+        else
+          { dir = nonRecursiveDir; filePattern = nonRecursiveFile; recursive = false; };
+
+      parsed = parsePattern pattern;
+      baseDir = if parsed.dir == "." then rootStr else "${rootStr}/${parsed.dir}";
+      dirPrefix = if parsed.dir == "." then "" else "${parsed.dir}/";
+
+      # Get list of files to check
+      filesToCheck =
+        if parsed.recursive then
+          map (f: "${dirPrefix}${f}") (listFilesRecursive baseDir)
+        else
+          map (f: "${dirPrefix}${f}") (listFiles baseDir);
+
+      # Filter files matching the pattern
+      matchingFiles = filter (f:
+        let
+          basename = basestring f;
+        in
+        matchPattern parsed.filePattern basename
+      ) filesToCheck;
+    in
+    matchingFiles;
+
+  # Get basename of a path (last component)
+  basestring = path:
+    let
+      parts = lib.splitString "/" path;
+      len = builtins.length parts;
+    in
+    if len == 0 then path else builtins.elemAt parts (len - 1);
+
+  # Find the last index of a character in a string (-1 if not found)
+  lastIndexOf = char: str:
+    let
+      len = builtins.stringLength str;
+      findLast = idx:
+        if idx < 0 then -1
+        else if builtins.substring idx 1 str == char then idx
+        else findLast (idx - 1);
+    in
+    findLast (len - 1);
+
+  # ==========================================================================
   # Source Normalization
   # ==========================================================================
 
@@ -263,6 +403,26 @@ rec {
         name = "sources-root";
       };
       rootHost = builtins.toString rootPath;
+
+      # Expand any glob patterns in the sources list
+      # Globs are only supported for simple strings, not attrsets or derivations
+      # Note: We don't deduplicate here because non-strings (attrsets, derivations)
+      # can't be easily compared. Deduplication happens at the string level only.
+      expandedStrings = concatMap (source:
+        if isGlob source then
+          expandGlob { inherit root; pattern = source; }
+        else if builtins.isString source then
+          [ source ]
+        else
+          []  # Non-strings handled separately
+      ) sources;
+
+      # Get non-string sources (attrsets, derivations)
+      nonStringSources = filter (s: !builtins.isString s) sources;
+
+      # Deduplicate string sources and combine with non-strings
+      expandedSources = (unique expandedStrings) ++ nonStringSources;
+
       mkEntry =
         source:
         # Case 1: Derivation source - { drv, rel } or { drv, rel, file }
@@ -330,7 +490,7 @@ rec {
         else
           throw "nixnative: sources must be relative strings, attrsets with 'rel', or derivation sources { drv, rel }, got ${showValue source}";
     in
-    map mkEntry sources;
+    map mkEntry expandedSources;
 
   # ==========================================================================
   # Header Set Building
