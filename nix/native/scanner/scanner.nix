@@ -217,10 +217,25 @@ rec {
 
       hasOverrides = headerOverrideLines != [] || sourceOverrideLines != [];
 
-      overrideScript = if hasOverrides then ''
-        # Apply header overrides from tools
+      # Build script for setting up working directory
+      # Fast path: no overrides - just cd to source (read-only is fine for scanning)
+      # Slow path: with overrides - symlink source tree, copy overrides on top
+      setupScript = if hasOverrides then ''
+        # Set up working directory with symlinks + overrides
+        work="$TMPDIR/work"
+        mkdir -p "$work"
+
+        # Symlink source tree (faster than copying)
+        for item in "$src"/*; do
+          [ -e "$item" ] && ln -s "$item" "$work/" 2>/dev/null || true
+        done
+        cd "$work"
+
+        # Apply header overrides from tools (copy on top of symlinks)
         while IFS='=' read -r rel target; do
           [ -z "$rel" ] && continue
+          # Remove symlink if it exists, create parent dirs, copy file
+          rm -f "$rel" 2>/dev/null || true
           mkdir -p "$(dirname "$rel")"
           cp "$target" "$rel"
         done <<'HEADER_OVERRIDES'
@@ -230,12 +245,16 @@ rec {
         # Apply source overrides from tools
         while IFS='=' read -r rel target; do
           [ -z "$rel" ] && continue
+          rm -f "$rel" 2>/dev/null || true
           mkdir -p "$(dirname "$rel")"
           cp "$target" "$rel"
         done <<'SOURCE_OVERRIDES'
         ${concatStringsSep "\n" sourceOverrideLines}
         SOURCE_OVERRIDES
-      '' else "";
+      '' else ''
+        # Fast path: no overrides, just cd to source directory
+        cd "$src"
+      '';
 
     in
     pkgs.runCommand "scan-${safeName}"
@@ -254,14 +273,7 @@ rec {
       ''
         set -euo pipefail
 
-        # Set up working directory with source tree
-        work="$TMPDIR/work"
-        mkdir -p "$work"
-        cp -r "$src"/* "$work/" 2>/dev/null || true
-        chmod -R u+w "$work"
-        cd "$work"
-
-        ${overrideScript}
+        ${setupScript}
 
         # Unset Nix wrapper environment variables
         unset NIX_CFLAGS_COMPILE NIX_CFLAGS_COMPILE_FOR_TARGET
