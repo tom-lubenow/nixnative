@@ -14,6 +14,15 @@
 #     bintools = native.compilers.clang.bintools;
 #   }
 #
+# Content-Addressed Derivations:
+# ------------------------------
+# When contentAddressed = true, the toolchain configures scanner (and
+# potentially other) derivations to use Nix's content-addressed mode.
+# This enables better incrementality: identical outputs are deduplicated
+# even when inputs differ.
+#
+# Note: Requires Nix with the 'ca-derivations' experimental feature enabled.
+#
 {
   lib,
   flags,
@@ -39,6 +48,10 @@ rec {
       # Additional inputs and environment
       runtimeInputs ? [ ], # Additional packages for PATH
       environment ? { }, # Additional environment variables
+
+      # Content-addressed derivations (experimental)
+      # When true, scanner derivations use CA mode for better incrementality
+      contentAddressed ? false,
     }:
     let
       # Generate name from languages if not provided
@@ -87,6 +100,7 @@ rec {
         linker
         bintools
         targetPlatform
+        contentAddressed
         ;
 
       # Bintools accessors (for convenience)

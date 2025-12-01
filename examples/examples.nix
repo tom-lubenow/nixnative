@@ -182,6 +182,14 @@ let
   crossCompileChecks = import ./cross-compile/checks.nix { inherit pkgs native; packages = crossCompilePackagesRaw; };
   crossCompilePackages = materializeSet crossCompilePackagesRaw;
 
+  # ===========================================================================
+  # Content-Addressed Derivations
+  # ===========================================================================
+
+  contentAddressedPackagesRaw = import ./content-addressed/project.nix { inherit pkgs native; };
+  contentAddressedChecks = import ./content-addressed/checks.nix { inherit pkgs; packages = contentAddressedPackagesRaw; };
+  contentAddressedPackages = materializeSet contentAddressedPackagesRaw;
+
 in {
   packages = mergeAttrs [
     # Core
@@ -218,6 +226,8 @@ in {
     mixedCCppRustPackages
     # Cross-Compilation
     crossCompilePackages
+    # Content-Addressed Derivations
+    contentAddressedPackages
   ];
 
   checks = mergeAttrs [
@@ -255,6 +265,8 @@ in {
     mixedCCppRustChecks
     # Cross-Compilation
     crossCompileChecks
+    # Content-Addressed Derivations
+    contentAddressedChecks
   ];
 
   defaults = {

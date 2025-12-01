@@ -51,6 +51,8 @@ let
 
   manifest = import ./scanner/manifest.nix { inherit lib utils; };
 
+  parsers = import ./scanner/parsers.nix { inherit lib; };
+
   scanner = import ./scanner/scanner.nix {
     inherit
       pkgs
@@ -58,6 +60,7 @@ let
       utils
       manifest
       language
+      parsers
       ;
   };
 
@@ -67,12 +70,12 @@ let
 
   clangCompilers = import ./compilers/clang.nix {
     inherit pkgs;
-    inherit (compilerCore) mkCompiler commonFlagTranslators;
+    inherit (compilerCore) mkCompiler commonFlagTranslators mkGccStyleScanner;
   };
 
   gccCompilers = import ./compilers/gcc.nix {
     inherit pkgs;
-    inherit (compilerCore) mkCompiler gccFlagTranslators;
+    inherit (compilerCore) mkCompiler gccFlagTranslators mkGccStyleScanner;
   };
 
   rustCompilers = import ./compilers/rustc.nix {
@@ -470,7 +473,7 @@ in
   # ==========================================================================
 
   # Core factories
-  inherit (compilerCore) mkCompiler commonFlagTranslators gccFlagTranslators;
+  inherit (compilerCore) mkCompiler commonFlagTranslators gccFlagTranslators mkGccStyleScanner validateScanner;
   inherit (linkerCore) mkLinker;
   inherit (toolchainCore) validateToolchain getCapabilities toolchainSupports;
 
@@ -578,7 +581,13 @@ in
     ;
 
   # Scanner and manifest utilities
-  inherit (scanner) mkDependencyScanner processTools;
+  inherit (scanner)
+    mkDependencyScanner  # Legacy batch scanner (deprecated)
+    mkFileScan           # Per-file scanner derivation
+    mkSourceScans        # Create per-file scans for all sources
+    mergeFileScans       # Merge per-file scan results into manifest
+    processTools
+    ;
   inherit (manifest) mkManifest emptyManifest mergeManifests;
 
   # Utilities (for advanced users)

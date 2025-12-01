@@ -8,6 +8,7 @@
   pkgs,
   mkCompiler,
   commonFlagTranslators,
+  mkGccStyleScanner,
 }:
 
 let
@@ -67,6 +68,13 @@ let
         runtimeInputs = sharedRuntimeInputs;
         environment = { };
         inherit capabilities flagTranslators;
+
+        # Scanner configuration for C files
+        scanner = mkGccStyleScanner {
+          compiler = "${llvm.clang}/bin/clang";
+          runtimeInputs = [ llvm.clang ];
+          extraFlags = [ "-fdirectives-only" ];
+        };
       };
 
       cpp = {
@@ -83,6 +91,13 @@ let
         environment = { };
         inherit capabilities flagTranslators;
         cxxRuntimeLibPath = "${pkgs.stdenv.cc.cc.lib}/lib";
+
+        # Scanner configuration for C++ files
+        scanner = mkGccStyleScanner {
+          compiler = "${llvm.clang}/bin/clang++";
+          runtimeInputs = [ llvm.clang ];
+          extraFlags = [ "-fdirectives-only" ];
+        };
       };
 
       # Bintools for this compiler

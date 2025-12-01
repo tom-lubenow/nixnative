@@ -8,6 +8,7 @@
   pkgs,
   mkCompiler,
   gccFlagTranslators,
+  mkGccStyleScanner,
 }:
 
 let
@@ -62,6 +63,13 @@ let
         environment = { };
         inherit capabilities;
         flagTranslators = gccFlagTranslators;
+
+        # Scanner configuration for C files
+        scanner = mkGccStyleScanner {
+          compiler = "${gcc}/bin/gcc";
+          runtimeInputs = [ gcc ];
+          extraFlags = [ "-fdirectives-only" ];
+        };
       };
 
       cpp = {
@@ -79,6 +87,13 @@ let
         inherit capabilities;
         flagTranslators = gccFlagTranslators;
         cxxRuntimeLibPath = "${gcc.cc.lib}/lib";
+
+        # Scanner configuration for C++ files
+        scanner = mkGccStyleScanner {
+          compiler = "${gcc}/bin/g++";
+          runtimeInputs = [ gcc ];
+          extraFlags = [ "-fdirectives-only" ];
+        };
       };
 
       # Bintools for this compiler
