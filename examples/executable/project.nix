@@ -13,10 +13,11 @@ let
   includeDirs = [ "include" ];
 
   # Source files to compile (relative to root)
-  sources = [
-    "src/main.cc"
-    "src/hello.cc"
-  ];
+  # Supports glob patterns:
+  #   - "src/*.cc"    - all .cc files in src/
+  #   - "**/*.cc"     - all .cc files recursively
+  #   - "src/**/*.cc" - all .cc files under src/ recursively
+  sources = [ "src/*.cc" ];
 
   # Build the executable using the high-level API
   # This automatically:

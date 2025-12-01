@@ -5,11 +5,7 @@ let
   commonLib = native.staticLib {
     name = "myapp-common";
     root = ./.;
-    sources = [
-      "common/config.cc"
-      "common/logger.cc"
-      "common/database.cc"
-    ];
+    sources = [ "common/*.cc" ];  # Glob pattern matches all .cc files
     includeDirs = [ "common/include" ];
     publicIncludeDirs = [ "common/include" ];
   };
