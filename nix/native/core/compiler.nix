@@ -3,6 +3,34 @@
 # A compiler is defined by its binaries, capabilities, and flag translators.
 # Different compilers (clang, gcc) implement this interface.
 #
+# Language configs also include a scanner configuration that encapsulates
+# how to scan source files for header dependencies. This keeps compiler-specific
+# details (flags, tools, output formats) encapsulated within the compiler layer.
+#
+# Scanner Interface:
+# ------------------
+# Each language config should provide a `scanner` attribute:
+#
+#   scanner = {
+#     # Generate the shell command to scan a single file for dependencies.
+#     # The command should write dependency information to `depfile`.
+#     # Arguments:
+#     #   file    - path to source file (relative to working directory)
+#     #   depfile - path where dependency output should be written
+#     #   flags   - compiler flags string (includes, defines, extras)
+#     # Returns: shell command string
+#     mkScanCommand : { file, depfile, flags } -> string
+#
+#     # Output format produced by the scan command.
+#     # Supported values:
+#     #   "make" - Make-format .d files (target: dep1 dep2 ...)
+#     #   "json" - JSON format (e.g., clang -MJ)
+#     outputFormat : string
+#
+#     # Packages required in the build environment for scanning.
+#     runtimeInputs : [package]
+#   };
+#
 { lib, flags }:
 
 rec {
@@ -211,4 +239,48 @@ rec {
       throw "nixnative: compiler missing required fields: ${lib.concatStringsSep ", " missing}"
     else
       compiler;
+
+  # ==========================================================================
+  # Scanner Helpers
+  # ==========================================================================
+
+  # Validate a scanner configuration
+  validateScanner =
+    { scanner, context ? "unknown" }:
+    let
+      required = [ "mkScanCommand" "outputFormat" "runtimeInputs" ];
+      missing = builtins.filter (f: !(scanner ? ${f})) required;
+    in
+    if missing != [ ] then
+      throw "nixnative: scanner for '${context}' missing required fields: ${lib.concatStringsSep ", " missing}"
+    else if !(builtins.elem scanner.outputFormat [ "make" "json" ]) then
+      throw "nixnative: scanner for '${context}' has invalid outputFormat '${scanner.outputFormat}'. Must be 'make' or 'json'."
+    else
+      scanner;
+
+  # Create a scanner configuration for GCC-style compilers (-MMD -MF)
+  # This is the common pattern for clang and gcc.
+  mkGccStyleScanner =
+    {
+      compiler,       # Path to compiler binary
+      runtimeInputs,  # Packages to include
+      extraFlags ? [], # Additional flags (e.g., -fdirectives-only)
+    }:
+    {
+      mkScanCommand = { file, depfile, flags }:
+        let
+          allFlags = lib.concatStringsSep " " (extraFlags ++ [ flags ]);
+        in
+        ''
+          ${compiler} \
+            -E ${allFlags} \
+            -MMD -MF ${depfile} \
+            -w \
+            ${file} \
+            -o /dev/null 2>/dev/null || true
+        '';
+
+      outputFormat = "make";
+      inherit runtimeInputs;
+    };
 }

@@ -3,6 +3,13 @@
 # A build context aggregates all configuration needed to compile a target:
 # sources, include directories, defines, flags, libraries, tools, etc.
 #
+# Supports two scanning modes:
+# - Per-file scanning (default): Uses mkSourceScans for incremental builds
+# - Legacy batch scanning: Uses mkDependencyScanner (deprecated)
+#
+# When contentAddressed is enabled on the toolchain, scanner derivations
+# use Nix's CA mode for better incrementality.
+#
 {
   pkgs,
   lib,
@@ -29,7 +36,8 @@ let
     emptyManifest
     mergeManifests
     processTools
-    mkDependencyScanner
+    mkSourceScans
+    mkDependencyScanner  # Legacy, kept for backwards compatibility
     ;
   inherit (compile)
     compileTranslationUnit
@@ -56,8 +64,8 @@ rec {
   #   langFlags    - Per-language raw flags { c = [...]; cpp = [...]; }
   #   libraries    - Library dependencies
   #   tools        - Tool plugins (protobuf, jinja, etc.)
-  #   depsManifest - Pre-computed dependency manifest
-  #   scanner      - Custom scanner (if not using auto-scan)
+  #   depsManifest - Pre-computed dependency manifest (skips scanning)
+  #   scanMode     - "per-file" (default, incremental) or "batch" (legacy)
   #
   mkBuildContext =
     {
@@ -73,7 +81,7 @@ rec {
       libraries ? [ ],
       tools ? [ ], # Tool plugins (replaces generators)
       depsManifest ? null,
-      scanner ? null,
+      scanMode ? "per-file", # "per-file" or "batch"
       ...
     }@args:
     let
@@ -125,35 +133,50 @@ rec {
         sources = allSources;
       };
 
-      # Auto-create scanner if needed
-      autoScanner =
-        if depsManifest == null && scanner == null then
-          mkDependencyScanner {
-            name = "${name}-scanner";
+      # Get contentAddressed setting from toolchain
+      contentAddressed = tc.contentAddressed or false;
+
+      # Create scanner based on mode
+      # - "per-file": Creates per-file scan derivations (incremental with CA)
+      # - "batch": Legacy batch scanner (single derivation for all files)
+      scanResult =
+        if depsManifest != null then
+          # Pre-computed manifest - no scanning needed
+          { scans = []; manifest = mkManifest depsManifest; }
+        else if scanMode == "per-file" then
+          # Per-file scanning (new, incremental)
+          mkSourceScans {
+            name = "${name}-scans";
             inherit root;
             sources = allSources;
+            inherit toolchain;
             includeDirs = combinedIncludeDirs;
             defines = combinedDefines;
             extraFlags = combinedCompileFlags;
-            libraries = libraries;
-            tools = tools;
-            toolchain = tc;
+            extraInputs = toolInfo.evalInputs ++ libsEvalInputs;
+            headerOverrides = toolInfo.headerOverrides;
+            sourceOverrides = toolInfo.sourceOverrides;
+            inherit contentAddressed;
           }
         else
-          null;
+          # Legacy batch scanning
+          let
+            batchScanner = mkDependencyScanner {
+              name = "${name}-scanner";
+              inherit root;
+              sources = allSources;
+              includeDirs = combinedIncludeDirs;
+              defines = combinedDefines;
+              extraFlags = combinedCompileFlags;
+              libraries = libraries;
+              tools = tools;
+              toolchain = tc;
+            };
+          in
+          { scans = []; manifest = mkManifest batchScanner; };
 
-      effectiveScanner = if scanner != null then scanner else autoScanner;
-
-      # Build dependency manifest
-      baseManifest =
-        if depsManifest != null then
-          mkManifest depsManifest
-        else if effectiveScanner != null then
-          mkManifest effectiveScanner
-        else
-          emptyManifest;
-
-      manifest = mergeManifests baseManifest toolInfo.manifest;
+      # Merge tool manifest with scanned manifest
+      manifest = mergeManifests scanResult.manifest toolInfo.manifest;
 
       # Compile all translation units
       objectInfos = map (
@@ -202,6 +225,9 @@ rec {
       inherit libraries tools;
       inherit flags;
       inherit libsEvalInputs;
-      scanner = effectiveScanner;
+      inherit contentAddressed scanMode;
+
+      # Per-file scan derivations (empty if using batch mode or pre-computed manifest)
+      scanDerivations = scanResult.scans;
     };
 }

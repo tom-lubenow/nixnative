@@ -1,7 +1,13 @@
 # Dependency scanner for nixnative
 #
-# Scans source files to discover header dependencies using -MMD.
-# Also processes tool plugins to integrate generated code.
+# Provides per-file dependency scanning with support for content-addressed
+# derivations. Each source file gets its own scanner derivation, enabling
+# incremental rebuilds when using CA derivations.
+#
+# Architecture:
+# - mkFileScan: Creates a derivation that scans a single source file
+# - mergeFileScans: Combines per-file scan results into a manifest
+# - processTools: Handles tool plugin integration (protobuf, jinja, etc.)
 #
 {
   pkgs,
@@ -9,12 +15,14 @@
   utils,
   manifest,
   language,
+  parsers,
 }:
 
 let
-  inherit (lib) concatStringsSep unique foldl' groupBy;
+  inherit (lib) concatStringsSep unique foldl' groupBy mapAttrsToList concatLists;
   inherit (utils)
     sanitizePath
+    sanitizeName
     toPathLike
     normalizeSources
     toDefineFlags
@@ -26,7 +34,8 @@ let
     validatePublic
     ;
   inherit (manifest) mkManifest emptyManifest mergeManifests;
-  inherit (language) detectLanguageName;
+  inherit (language) detectLanguageName detectLanguage;
+  inherit (parsers) mkParseScript;
 
 in
 rec {
@@ -152,15 +161,233 @@ rec {
     } tools;
 
   # ==========================================================================
-  # Dependency Scanner
+  # Per-File Scanner
   # ==========================================================================
 
-  # Scan sources for header dependencies using -MMD
+  # Scan a single source file for header dependencies.
   #
-  # NOTE: Currently uses C++ compiler for all files. This works because
-  # we're only parsing headers (-fsyntax-only), not generating code.
-  # For most projects this is fine. Future enhancement: per-file language
-  # detection for scanning.
+  # Creates a derivation that:
+  # 1. Uses the language-specific scanner from the language config
+  # 2. Parses the output to extract relative dependencies
+  # 3. Outputs a simple text file with one dependency per line
+  #
+  # When contentAddressed is true, the derivation uses CA mode, meaning
+  # identical outputs will be deduplicated even if inputs differ.
+  #
+  mkFileScan =
+    {
+      langConfig,          # Language config with scanner
+      file,                # { rel, store } - normalized source file
+      root,                # Project root (for header access)
+      includeDirs ? [ ],   # Include directories
+      defines ? [ ],       # Preprocessor defines
+      extraFlags ? [ ],    # Additional compiler flags
+      extraInputs ? [ ],   # Additional derivation inputs
+      headerOverrides ? { }, # Generated header overrides from tools
+      sourceOverrides ? { }, # Generated source overrides from tools
+      contentAddressed ? false,
+    }:
+    let
+      scanner = langConfig.scanner;
+
+      # Build flags string
+      includeFlags = map (dir:
+        if builtins.isString dir then "-I${dir}"
+        else if builtins.isPath dir then "-I${dir}"
+        else if builtins.isAttrs dir && dir ? path then "-I${dir.path}"
+        else throw "mkFileScan: includeDirs entries must be strings, paths, or {path} attrs"
+      ) includeDirs;
+
+      defineFlags = toDefineFlags defines;
+
+      flagsStr = concatStringsSep " " (
+        includeFlags ++ defineFlags ++ extraFlags
+      );
+
+      # Sanitize filename for derivation name
+      safeName = sanitizeName (builtins.replaceStrings ["/"] ["_"] file.rel);
+
+      # Generate override copy commands
+      headerOverrideLines = map (name: "${name}=${headerOverrides.${name}}") (
+        builtins.attrNames headerOverrides
+      );
+      sourceOverrideLines = map (name: "${name}=${sourceOverrides.${name}}") (
+        builtins.attrNames sourceOverrides
+      );
+
+      hasOverrides = headerOverrideLines != [] || sourceOverrideLines != [];
+
+      overrideScript = if hasOverrides then ''
+        # Apply header overrides from tools
+        while IFS='=' read -r rel target; do
+          [ -z "$rel" ] && continue
+          mkdir -p "$(dirname "$rel")"
+          cp "$target" "$rel"
+        done <<'HEADER_OVERRIDES'
+        ${concatStringsSep "\n" headerOverrideLines}
+        HEADER_OVERRIDES
+
+        # Apply source overrides from tools
+        while IFS='=' read -r rel target; do
+          [ -z "$rel" ] && continue
+          mkdir -p "$(dirname "$rel")"
+          cp "$target" "$rel"
+        done <<'SOURCE_OVERRIDES'
+        ${concatStringsSep "\n" sourceOverrideLines}
+        SOURCE_OVERRIDES
+      '' else "";
+
+    in
+    pkgs.runCommand "scan-${safeName}"
+      ({
+        src = root;
+        buildInputs = scanner.runtimeInputs ++ (map toPathLike extraInputs);
+
+        # Pass through source file info
+        passthru = {
+          sourceFile = file.rel;
+          inherit langConfig;
+        };
+      } // lib.optionalAttrs contentAddressed {
+        __contentAddressed = true;
+      })
+      ''
+        set -euo pipefail
+
+        # Set up working directory with source tree
+        work="$TMPDIR/work"
+        mkdir -p "$work"
+        cp -r "$src"/* "$work/" 2>/dev/null || true
+        chmod -R u+w "$work"
+        cd "$work"
+
+        ${overrideScript}
+
+        # Unset Nix wrapper environment variables
+        unset NIX_CFLAGS_COMPILE NIX_CFLAGS_COMPILE_FOR_TARGET
+        unset NIX_LDFLAGS NIX_LDFLAGS_FOR_TARGET
+
+        # Run the scanner
+        depfile="$TMPDIR/deps.d"
+        ${scanner.mkScanCommand {
+          file = file.rel;
+          depfile = "$depfile";
+          flags = flagsStr;
+        }}
+
+        # Parse dependencies and write output
+        ${mkParseScript {
+          format = scanner.outputFormat;
+          depfile = "$depfile";
+          outfile = "$out";
+          sourceFile = file.rel;
+        }}
+      '';
+
+  # ==========================================================================
+  # Manifest Merging
+  # ==========================================================================
+
+  # Merge multiple per-file scan results into a single manifest.
+  #
+  # Takes a list of scan derivations (from mkFileScan) and produces
+  # a manifest in the standard format:
+  #   { schema = 1; units = { "file.cc" = { dependencies = [...]; }; }; }
+  #
+  mergeFileScans =
+    scans:
+    let
+      # Read deps from a scan derivation
+      # Each scan output is a file with one dep per line
+      readDeps = scan:
+        let
+          content = builtins.readFile scan;
+          lines = lib.filter (l: l != "") (lib.splitString "\n" content);
+        in
+        {
+          name = scan.passthru.sourceFile;
+          value = { dependencies = lines; };
+        };
+
+      units = builtins.listToAttrs (map readDeps scans);
+    in
+    {
+      schema = 1;
+      inherit units;
+    };
+
+  # ==========================================================================
+  # Batch Scanner (Convenience)
+  # ==========================================================================
+
+  # High-level scanner that creates per-file scans for all sources.
+  #
+  # This is the main entry point for the new per-file scanning architecture.
+  # It groups sources by language and creates appropriate scan derivations.
+  #
+  mkSourceScans =
+    {
+      name ? "scans",
+      root,
+      sources,
+      toolchain,
+      includeDirs ? [ ],
+      defines ? [ ],
+      extraFlags ? [ ],
+      extraInputs ? [ ],
+      headerOverrides ? { },
+      sourceOverrides ? { },
+      contentAddressed ? false,
+    }:
+    let
+      # Normalize sources
+      tus = normalizeSources { inherit root sources; };
+
+      # Group by language
+      tusByLang = groupBy (tu:
+        let lang = detectLanguage tu.relNorm;
+        in if lang == null then "unknown" else lang.name
+      ) tus;
+
+      # Create scans for each language
+      mkLangScans = lang: files:
+        if toolchain.supportsLanguage lang then
+          map (file: mkFileScan {
+            langConfig = toolchain.languages.${lang};
+            file = { rel = file.relNorm; store = file.store; };
+            inherit root includeDirs defines extraFlags extraInputs;
+            inherit headerOverrides sourceOverrides contentAddressed;
+          }) files
+        else if toolchain.supportsLanguage "cpp" then
+          # Fallback to C++ for unknown languages
+          map (file: mkFileScan {
+            langConfig = toolchain.languages.cpp;
+            file = { rel = file.relNorm; store = file.store; };
+            inherit root includeDirs defines extraFlags extraInputs;
+            inherit headerOverrides sourceOverrides contentAddressed;
+          }) files
+        else
+          [ ];  # Skip unsupported languages
+
+      allScans = concatLists (mapAttrsToList mkLangScans tusByLang);
+    in
+    {
+      # Individual scan derivations
+      scans = allScans;
+
+      # Merged manifest (lazy - only evaluated if needed)
+      manifest = mergeFileScans allScans;
+    };
+
+  # ==========================================================================
+  # Legacy Scanner (Deprecated)
+  # ==========================================================================
+
+  # Original batch scanner that scans all files in a single derivation.
+  # Kept for backwards compatibility but deprecated in favor of mkSourceScans.
+  #
+  # NOTE: This scanner does NOT support contentAddressed mode and will
+  # re-scan all files whenever any input changes.
   #
   mkDependencyScanner =
     {
@@ -274,7 +501,7 @@ rec {
       # Uses language detection based on file extension
       tusByLang = groupBy (tu:
         let
-          lang = language.detectLanguage tu.relNorm;
+          lang = detectLanguage tu.relNorm;
         in
         if lang == null then "unknown" else lang.name
       ) tus;
@@ -286,20 +513,20 @@ rec {
       unsupportedLangs = lib.filter (lang: !(tc.supportsLanguage lang)) (builtins.attrNames tusByLang);
 
       # Generate scanner script for a specific language
+      # Uses the language's scanner config
       mkScannerScript = lang:
         let
-          compiler = tc.getCompilerForLanguage lang;
-          defaultFlags = concatStringsSep " " (tc.getDefaultFlagsForLanguage lang);
+          langConfig = tc.languages.${lang};
+          scanner = langConfig.scanner;
         in
         ''
           srcFile="$1"
           depfile="$TMP/$(echo "$srcFile" | tr '/' '_').d"
-          if ! ${compiler} \
-              ${defaultFlags} \
-              ${commonFlags} \
-              -MMD -MF "$depfile" -fsyntax-only "$srcFile" 2>"$depfile.err"; then
-            echo "$srcFile" >> "$TMP/failed"
-          fi
+          ${scanner.mkScanCommand {
+            file = "$srcFile";
+            depfile = "$depfile";
+            flags = commonFlags;
+          }}
         '';
 
       # Generate source list for a language

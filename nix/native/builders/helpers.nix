@@ -49,8 +49,8 @@ rec {
   #   ldflags      - Additional linker flags
   #   libraries    - Library dependencies
   #   tools        - Tool plugins
-  #   depsManifest - Pre-computed dependency manifest
-  #   scanner      - Custom scanner
+  #   depsManifest - Pre-computed dependency manifest (skips scanning)
+  #   scanMode     - "per-file" (default, incremental) or "batch" (legacy)
   #
   mkExecutable =
     args:
