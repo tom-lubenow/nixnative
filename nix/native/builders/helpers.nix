@@ -10,6 +10,7 @@
   context,
   link,
   platform,
+  dynamic ? null,  # Optional dynamic module
 }:
 
 let
@@ -68,13 +69,21 @@ rec {
       # Recursively collect all link flags from libraries and their transitive dependencies
       allLinkFlags = collectAllLinkFlags libraries;
 
-      drv = linkExecutable {
-        inherit toolchain name flags;
-        objects = objectPaths;
-        ldflags = args.ldflags or [ ];
-        linkFlags = allLinkFlags;
-        extraInputs = libsEvalInputs;
-      };
+      # Use dynamic link if context is dynamic mode
+      # In dynamic mode, the driver already has all link configuration built in
+      drv = if ctx.isDynamic or false then
+        dynamic.mkDynamicExecutable {
+          inherit name;
+          driverDrv = ctx.driverDrv;
+        }
+      else
+        linkExecutable {
+          inherit toolchain name flags;
+          objects = objectPaths;
+          ldflags = args.ldflags or [ ];
+          linkFlags = allLinkFlags;
+          extraInputs = libsEvalInputs;
+        };
     in
     drv
     // {
@@ -275,14 +284,21 @@ rec {
       # Recursively collect all link flags from libraries and their transitive dependencies
       allLinkFlags = collectAllLinkFlags libraries;
 
-      # Link the shared library
-      linkDrv = linkSharedLibrary {
-        inherit toolchain name flags;
-        objects = objectPaths;
-        ldflags = args.ldflags or [ ];
-        linkFlags = allLinkFlags;
-        extraInputs = libsEvalInputs;
-      };
+      # Link the shared library (use dynamic link if in dynamic mode)
+      # In dynamic mode, the driver already has all link configuration built in
+      linkDrv = if ctx.isDynamic or false then
+        dynamic.mkDynamicSharedLibrary {
+          inherit name;
+          driverDrv = ctx.driverDrv;
+        }
+      else
+        linkSharedLibrary {
+          inherit toolchain name flags;
+          objects = objectPaths;
+          ldflags = args.ldflags or [ ];
+          linkFlags = allLinkFlags;
+          extraInputs = libsEvalInputs;
+        };
 
       # Install headers
       installHeaders = concatStringsSep "\n" (

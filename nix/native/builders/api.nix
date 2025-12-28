@@ -20,6 +20,10 @@
 # Scan Modes:
 #   scanMode = "per-file" (default) - Per-file scanner derivations (incremental)
 #   scanMode = "batch" - Legacy batch scanner (single derivation)
+#   scanMode = "dynamic" - Dynamic derivations (no IFD, experimental)
+#
+# Or use the shorthand:
+#   dynamic = true - Equivalent to scanMode = "dynamic"
 #
 {
   lib,
@@ -96,11 +100,19 @@ let
   # Note: scanMode passes through to mkBuildContext
   cleanArgs =
     args:
-    builtins.removeAttrs args [
+    let
+      # Convert dynamic=true to scanMode="dynamic"
+      withScanMode = if args.dynamic or false then
+        args // { scanMode = "dynamic"; }
+      else
+        args;
+    in
+    builtins.removeAttrs withScanMode [
       "compiler"
       "linker"
       "toolchain"
       "contentAddressed"  # Handled by extractToolchain, stored in toolchain
+      "dynamic"  # Converted to scanMode above
     ];
 
   # ==========================================================================
@@ -114,7 +126,8 @@ let
   #   linker           - (optional) "lld", "mold", "gold", "ld", or linker object
   #   toolchain        - (optional) Pre-built toolchain (overrides compiler/linker)
   #   contentAddressed - (optional) Enable CA derivations for incremental builds
-  #   scanMode         - (optional) "per-file" (default) or "batch" (legacy)
+  #   scanMode         - (optional) "per-file" (default), "batch" (legacy), or "dynamic"
+  #   dynamic          - (optional) Shorthand for scanMode = "dynamic"
   #   name             - Target name
   #   root             - Source root directory
   #   sources          - List of source files

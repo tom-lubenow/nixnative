@@ -11,6 +11,8 @@
 {
   pkgs,
   lib ? pkgs.lib,
+  # Nix package with dynamic derivations support (optional, defaults to pkgs.nix)
+  nixPackage ? pkgs.nix,
 }:
 
 let
@@ -62,6 +64,14 @@ let
       language
       parsers
       ;
+  };
+
+  # ==========================================================================
+  # Dynamic Derivations Module (Experimental)
+  # ==========================================================================
+
+  dynamic = import ./dynamic {
+    inherit pkgs lib utils scanner nixPackage;
   };
 
   # ==========================================================================
@@ -435,6 +445,7 @@ let
       flags
       compile
       scanner
+      dynamic
       ;
   };
 
@@ -445,6 +456,7 @@ let
       utils
       context
       link
+      dynamic
       ;
     platform = platformUtils;
   };
@@ -589,6 +601,16 @@ in
     processTools
     ;
   inherit (manifest) mkManifest emptyManifest mergeManifests;
+
+  # Dynamic derivations (experimental)
+  # Requires: experimental-features = dynamic-derivations ca-derivations
+  inherit (dynamic)
+    hasDynamicDerivations    # Check if dynamic derivations are available
+    mkDynamicDriver          # Create dynamic driver derivation
+    mkDynamicBuildContext    # Dynamic-mode build context
+    linkDynamicExecutable    # Link from dynamic driver output
+    linkDynamicSharedLibrary # Link shared lib from dynamic driver
+    ;
 
   # Utilities (for advanced users)
   inherit utils;

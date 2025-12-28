@@ -3,9 +3,10 @@
 # A build context aggregates all configuration needed to compile a target:
 # sources, include directories, defines, flags, libraries, tools, etc.
 #
-# Supports two scanning modes:
+# Supports three scanning modes:
 # - Per-file scanning (default): Uses mkSourceScans for incremental builds
 # - Legacy batch scanning: Uses mkDependencyScanner (deprecated)
+# - Dynamic scanning: Uses dynamic derivations (no IFD, experimental)
 #
 # When contentAddressed is enabled on the toolchain, scanner derivations
 # use Nix's CA mode for better incrementality.
@@ -17,6 +18,7 @@
   flags,
   compile,
   scanner,
+  dynamic ? null,  # Optional dynamic module (injected when available)
 }:
 
 let
@@ -65,7 +67,7 @@ rec {
   #   libraries    - Library dependencies
   #   tools        - Tool plugins (protobuf, jinja, etc.)
   #   depsManifest - Pre-computed dependency manifest (skips scanning)
-  #   scanMode     - "per-file" (default, incremental) or "batch" (legacy)
+  #   scanMode     - "per-file" (default, incremental), "batch" (legacy), or "dynamic" (experimental)
   #
   mkBuildContext =
     {
@@ -81,9 +83,16 @@ rec {
       libraries ? [ ],
       tools ? [ ], # Tool plugins (replaces generators)
       depsManifest ? null,
-      scanMode ? "per-file", # "per-file" or "batch"
+      scanMode ? "per-file", # "per-file", "batch", or "dynamic"
       ...
     }@args:
+    # Dynamic mode: delegate to dynamic context
+    if scanMode == "dynamic" then
+      if dynamic == null then
+        throw "nixnative: dynamic mode requested but dynamic module not available"
+      else
+        dynamic.mkDynamicBuildContext args
+    else
     let
       tc = toolchain;
       rootPath = sanitizePath { path = root; };

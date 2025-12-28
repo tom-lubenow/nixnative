@@ -5,11 +5,18 @@
   inputs.crane.url = "github:ipetkov/crane/v0.16.1";
   inputs.crane.inputs.nixpkgs.follows = "nixpkgs";
 
+  # Nix with full dynamic derivations support (commit d904921)
+  # This is the recommended version from John Ericson's work on RFC 92
+  # Requires: experimental-features = nix-command dynamic-derivations ca-derivations recursive-nix
+  inputs.nix.url = "github:NixOS/nix/d904921eecbc17662fef67e8162bd3c7d1a54ce0";
+  inputs.nix.inputs.nixpkgs.follows = "nixpkgs";
+
   outputs =
     {
       self,
       nixpkgs,
       crane,
+      nix,
     }:
     let
       systems = [
@@ -23,7 +30,9 @@
           system:
           let
             pkgs = import nixpkgs { inherit system; };
-            native = import ./nix/native { inherit pkgs; };
+            # Nix package with dynamic derivations support (version 4 JSON format)
+            nixPackage = nix.packages.${system}.default;
+            native = import ./nix/native { inherit pkgs nixPackage; };
             craneLib = crane.lib.${system};
             examples = import ./examples/examples.nix {
               inherit pkgs native system;

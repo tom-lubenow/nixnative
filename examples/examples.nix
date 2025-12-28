@@ -190,6 +190,22 @@ let
   contentAddressedChecks = import ./content-addressed/checks.nix { inherit pkgs; packages = contentAddressedPackagesRaw; };
   contentAddressedPackages = materializeSet contentAddressedPackagesRaw;
 
+  # ===========================================================================
+  # Dynamic Derivations (Experimental)
+  # ===========================================================================
+
+  dynamicDerivationsPackagesRaw =
+    if native.hasDynamicDerivations then
+      import ./dynamic-derivations/project.nix { inherit pkgs native; }
+    else
+      { };
+  dynamicDerivationsChecks =
+    if native.hasDynamicDerivations then
+      import ./dynamic-derivations/checks.nix { inherit pkgs native; packages = dynamicDerivationsPackagesRaw; }
+    else
+      { };
+  dynamicDerivationsPackages = materializeSet dynamicDerivationsPackagesRaw;
+
 in {
   packages = mergeAttrs [
     # Core
@@ -228,6 +244,8 @@ in {
     crossCompilePackages
     # Content-Addressed Derivations
     contentAddressedPackages
+    # Dynamic Derivations
+    dynamicDerivationsPackages
   ];
 
   checks = mergeAttrs [
@@ -267,6 +285,8 @@ in {
     crossCompileChecks
     # Content-Addressed Derivations
     contentAddressedChecks
+    # Dynamic Derivations
+    dynamicDerivationsChecks
   ];
 
   defaults = {
