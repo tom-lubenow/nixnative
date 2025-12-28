@@ -28,7 +28,13 @@ import hashlib
 
 
 def nixbase32_encode(data: bytes) -> str:
-    """Encode bytes to Nix's base32 format."""
+    """Encode bytes to Nix's base32 format.
+
+    Nix uses a custom base32 alphabet and encoding:
+    - Little-endian byte interpretation
+    - LSB-first digit extraction
+    - Result is REVERSED at the end
+    """
     # Nix uses a custom base32 alphabet
     alphabet = "0123456789abcdfghijklmnpqrsvwxyz"
 
@@ -41,7 +47,19 @@ def nixbase32_encode(data: bytes) -> str:
         result.append(alphabet[num % 32])
         num //= 32
 
-    return ''.join(result)
+    # CRITICAL: Nix reverses the result
+    return ''.join(reversed(result))
+
+
+def compute_standard_placeholder(output_name: str) -> str:
+    """Compute the standard placeholder for an output.
+
+    For CA derivations, the placeholder is:
+    sha256("nix-output:<output_name>")
+    """
+    clear_text = f"nix-output:{output_name}"
+    digest = hashlib.sha256(clear_text.encode()).digest()
+    return "/" + nixbase32_encode(digest)
 
 
 def compute_placeholder(drv_path: str, output_name: str) -> str:
@@ -130,48 +148,76 @@ def generate_link_derivation(
     driver_flags = link_config.get("driverFlags", [])
     ar = link_config.get("ar", "ar")
     ranlib = link_config.get("ranlib")
+    linker_inputs = link_config.get("linkerInputs", [])
 
-    # Build input derivations with dynamicOutputs
-    input_drvs = {}
-    object_placeholders = []
+    # Build input derivations:
+    # Compile derivations have already been built by the driver,
+    # so we use their actual output paths directly
+    input_drvs = {}  # Map from drv path -> {outputs: [...], dynamicOutputs: {}}
+    object_paths = []
 
     for compile_drv in compile_drvs:
         drv_path = compile_drv["drv"]
         object_name = compile_drv["object"]
+        out_path = compile_drv.get("out", "")
 
-        # Add to inputDrvs with dynamicOutputs
+        # Add to inputDrvs (John Ericson's Nix format: {outputs: [...], dynamicOutputs: {}})
         if drv_path not in input_drvs:
-            input_drvs[drv_path] = {
-                "outputs": [],
-                "dynamicOutputs": {
-                    "out": {
-                        "outputs": ["out"],
-                        "dynamicOutputs": {}
-                    }
-                }
-            }
+            input_drvs[drv_path] = {"outputs": ["out"], "dynamicOutputs": {}}
 
-        # Compute the placeholder for this object
-        # First, get the placeholder for the compile drv's output
-        drv_out_placeholder = compute_placeholder(drv_path, "out")
-        # Then, compute the dynamic placeholder for the output of that drv
-        obj_placeholder = compute_dynamic_placeholder(drv_out_placeholder, "out")
-        object_placeholders.append(f"{obj_placeholder}/{object_name}")
+        # Use actual output path from built compile derivation
+        if out_path:
+            object_paths.append(f"{out_path}/{object_name}")
+        else:
+            # Fallback to placeholder if output path not provided
+            placeholder = compute_placeholder(drv_path, "out")
+            object_paths.append(f"{placeholder}/{object_name}")
 
-    # Input sources
+    # Input sources - include all store paths the link step needs
     input_srcs = []
     if coreutils_path:
         input_srcs.append(coreutils_path)
 
+    # Extract store path from compiler (e.g., /nix/store/xxx-clang/bin/clang++ -> /nix/store/xxx-clang)
+    if compiler:
+        # The compiler path is like /nix/store/hash-name/bin/clang++
+        # We need to extract /nix/store/hash-name
+        parts = compiler.split("/")
+        if len(parts) >= 4 and parts[1] == "nix" and parts[2] == "store":
+            compiler_store_path = "/".join(parts[:4])
+            input_srcs.append(compiler_store_path)
+
+    # Also add ar and ranlib store paths if used
+    if ar and ar.startswith("/nix/store/"):
+        parts = ar.split("/")
+        if len(parts) >= 4:
+            input_srcs.append("/".join(parts[:4]))
+
+    if ranlib and ranlib.startswith("/nix/store/"):
+        parts = ranlib.split("/")
+        if len(parts) >= 4:
+            input_srcs.append("/".join(parts[:4]))
+
+    # Add linker runtime inputs (e.g., lld package)
+    for linker_input in linker_inputs:
+        if linker_input.startswith("/nix/store/"):
+            input_srcs.append(linker_input)
+
     # Build the link command based on output type
-    objects_expr = " ".join(object_placeholders)
+    objects_expr = " ".join(object_paths)
     link_flags_str = " ".join(link_flags) if isinstance(link_flags, list) else link_flags
     driver_flags_str = " ".join(driver_flags) if isinstance(driver_flags, list) else driver_flags
     linker_flag = f"{linker_driver_flag} " if linker_driver_flag else ""
 
+    # Extract compiler bin directory for PATH
+    compiler_bin_dir = os.path.dirname(compiler) if compiler else ""
+    # Add linker bin directories to PATH (for lld, etc.)
+    linker_bin_dirs = ":".join(f"{p}/bin" for p in linker_inputs if p)
+    path_dirs = ":".join(filter(None, [compiler_bin_dir, linker_bin_dirs, f"{coreutils_path}/bin"]))
+
     if output_type == "executable":
         builder_script = f"""
-export PATH="{coreutils_path}/bin:$PATH"
+export PATH="{path_dirs}:$PATH"
 set -eo pipefail
 unset NIX_CFLAGS_COMPILE NIX_CFLAGS_COMPILE_FOR_TARGET
 unset NIX_LDFLAGS NIX_LDFLAGS_FOR_TARGET
@@ -181,7 +227,7 @@ mkdir -p "$out/bin"
     elif output_type == "sharedLibrary":
         lib_name = f"lib{name}.so"
         builder_script = f"""
-export PATH="{coreutils_path}/bin:$PATH"
+export PATH="{path_dirs}:$PATH"
 set -eo pipefail
 unset NIX_CFLAGS_COMPILE NIX_CFLAGS_COMPILE_FOR_TARGET
 unset NIX_LDFLAGS NIX_LDFLAGS_FOR_TARGET
@@ -191,8 +237,10 @@ mkdir -p "$out/lib"
     elif output_type == "staticArchive":
         lib_name = f"lib{name}.a"
         ranlib_cmd = f'{ranlib} "$out/lib/{lib_name}"' if ranlib else ""
+        ar_bin_dir = os.path.dirname(ar) if ar else ""
+        ar_path_dirs = ":".join(filter(None, [ar_bin_dir, f"{coreutils_path}/bin"]))
         builder_script = f"""
-export PATH="{coreutils_path}/bin:$PATH"
+export PATH="{ar_path_dirs}:$PATH"
 set -eo pipefail
 mkdir -p "$out/lib"
 {ar} rcs "$out/lib/{lib_name}" {objects_expr}
@@ -201,7 +249,10 @@ mkdir -p "$out/lib"
     else:
         raise ValueError(f"Unknown output type: {output_type}")
 
-    # Generate the derivation
+    # Use CA derivations with the standard placeholder for 'out'
+    # For CA derivations, Nix substitutes sha256("nix-output:out") at build time
+    standard_placeholder = compute_standard_placeholder("out")
+
     drv = {
         "name": f"link-{name}",
         "system": system,
@@ -209,9 +260,10 @@ mkdir -p "$out/lib"
         "args": ["-c", builder_script.strip()],
         "env": {
             "name": f"link-{name}",
+            "out": standard_placeholder,
         },
         "inputDrvs": input_drvs,
-        "inputSrcs": sorted(set(input_srcs)),
+        "inputSrcs": sorted(set(input_srcs)),  # Full store paths
         "outputs": {
             "out": {
                 "hashAlgo": "sha256",

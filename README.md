@@ -1,89 +1,134 @@
 # nixnative
 
-A modular, extensible system for defining minimal, incremental C/C++ build graphs natively in Nix.
+Incremental C/C++ builds using Nix dynamic derivations.
 
-## Why nixnative?
+## Overview
 
-Traditional C++ build systems (CMake, Meson, Bazel) sit outside Nix and fight against it—wrapping them loses granularity and reproducibility. nixnative takes a different approach: **the build graph is pure Nix**. Each source file becomes a derivation, dependencies flow through attribute sets, and toolchains are just composable Nix functions.
+nixnative implements minimal, incremental C/C++ build graphs natively in Nix using [RFC 92 dynamic derivations](https://github.com/NixOS/rfcs/blob/master/rfcs/0092-plan-dynamism.md). Each source file becomes its own derivation, enabling true per-file incrementality while eliminating IFD (Import From Derivation) during evaluation.
+
+## Requirements
+
+This project requires Nix with dynamic derivations support. The recommended version is pinned in `flake.nix`:
+
+```nix
+# Nix with full dynamic derivations support (commit d904921)
+inputs.nix.url = "github:NixOS/nix/d904921eecbc17662fef67e8162bd3c7d1a54ce0";
+```
+
+Enable the required experimental features in your Nix configuration:
+
+```
+experimental-features = nix-command dynamic-derivations ca-derivations recursive-nix
+```
+
+## Why Dynamic Derivations?
+
+Traditional approaches to incremental C++ builds in Nix face a fundamental tradeoff:
+
+1. **IFD-based scanning**: Evaluation blocks while scanning dependencies, breaking `nix flake check` and slowing CI.
+2. **Checked-in manifests**: Requires manual synchronization, adding maintenance burden.
+
+Dynamic derivations solve this by deferring derivation creation to build time:
+
+```
+EVALUATION (instant):
+  sources → driver.drv (single derivation)
+                ↓
+  builtins.outputOf → placeholder for compilation outputs
+
+BUILD TIME:
+  1. driver.drv runs scanner (clang -MMD)
+  2. driver.drv generates compilation .drv files via `nix derivation add`
+  3. Nix automatically builds those .drv files
+  4. link step receives actual object paths
+```
 
 This gives you:
 
-- **True incrementality.** Change one file, rebuild one derivation. Nix's content-addressed store does the rest.
-- **Full toolchain control.** Compilers, linkers, and flags are explicit inputs—no hidden state, no "works on my machine."
-- **Composability.** Mix compilers (clang, gcc), linkers (lld, mold, gold), and integrate foreign libraries (Rust, Zig) in a single project.
-- **Extensibility.** Adding a new compiler or code generator is just writing a Nix function.
+- **Instant evaluation**: No IFD blocking during `nix eval` or `nix flake check`
+- **True incrementality**: Change one file, rebuild one derivation
+- **Full toolchain control**: Compilers, linkers, and flags are explicit inputs
+- **Content-addressed caching**: Identical compilations are deduplicated
+
+## Quick Start
+
+```nix
+# flake.nix
+{
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+  inputs.nixnative.url = "github:your/nixnative";
+
+  outputs = { nixpkgs, nixnative, ... }: {
+    packages.x86_64-linux.default = let
+      pkgs = import nixpkgs { system = "x86_64-linux"; };
+      native = nixnative.lib.native { inherit pkgs; };
+    in native.executable {
+      name = "hello";
+      root = ./.;
+      sources = [ "src/main.cc" ];
+    };
+  };
+}
+```
+
+Build and run:
+
+```sh
+nix build
+./result/bin/hello
+```
 
 ## Features
 
-- **Modular toolchains.** Compilers and linkers are independent, composable pieces. Use clang with mold, gcc with lld, or define your own combinations.
-- **Abstract flags.** Write `lto = "thin";` once—nixnative translates it to the right CLI flags for each compiler.
-- **Automatic dependency scanning.** Omit the manifest and nixnative discovers header dependencies automatically. Or commit a checked-in manifest for CI without IFD.
-- **Tool plugins.** Code generators (protobuf, Jinja templates, etc.) integrate cleanly—generated sources, headers, and link flags flow through automatically.
-- **Structured libraries.** Static, shared, and header-only libraries propagate their public interface (includes, defines, link flags) to dependents.
-- **IDE integration.** Every target exports `compile_commands.json` for clangd/LSP.
+- **Modular toolchains**: Compilers and linkers are independent, composable pieces. Use clang with mold, gcc with lld, or define your own.
+- **Abstract flags**: Write `lto = "thin";` once—nixnative translates it to the right CLI flags for each compiler.
+- **Tool plugins**: Code generators (templates, etc.) integrate cleanly—generated sources and headers flow through automatically.
+- **Structured libraries**: Static, shared, and header-only libraries propagate their public interface to dependents.
+- **IDE integration**: Every target exports `compile_commands.json` for clangd/LSP.
 
-## Platform support
+## Examples
 
-- **Linux** (x86_64, aarch64): Primary supported platform. All features tested in CI.
-- **macOS** (aarch64-darwin): Best-effort support. Core functionality works, but some features may have limitations. Darwin-specific complexity is isolated to avoid impacting Linux development.
+See the `examples/` directory for working examples:
 
-## Repository layout
+- `examples/executable` – Minimal executable
+- `examples/library` – Static library with public headers
+- `examples/app-with-library` – Executable + library + tool plugins
+- `examples/multi-toolchain` – Different compiler/linker combinations
+- `examples/dynamic-derivations` – Explicit dynamic mode example
 
-```
-.
-├── README.md
-├── flake.nix     # Top level flake used for internal CI and public API
-├── nix/          # core library (compilers, linkers, toolchains, builders)
-└── examples/     # Various examples to demonstrate and test functionality
-```
-
-## Quick start
-
-### Example flakes
-
-Each directory under `examples/` contains a self-contained flake template. You can copy any of them into a new repository (or run them in place) and simply replace the sources while reusing the nixnative library. For example:
-
-- `examples/executable` – minimal executable that relies on the dependency scanner.
-- `examples/library` – static library exposing public headers and a smoke-test that links against it.
-- `examples/app-with-library` – executable + internal library + generated sources with a checked-in `.deps.nix` manifest (mirrors `.#simple-strict`/`.#simple-scanned`).
-- `examples/rust-integration` – executable that links against a Rust static library built via a minimal `rustc` invocation.
-- `examples/rust-integration-crane` – same idea, but the Rust library is built with `crane` for a Cargo-first workflow.
-- `examples/multi-toolchain` – demonstrates using different compiler/linker combinations and abstract flags.
-
-To build one of them directly:
+Build an example:
 
 ```sh
-cd examples/executable
-nix build
+nix build .#executableExample
 ./result/bin/executable-example
 ```
 
-Back at the root flake the same packages are exposed as `.#executableExample`, `.#mathLibrary`, `.#simple-strict`, etc.
+## Platform Support
 
-### Build the example
+- **Linux** (x86_64, aarch64): Primary supported platform
+- **macOS** (aarch64-darwin): Best-effort support
 
-```sh
-nix build .#simple-strict           # uses the checked-in .deps.nix
-./result/bin/simple-strict
+## Repository Layout
+
+```
+.
+├── flake.nix       # Top-level flake with examples
+├── nix/native/     # Core library (compilers, linkers, toolchains, builders)
+│   ├── dynamic/    # Dynamic derivations implementation
+│   ├── builders/   # High-level build functions
+│   └── ...
+└── examples/       # Example projects
 ```
 
-You can also exercise the scanner-based flow:
+## Current Status
 
-```sh
-nix build .#simple-scanned          # auto-scans dependencies via IFD
-./result/bin/simple-scanned
-```
+This project builds on experimental Nix features. The dynamic derivations implementation is based on [John Ericson's work on RFC 92](https://github.com/NixOS/nix/commits/author/John-Ericson).
 
-Run the full test suite (builds both variants and runs smoke tests):
+Key references:
+- [RFC 92: Plan Dynamism](https://github.com/NixOS/rfcs/blob/master/rfcs/0092-plan-dynamism.md)
+- [Farid Zakaria's nix-ninja blog posts](https://fzakaria.com/)
+- [nix-ninja project](https://github.com/aspect-build/nix-ninja)
 
-```sh
-nix flake check
-```
+## License
 
-## On naming
-
-This project is called "Nix Native" to emphasize that the build graphs are written in pure nix, as opposed to delegating to another tool.
-This is an imperfect naming as it could collide with other interpretations of the word "native", however to that end I would stress that
-all are welcome. The initial implementation of this library includes native support for C and C++, however other languages are welcome to
-implement native build graph support as well via PR. The north star is simply "minimal, incremental builds implemented natively in nix"
-and any compilation toolchain that can satisfy that should be welcome.
+MIT

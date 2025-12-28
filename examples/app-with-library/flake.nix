@@ -17,7 +17,7 @@
       );
     in {
       packages = forAllSystems ({ packages, ... }: packages // {
-        default = packages.strict;
+        default = packages.app;
       });
 
       checks = forAllSystems ({ checks, ... }: checks);

@@ -12,18 +12,14 @@
 # For advanced use cases, pass a pre-built toolchain directly:
 #   native.executable { toolchain = myToolchain; ... }
 #
-# Content-Addressed Mode:
-#   Enable contentAddressed = true for better incremental builds when using
-#   Nix with the 'ca-derivations' experimental feature:
-#   native.executable { contentAddressed = true; ... }
+# Dynamic Derivations:
+#   nixnative uses Nix dynamic derivations (RFC 92) for incremental builds.
+#   This eliminates IFD (Import From Derivation) during evaluation while
+#   enabling per-file incremental compilation at build time.
 #
-# Scan Modes:
-#   scanMode = "per-file" (default) - Per-file scanner derivations (incremental)
-#   scanMode = "batch" - Legacy batch scanner (single derivation)
-#   scanMode = "dynamic" - Dynamic derivations (no IFD, experimental)
+#   Requirements:
+#     experimental-features = nix-command dynamic-derivations ca-derivations recursive-nix
 #
-# Or use the shorthand:
-#   dynamic = true - Equivalent to scanMode = "dynamic"
 #
 {
   lib,
@@ -97,22 +93,18 @@ let
       };
 
   # Remove our special params from args before passing to mk* functions
-  # Note: scanMode passes through to mkBuildContext
+  # Always use dynamic mode (default scanMode)
   cleanArgs =
     args:
     let
-      # Convert dynamic=true to scanMode="dynamic"
-      withScanMode = if args.dynamic or false then
-        args // { scanMode = "dynamic"; }
-      else
-        args;
+      # Always use dynamic mode
+      withScanMode = args // { scanMode = "dynamic"; };
     in
     builtins.removeAttrs withScanMode [
       "compiler"
       "linker"
       "toolchain"
       "contentAddressed"  # Handled by extractToolchain, stored in toolchain
-      "dynamic"  # Converted to scanMode above
     ];
 
   # ==========================================================================
@@ -122,24 +114,20 @@ let
   # Build an executable
   #
   # Arguments:
-  #   compiler         - (optional) "clang", "gcc", or compiler family object
-  #   linker           - (optional) "lld", "mold", "gold", "ld", or linker object
-  #   toolchain        - (optional) Pre-built toolchain (overrides compiler/linker)
-  #   contentAddressed - (optional) Enable CA derivations for incremental builds
-  #   scanMode         - (optional) "per-file" (default), "batch" (legacy), or "dynamic"
-  #   dynamic          - (optional) Shorthand for scanMode = "dynamic"
-  #   name             - Target name
-  #   root             - Source root directory
-  #   sources          - List of source files
-  #   includeDirs      - Include directories
-  #   defines          - Preprocessor defines
-  #   flags            - Abstract flags (lto, sanitizers, etc.)
-  #   compileFlags     - Raw compile flags (all languages)
-  #   langFlags        - Per-language raw flags { c = [...]; cpp = [...]; }
-  #   ldflags          - Additional linker flags
-  #   libraries        - Library dependencies
-  #   tools            - Tool plugins (protobuf, jinja, etc.)
-  #   depsManifest     - Pre-computed dependency manifest (skips scanning)
+  #   compiler     - (optional) "clang", "gcc", or compiler family object
+  #   linker       - (optional) "lld", "mold", "gold", "ld", or linker object
+  #   toolchain    - (optional) Pre-built toolchain (overrides compiler/linker)
+  #   name         - Target name
+  #   root         - Source root directory
+  #   sources      - List of source files
+  #   includeDirs  - Include directories
+  #   defines      - Preprocessor defines
+  #   flags        - Abstract flags (lto, sanitizers, etc.)
+  #   compileFlags - Raw compile flags (all languages)
+  #   langFlags    - Per-language raw flags { c = [...]; cpp = [...]; }
+  #   ldflags      - Additional linker flags
+  #   libraries    - Library dependencies
+  #   tools        - Tool plugins (code generators, etc.)
   #
   executable =
     args:

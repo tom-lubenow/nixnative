@@ -25,10 +25,45 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import os
 import sys
 from pathlib import Path
+
+
+def nix_base32_encode(data: bytes) -> str:
+    """Encode bytes to Nix's base32 format.
+
+    Nix uses a custom base32 alphabet and encoding:
+    - Little-endian byte interpretation
+    - LSB-first digit extraction
+    - Result is REVERSED at the end
+    """
+    alphabet = "0123456789abcdfghijklmnpqrsvwxyz"
+
+    # Convert to integer (little-endian)
+    num = int.from_bytes(data, byteorder='little')
+
+    # Encode - SHA256 is 32 bytes = 52 base32 chars
+    result = []
+    for _ in range(52):
+        result.append(alphabet[num % 32])
+        num //= 32
+
+    # CRITICAL: Nix reverses the result
+    return ''.join(reversed(result))
+
+
+def compute_standard_placeholder(output_name: str) -> str:
+    """Compute the standard placeholder for an output.
+
+    For regular derivations, the placeholder is:
+    sha256("nix-output:<output_name>")
+    """
+    clear_text = f"nix-output:{output_name}"
+    digest = hashlib.sha256(clear_text.encode()).digest()
+    return "/" + nix_base32_encode(digest)
 
 
 def sanitize_name(name: str) -> str:
@@ -52,11 +87,27 @@ def generate_derivation(
     lang_flags: str,
     linker_flag: str,
     system: str,
+    bash_path: str,
+    coreutils_path: str,
 ) -> dict:
     """Generate a derivation JSON for compiling a source file."""
 
     # Derivation name - use normalized output name like nix-ninja
     name = f"compile-{sanitize_name(source_rel)}"
+
+    # Rewrite relative include flags to be relative to source_tree
+    # -Ifoo -> -I{source_tree}/foo for relative paths
+    # -I/abs/path -> unchanged for absolute paths
+    def rewrite_include_flag(flag):
+        if flag.startswith("-I"):
+            path = flag[2:]
+            if not path.startswith("/"):
+                return f"-I{source_tree}/{path}"
+        return flag
+
+    rewritten_include_flags = " ".join(
+        rewrite_include_flag(f) for f in include_flags.split()
+    ) if include_flags else ""
 
     # Build the compile command
     # Order: default flags, compile flags, lang flags, linker flag, includes, defines
@@ -68,15 +119,11 @@ def generate_derivation(
                 compile_flags,
                 lang_flags,
                 linker_flag,
-                include_flags,
+                rewritten_include_flags,
                 define_flags,
             ],
         )
     )
-
-    # Get paths from environment (these are set by the driver derivation)
-    bash_path = os.environ.get("BASH_PATH", "/bin/sh")
-    coreutils_path = os.environ.get("COREUTILS_PATH", "")
 
     # The builder script
     # Include PATH setup to find coreutils (mkdir, etc.)
@@ -95,8 +142,11 @@ mkdir -p "$out"
     if coreutils_path:
         input_srcs.append(coreutils_path)
 
-    # Standard JSON derivation format (not version 4)
-    # This format uses inputSrcs (full paths) and inputDrvs
+    # Use CA derivations with the standard placeholder for 'out'
+    # For CA derivations, Nix substitutes sha256("nix-output:out") at build time
+    # This is the same approach nix-ninja uses
+    standard_placeholder = compute_standard_placeholder("out")
+
     drv = {
         "name": name,
         "system": system,
@@ -104,9 +154,10 @@ mkdir -p "$out"
         "args": ["-c", builder_script.strip()],
         "env": {
             "name": name,
+            "out": standard_placeholder,
         },
         "inputDrvs": {},
-        "inputSrcs": sorted(set(input_srcs)),
+        "inputSrcs": sorted(set(input_srcs)),  # Full store paths
         "outputs": {
             "out": {
                 "hashAlgo": "sha256",
@@ -135,6 +186,8 @@ def main():
     parser.add_argument("--lang-flags", default="", help="Per-language flags")
     parser.add_argument("--linker-flag", default="", help="Linker driver flag")
     parser.add_argument("--system", required=True, help="System (e.g., x86_64-linux)")
+    parser.add_argument("--bash-path", required=True, help="Path to bash")
+    parser.add_argument("--coreutils-path", required=True, help="Path to coreutils")
     parser.add_argument("--output", required=True, help="Output JSON file path")
 
     args = parser.parse_args()
@@ -151,6 +204,8 @@ def main():
         lang_flags=args.lang_flags,
         linker_flag=args.linker_flag,
         system=args.system,
+        bash_path=args.bash_path,
+        coreutils_path=args.coreutils_path,
     )
 
     with open(args.output, "w") as f:

@@ -186,7 +186,7 @@ echo "$config" | jq -c '.sources[]' | while read -r source_json; do
   tree_dir=$(create_source_tree "$rel" "$deps_list")
 
   # Add source tree to nix store
-  tree_store_path=$(nix store add-path "$tree_dir" --name "src-$(echo "$rel" | tr '/' '_')")
+  tree_store_path=$($NIX_BIN store add-path "$tree_dir" --name "src-$(echo "$rel" | tr '/' '_')")
 
   # Get compiler and flags for this file
   compiler=$(get_compiler "$lang")
@@ -203,6 +203,8 @@ echo "$config" | jq -c '.sources[]' | while read -r source_json; do
     --source-tree "$tree_store_path"
     --compiler "$compiler"
     --system "$system"
+    --bash-path "$BASH_PATH"
+    --coreutils-path "$COREUTILS_PATH"
     --output "$drv_json"
   )
 
@@ -228,13 +230,19 @@ echo "$config" | jq -c '.sources[]' | while read -r source_json; do
 
   python3 "$GENERATE_DRV_SCRIPT" "${args[@]}"
 
-  # Add derivation to store
-  drv_path=$(nix derivation add < "$drv_json")
+  # CA derivations use standard placeholder - nix derivation add works directly
+  drv_path=$($NIX_BIN derivation add < "$drv_json")
+
   echo "Created: $drv_path"
 
-  # Add to compile_drvs array
-  jq --arg drv "$drv_path" --arg obj "$object_name" \
-    '. += [{"drv": $drv, "object": $obj}]' \
+  # Build the compile derivation to get the actual output path
+  # For CA derivations, this produces a deterministic output
+  out_path=$($NIX_BIN build "$drv_path^out" --no-link --print-out-paths)
+  echo "Built: $out_path"
+
+  # Add to compile_drvs array with actual output path
+  jq --arg drv "$drv_path" --arg obj "$object_name" --arg out "$out_path" \
+    '. += [{"drv": $drv, "object": $obj, "out": $out}]' \
     "$compile_drvs_json" > "$compile_drvs_json.tmp"
   mv "$compile_drvs_json.tmp" "$compile_drvs_json"
 done
@@ -257,8 +265,9 @@ python3 "$GENERATE_LINK_DRV_SCRIPT" \
   --system "$system" \
   --output "$link_drv_json"
 
-# Add link derivation to store
-link_drv_path=$(nix derivation add < "$link_drv_json")
+# CA derivations use standard placeholder - nix derivation add works directly
+link_drv_path=$($NIX_BIN derivation add < "$link_drv_json")
+
 echo "Created link derivation: $link_drv_path"
 
 # Output the link .drv file to $out

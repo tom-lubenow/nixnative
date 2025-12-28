@@ -1,12 +1,15 @@
-# nixnative - Multi-compiler, multi-linker C/C++ build system for Nix
+# nixnative - Incremental C/C++ builds using Nix dynamic derivations
 #
 # Main entry point. Import this to get access to all nixnative functionality.
 #
+# Requires Nix with dynamic derivations support:
+#   experimental-features = nix-command dynamic-derivations ca-derivations recursive-nix
+#
 # Usage:
 #   let
-#     native = nixnative.lib.native { inherit pkgs; };
+#     native = nixnative.lib.native { inherit pkgs nixPackage; };
 #   in
-#   native.mkExecutable { ... }
+#   native.executable { ... }
 #
 {
   pkgs,
@@ -88,9 +91,6 @@ let
     inherit (compilerCore) mkCompiler gccFlagTranslators mkGccStyleScanner;
   };
 
-  rustCompilers = import ./compilers/rustc.nix {
-    inherit pkgs lib;
-  };
 
   # ==========================================================================
   # Linker Implementations
@@ -184,12 +184,6 @@ let
       gcc12
       gcc13
       gcc14
-      ;
-
-    # Rust compiler (has .rust)
-    inherit (rustCompilers)
-      rustc
-      mkRustc
       ;
   };
 
@@ -472,12 +466,6 @@ let
       ;
   };
 
-  # Rust builders
-  rustBuilders = import ./builders/rust.nix {
-    inherit pkgs lib utils;
-    platform = platformUtils;
-  };
-
 in
 {
   # ==========================================================================
@@ -573,15 +561,6 @@ in
     ;
   inherit (helpers) mkDevShell mkTest;
 
-  # Rust builders
-  inherit (rustBuilders)
-    mkRustCrate
-    mkRustExecutable
-    mkRustLib
-    mkRustStaticLib
-    mkRustDylib
-    ;
-
   # Lower-level builders
   inherit (context) mkBuildContext;
   inherit (compile) compileTranslationUnit generateCompileCommands;
@@ -592,24 +571,15 @@ in
     createStaticArchive
     ;
 
-  # Scanner and manifest utilities
-  inherit (scanner)
-    mkDependencyScanner  # Legacy batch scanner (deprecated)
-    mkFileScan           # Per-file scanner derivation
-    mkSourceScans        # Create per-file scans for all sources
-    mergeFileScans       # Merge per-file scan results into manifest
-    processTools
-    ;
+  # Tool plugin processing
+  inherit (scanner) processTools;
   inherit (manifest) mkManifest emptyManifest mergeManifests;
 
-  # Dynamic derivations (experimental)
-  # Requires: experimental-features = dynamic-derivations ca-derivations
+  # Dynamic derivations internals (for advanced use)
   inherit (dynamic)
-    hasDynamicDerivations    # Check if dynamic derivations are available
-    mkDynamicDriver          # Create dynamic driver derivation
-    mkDynamicBuildContext    # Dynamic-mode build context
-    linkDynamicExecutable    # Link from dynamic driver output
-    linkDynamicSharedLibrary # Link shared lib from dynamic driver
+    hasDynamicDerivations
+    mkDynamicDriver
+    mkDynamicBuildContext
     ;
 
   # Utilities (for advanced users)

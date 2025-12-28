@@ -175,14 +175,16 @@ rec {
             ++ (tc.translateFlags flags);
           ar = tc.ar;
           ranlib = tc.ranlib;
+          # Include linker runtime inputs as store paths for the link derivation
+          linkerInputs = map toString tc.linker.runtimeInputs;
         };
         system = pkgs.stdenv.hostPlatform.system;
       };
 
     in
     pkgs.stdenv.mkDerivation ({
-      pname = "${name}-driver";
-      version = "0.1.0";
+      # Name MUST end in .drv for CA output path to be recognized as a derivation
+      name = "${name}-driver.drv";
 
       # Content-addressed derivation with text output mode
       # The output will be a .drv file (link derivation)
@@ -219,6 +221,7 @@ rec {
       # Pass paths for generated derivations
       BASH_PATH = "${pkgs.bash}/bin/bash";
       COREUTILS_PATH = "${pkgs.coreutils}";
+      NIX_BIN = "${nixPackage}/bin/nix";
 
       # Enable experimental features for nested nix commands
       NIX_CONFIG = ''
@@ -229,7 +232,6 @@ rec {
         inherit name toolchain tus;
         inherit includeDirs defines compileFlags flags;
       };
-    } // tc.environment) {
       # Skip default phases
       dontUnpack = true;
       dontConfigure = true;
@@ -278,7 +280,7 @@ rec {
 
         runHook postBuild
       '';
-    };
+    } // tc.environment);
 
   # ==========================================================================
   # Dynamic Output Reference

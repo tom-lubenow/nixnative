@@ -78,8 +78,7 @@ PY
       evalInputs = [ renderDrv ];
     };
 
-  buildInfoStrict = mkBuildInfoTool "strict";
-  buildInfoScanned = mkBuildInfoTool "scanner";
+  buildInfoTool = mkBuildInfoTool "dynamic";
 
   # Wrap zlib via pkg-config
   zlibLib = native.pkgConfig.makeLibrary {
@@ -93,31 +92,18 @@ PY
     name = "math";
     inherit root includeDirs;
     sources = libSources;
-    depsManifest = ./.deps.nix;
     publicIncludeDirs = includeDirs;
   };
 
-  # Executable with pre-computed manifest and tools
-  strict = native.executable {
-    name = "simple-strict";
-    inherit root includeDirs;
-    sources = appSources;
-    depsManifest = ./.deps.nix;
-    libraries = [ mathLib zlibLib ];
-    tools = [ buildInfoStrict ];
-  };
-
-  # Executable with auto-scanned dependencies
-  scanned = native.executable {
-    name = "simple-scanned";
+  # Main executable with tool plugin
+  app = native.executable {
+    name = "simple-app";
     inherit root includeDirs;
     sources = appSources;
     libraries = [ mathLib zlibLib ];
-    tools = [ buildInfoScanned ];
+    tools = [ buildInfoTool ];
   };
 
 in {
-  mathLib = mathLib;
-  strict = strict;
-  scanned = scanned;
+  inherit mathLib app;
 }

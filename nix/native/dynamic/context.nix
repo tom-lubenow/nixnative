@@ -107,7 +107,7 @@ rec {
 
       # Combine link flags from libraries
       combinedLinkFlags = linkFlags ++ publicAggregate.linkFlags;
-      combinedLdflags = ldflags ++ publicAggregate.ldFlags;
+      combinedLdflags = ldflags;
 
       # Create the dynamic driver
       driverDrv = mkDynamicDriver {
