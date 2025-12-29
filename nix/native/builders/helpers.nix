@@ -1,33 +1,38 @@
 # High-level build helpers for nixnative
 #
 # These functions provide the primary API for building C/C++ targets.
-# They use mkBuildContext internally and produce ready-to-use derivations.
+# They use the dynamic compilation primitives and produce ready-to-use derivations.
 #
 {
   pkgs,
   lib,
   utils,
-  context,
   link,
   platform,
-  dynamic ? null,  # Optional dynamic module
+  scanner,  # Tool processing
+  dynamic,  # Dynamic compilation module (required)
 }:
 
 let
   inherit (lib) concatStringsSep;
   inherit (utils)
+    sanitizePath
     sanitizeName
     normalizeIncludeDir
     mergePublic
     ensureList
-    collectAllLinkFlags
+    collectPublic
+    emptyPublic
+    collectObjectRefs
+    collectLinkFlags
     ;
-  inherit (context) mkBuildContext;
-  inherit (link)
-    linkExecutable
-    linkSharedLibrary
-    createStaticArchive
+  inherit (scanner) processTools;
+  inherit (dynamic)
+    mkCompileSet
+    mkLinkWrapper
+    mkArchiveWrapper
     ;
+  inherit (link) createStaticArchive;
 
 in
 rec {
@@ -50,47 +55,100 @@ rec {
   #   ldflags      - Additional linker flags
   #   libraries    - Library dependencies
   #   tools        - Tool plugins
-  #   depsManifest - Pre-computed dependency manifest (skips scanning)
-  #   scanMode     - "per-file" (default, incremental) or "batch" (legacy)
   #
   mkExecutable =
-    args:
+    {
+      name,
+      toolchain,
+      root,
+      sources,
+      includeDirs ? [],
+      defines ? [],
+      flags ? [],
+      compileFlags ? [],
+      langFlags ? {},
+      ldflags ? [],
+      libraries ? [],
+      tools ? [],
+      ...
+    }@args:
     let
-      ctx = mkBuildContext args;
-      inherit (ctx)
-        toolchain
-        name
-        objectPaths
-        flags
-        libraries
-        libsEvalInputs
-        ;
+      tc = toolchain;
+      rootPath = sanitizePath { path = root; };
 
-      # Recursively collect all link flags from libraries and their transitive dependencies
-      allLinkFlags = collectAllLinkFlags libraries;
+      # Process tools for generated headers/sources
+      toolInfo = processTools tools;
 
-      # Use dynamic link if context is dynamic mode
-      # In dynamic mode, the driver already has all link configuration built in
-      drv = if ctx.isDynamic or false then
-        dynamic.mkDynamicExecutable {
-          inherit name;
-          driverDrv = ctx.driverDrv;
-        }
-      else
-        linkExecutable {
-          inherit toolchain name flags;
-          objects = objectPaths;
-          ldflags = args.ldflags or [ ];
-          linkFlags = allLinkFlags;
-          extraInputs = libsEvalInputs;
-        };
+      # Collect public attributes from libraries
+      libsPublic = collectPublic libraries;
+
+      # Merge library and tool public attributes
+      publicAggregate = mergePublic libsPublic toolInfo.public;
+
+      # Combine sources (own + tool-generated)
+      allSources = sources ++ toolInfo.sources;
+
+      # Combine include directories
+      combinedIncludeDirs = includeDirs
+        ++ (map (d: d.path) publicAggregate.includeDirs)
+        ++ toolInfo.includeDirs;
+
+      # Combine defines
+      combinedDefines = defines ++ publicAggregate.defines ++ toolInfo.defines;
+
+      # Combine compile flags
+      combinedCompileFlags = compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
+
+      # Compile own sources
+      compileSet = mkCompileSet {
+        inherit name root toolchain flags;
+        sources = allSources;
+        includeDirs = combinedIncludeDirs;
+        defines = combinedDefines;
+        compileFlags = combinedCompileFlags;
+        inherit langFlags;
+        headerOverrides = toolInfo.headerOverrides;
+        sourceOverrides = toolInfo.sourceOverrides;
+        extraInputs = toolInfo.evalInputs;
+      };
+
+      # Collect object refs from libraries
+      libObjectRefs = collectObjectRefs libraries;
+
+      # Collect legacy link flags (for external libs like pkg-config)
+      legacyLinkFlags = collectLinkFlags libraries;
+
+      # All object references (own + from libraries)
+      allObjectRefs = compileSet.objectRefs ++ libObjectRefs;
+
+      # Link into executable
+      linked = mkLinkWrapper {
+        inherit name toolchain flags;
+        objectRefs = allObjectRefs;
+        outputType = "executable";
+        inherit ldflags;
+        linkFlags = legacyLinkFlags;
+      };
+
+      # Create a derivation that wraps the linked output
+      drv = pkgs.runCommand name {
+        linkedOutput = linked.out;
+      } ''
+        mkdir -p $out
+        cp -r "$linkedOutput"/* $out/
+      '';
     in
-    drv
-    // {
+    drv // {
       artifactType = "executable";
       inherit name;
       executablePath = "${drv}/bin/${name}";
-      passthru = (drv.passthru or { }) // ctx;
+      inherit (compileSet) objectRefs;
+      compileCommands = null;  # TODO: generate at build time
+      passthru = {
+        inherit toolchain;
+        inherit (compileSet) wrappers tus;
+        inherit libraries tools;
+      };
     };
 
   # ==========================================================================
@@ -99,34 +157,69 @@ rec {
 
   # Build a static library from C/C++ sources
   #
-  # Objects are passed directly to the linker for better incrementality.
+  # Objects are compiled but NOT linked. The objectRefs are exposed for
+  # consumers (executables, shared libs) to collect and link.
+  #
   # Use mkArchive if you need an actual .a archive file.
   #
-  # Additional arguments:
-  #   compileFlags      - Raw compile flags (all languages)
-  #   langFlags         - Per-language raw flags { c = [...]; cpp = [...]; }
-  #   publicIncludeDirs - Headers to expose to consumers
-  #   publicDefines     - Defines to propagate to consumers
-  #   publicCxxFlags    - C++ flags to propagate to consumers
-  #
   mkStaticLib =
-    args:
+    {
+      name,
+      toolchain,
+      root,
+      sources,
+      includeDirs ? [],
+      defines ? [],
+      flags ? [],
+      compileFlags ? [],
+      langFlags ? {},
+      libraries ? [],
+      tools ? [],
+      publicIncludeDirs ? [],
+      publicDefines ? [],
+      publicCxxFlags ? [],
+      ...
+    }@args:
     let
-      ctx = mkBuildContext args;
-      inherit (ctx)
-        toolchain
-        name
-        rootPath
-        publicAggregate
-        objectPaths
-        ;
-
-      # Public interface for consumers
-      publicIncludeDirs = args.publicIncludeDirs or [ ];
-      publicDefines = args.publicDefines or [ ];
-      publicCxxFlags = args.publicCxxFlags or [ ];
-
+      tc = toolchain;
+      rootPath = sanitizePath { path = root; };
       rootHost = builtins.toString rootPath;
+
+      # Process tools for generated headers/sources
+      toolInfo = processTools tools;
+
+      # Collect public attributes from libraries
+      libsPublic = collectPublic libraries;
+
+      # Merge library and tool public attributes
+      publicAggregate = mergePublic libsPublic toolInfo.public;
+
+      # Combine sources (own + tool-generated)
+      allSources = sources ++ toolInfo.sources;
+
+      # Combine include directories
+      combinedIncludeDirs = includeDirs
+        ++ (map (d: d.path) publicAggregate.includeDirs)
+        ++ toolInfo.includeDirs;
+
+      # Combine defines
+      combinedDefines = defines ++ publicAggregate.defines ++ toolInfo.defines;
+
+      # Combine compile flags
+      combinedCompileFlags = compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
+
+      # Compile sources (NO linking!)
+      compileSet = mkCompileSet {
+        inherit name root toolchain flags;
+        sources = allSources;
+        includeDirs = combinedIncludeDirs;
+        defines = combinedDefines;
+        compileFlags = combinedCompileFlags;
+        inherit langFlags;
+        headerOverrides = toolInfo.headerOverrides;
+        sourceOverrides = toolInfo.sourceOverrides;
+        extraInputs = toolInfo.evalInputs;
+      };
 
       # Normalize public include directories
       publicIncludeStores = map (
@@ -137,7 +230,7 @@ rec {
         }
       ) (ensureList publicIncludeDirs);
 
-      # Install headers only (no archive - objects are passed directly to linker)
+      # Install headers only (no archive - objects are passed via objectRefs)
       installHeaders = concatStringsSep "\n" (
         map (dir: "cp -r ${dir}/. $out/include/") publicIncludeStores
       );
@@ -148,41 +241,39 @@ rec {
         ${installHeaders}
       '';
 
-      # Build public interface - pass object files directly to linker
-      # NOTE: We intentionally do NOT merge transitive linkFlags here.
-      # Static libraries should only expose their own objects in public.linkFlags.
-      # Transitive dependencies are tracked via the 'libraries' attribute and
-      # resolved recursively by executables/shared libs using collectAllLinkFlags.
-      # This prevents duplicate symbol errors when multiple libraries share deps.
+      # Build public interface
+      # NOTE: linkFlags is EMPTY - consumers get objects via objectRefs
       basePublic = {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
         cxxFlags = publicCxxFlags;
-        linkFlags = objectPaths;
+        linkFlags = [];  # No linkFlags - use objectRefs instead
       };
 
-      # Merge headers/defines/cxxFlags from dependencies, but NOT linkFlags
+      # Merge headers/defines/cxxFlags from dependencies
       combinedPublic = {
         includeDirs = publicAggregate.includeDirs ++ basePublic.includeDirs;
         defines = publicAggregate.defines ++ basePublic.defines;
         cxxFlags = publicAggregate.cxxFlags ++ basePublic.cxxFlags;
-        linkFlags = basePublic.linkFlags; # Only this lib's objects
+        linkFlags = [];  # Consumers use objectRefs
       };
     in
-    headersDrv
-    // {
+    headersDrv // {
       artifactType = "static";
       inherit name;
-      inherit objectPaths;
-      inherit (ctx)
-        objectInfos
-        compileCommands
-        manifest
-        libraries
-        tools
-        ;
+
+      # Expose object references for consumers
+      inherit (compileSet) objectRefs;
+
+      # Keep reference to libraries for transitive dependency resolution
+      inherit libraries tools;
+
       public = combinedPublic;
-      passthru = (headersDrv.passthru or { }) // ctx;
+      compileCommands = null;  # TODO: generate at build time
+      passthru = {
+        inherit toolchain;
+        inherit (compileSet) wrappers tus;
+      };
     };
 
   # ==========================================================================
@@ -195,10 +286,6 @@ rec {
   # - External distribution/installation
   # - Traditional archive link semantics (selective object inclusion)
   #
-  # Arguments:
-  #   lib  - A static library from mkStaticLib
-  #   name - (optional) Override archive name
-  #
   mkArchive =
     {
       lib,
@@ -206,25 +293,50 @@ rec {
     }:
     let
       tc = lib.passthru.toolchain;
-      objects = lib.objectPaths or lib.passthru.objectPaths;
 
-      archiveDrv = createStaticArchive {
-        toolchain = tc;
-        inherit name objects;
-      };
+      # Get objectRefs from the library
+      objectRefs = lib.objectRefs or [];
+
+      # If no objectRefs, fall back to legacy objectPaths
+      hasObjectRefs = objectRefs != [];
+
+      # Create archive using new primitive or legacy method
+      archiveResult =
+        if hasObjectRefs then
+          mkArchiveWrapper {
+            inherit name objectRefs;
+            toolchain = tc;
+          }
+        else
+          # Legacy fallback
+          let
+            objects = lib.objectPaths or lib.passthru.objectPaths or [];
+            archiveDrv = createStaticArchive {
+              toolchain = tc;
+              inherit name objects;
+            };
+          in {
+            drv = archiveDrv;
+            archivePath = "${archiveDrv}/lib/lib${sanitizeName name}.a";
+          };
 
       archiveName = "lib${sanitizeName name}.a";
 
       # Combine archive with headers from original lib
-      archive = pkgs.runCommand "archive-${name}" { } ''
+      archive = pkgs.runCommand "archive-${name}" {
+        archiveOutput = archiveResult.out or archiveResult.archivePath;
+      } ''
         set -euo pipefail
         mkdir -p "$out/lib" "$out/include"
-        cp ${archiveDrv}/lib/${archiveName} "$out/lib/"
+        if [ -d "$archiveOutput" ]; then
+          cp -r "$archiveOutput"/lib/* "$out/lib/" 2>/dev/null || true
+        else
+          cp "$archiveOutput" "$out/lib/${archiveName}"
+        fi
         cp -r ${lib}/include/. $out/include/ 2>/dev/null || true
       '';
     in
-    archive
-    // {
+    archive // {
       artifactType = "archive";
       inherit name;
       archivePath = "${archive}/lib/${archiveName}";
@@ -239,34 +351,89 @@ rec {
 
   # Build a shared library (.so) from C/C++ sources
   #
-  # Arguments:
-  #   compileFlags - Raw compile flags (all languages)
-  #   langFlags    - Per-language raw flags { c = [...]; cpp = [...]; }
-  #   ldflags      - Additional linker flags
-  #
   mkSharedLib =
-    args:
+    {
+      name,
+      toolchain,
+      root,
+      sources,
+      includeDirs ? [],
+      defines ? [],
+      flags ? [],
+      compileFlags ? [],
+      langFlags ? {},
+      ldflags ? [],
+      libraries ? [],
+      tools ? [],
+      publicIncludeDirs ? [],
+      publicDefines ? [],
+      publicCxxFlags ? [],
+      ...
+    }@args:
     let
-      ctx = mkBuildContext args;
-      inherit (ctx)
-        toolchain
-        name
-        rootPath
-        publicAggregate
-        objectPaths
-        flags
-        libraries
-        libsEvalInputs
-        ;
-
-      targetPlatform = toolchain.targetPlatform;
-
-      # Public interface for consumers
-      publicIncludeDirs = args.publicIncludeDirs or [ ];
-      publicDefines = args.publicDefines or [ ];
-      publicCxxFlags = args.publicCxxFlags or [ ];
-
+      tc = toolchain;
+      rootPath = sanitizePath { path = root; };
       rootHost = builtins.toString rootPath;
+
+      targetPlatform = tc.targetPlatform;
+
+      # Process tools for generated headers/sources
+      toolInfo = processTools tools;
+
+      # Collect public attributes from libraries
+      libsPublic = collectPublic libraries;
+
+      # Merge library and tool public attributes
+      publicAggregate = mergePublic libsPublic toolInfo.public;
+
+      # Combine sources (own + tool-generated)
+      allSources = sources ++ toolInfo.sources;
+
+      # Combine include directories
+      combinedIncludeDirs = includeDirs
+        ++ (map (d: d.path) publicAggregate.includeDirs)
+        ++ toolInfo.includeDirs;
+
+      # Combine defines
+      combinedDefines = defines ++ publicAggregate.defines ++ toolInfo.defines;
+
+      # Combine compile flags
+      combinedCompileFlags = compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
+
+      # Compile sources
+      compileSet = mkCompileSet {
+        inherit name root toolchain flags;
+        sources = allSources;
+        includeDirs = combinedIncludeDirs;
+        defines = combinedDefines;
+        compileFlags = combinedCompileFlags;
+        inherit langFlags;
+        headerOverrides = toolInfo.headerOverrides;
+        sourceOverrides = toolInfo.sourceOverrides;
+        extraInputs = toolInfo.evalInputs;
+      };
+
+      # Collect object refs from libraries
+      libObjectRefs = collectObjectRefs libraries;
+
+      # Collect legacy link flags
+      legacyLinkFlags = collectLinkFlags libraries;
+
+      # All object references (own + from libraries)
+      allObjectRefs = compileSet.objectRefs ++ libObjectRefs;
+
+      # Link into shared library
+      linked = mkLinkWrapper {
+        inherit name toolchain flags;
+        objectRefs = allObjectRefs;
+        outputType = "sharedLibrary";
+        inherit ldflags;
+        linkFlags = legacyLinkFlags;
+      };
+
+      # Determine shared library name
+      sharedExt = builtins.substring 1 100 (platform.sharedLibExtension targetPlatform);
+      sharedName = "lib${name}.${sharedExt}";
 
       # Normalize public include directories
       publicIncludeStores = map (
@@ -277,46 +444,22 @@ rec {
         }
       ) (ensureList publicIncludeDirs);
 
-      # Determine shared library name
-      sharedExt = builtins.substring 1 100 (platform.sharedLibExtension targetPlatform); # Strip leading "."
-      sharedName = "lib${name}.${sharedExt}";
-
-      # Recursively collect all link flags from libraries and their transitive dependencies
-      allLinkFlags = collectAllLinkFlags libraries;
-
-      # Link the shared library (use dynamic link if in dynamic mode)
-      # In dynamic mode, the driver already has all link configuration built in
-      linkDrv = if ctx.isDynamic or false then
-        dynamic.mkDynamicSharedLibrary {
-          inherit name;
-          driverDrv = ctx.driverDrv;
-        }
-      else
-        linkSharedLibrary {
-          inherit toolchain name flags;
-          objects = objectPaths;
-          ldflags = args.ldflags or [ ];
-          linkFlags = allLinkFlags;
-          extraInputs = libsEvalInputs;
-        };
-
       # Install headers
       installHeaders = concatStringsSep "\n" (
         map (dir: "cp -r ${dir}/. $out/include/") publicIncludeStores
       );
 
       # Combine link output + headers
-      sharedDrv = pkgs.runCommand "shared-${name}" { } ''
+      sharedDrv = pkgs.runCommand "shared-${name}" {
+        linkedOutput = linked.out;
+      } ''
         set -euo pipefail
         mkdir -p "$out/lib" "$out/include"
-        cp ${linkDrv}/lib/${sharedName} "$out/lib/"
+        cp -r "$linkedOutput"/lib/* "$out/lib/" 2>/dev/null || true
         ${installHeaders}
       '';
 
       # Build public interface
-      # NOTE: Shared libraries only expose their own .so file in linkFlags.
-      # Unlike static libraries, the .so already contains all linked code,
-      # so consumers don't need transitive dependencies.
       basePublic = {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
@@ -324,29 +467,26 @@ rec {
         linkFlags = [ "${sharedDrv}/lib/${sharedName}" ];
       };
 
-      # Merge headers/defines/cxxFlags from dependencies, but NOT linkFlags
-      # (consumers only need to link against this .so, not its deps)
+      # Merge headers/defines/cxxFlags from dependencies
       combinedPublic = {
         includeDirs = publicAggregate.includeDirs ++ basePublic.includeDirs;
         defines = publicAggregate.defines ++ basePublic.defines;
         cxxFlags = publicAggregate.cxxFlags ++ basePublic.cxxFlags;
-        linkFlags = basePublic.linkFlags; # Only this shared lib
+        linkFlags = basePublic.linkFlags;
       };
     in
-    sharedDrv
-    // {
+    sharedDrv // {
       artifactType = "shared";
       inherit name;
       sharedLibrary = "${sharedDrv}/lib/${sharedName}";
-      inherit (ctx)
-        objectInfos
-        compileCommands
-        manifest
-        libraries
-        tools
-        ;
+      inherit (compileSet) objectRefs;
+      inherit libraries tools;
       public = combinedPublic;
-      passthru = (sharedDrv.passthru or { }) // ctx;
+      compileCommands = null;
+      passthru = {
+        inherit toolchain;
+        inherit (compileSet) wrappers tus;
+      };
     };
 
   # ==========================================================================
@@ -359,23 +499,23 @@ rec {
     {
       name,
       root ? ./.,
-      includeDirs ? [ ],
-      defines ? [ ],
-      cxxFlags ? [ ],
-      libraries ? [ ],
-      publicIncludeDirs ? [ ],
-      publicDefines ? [ ],
-      publicCxxFlags ? [ ],
-      tools ? [ ],
+      includeDirs ? [],
+      defines ? [],
+      cxxFlags ? [],
+      libraries ? [],
+      publicIncludeDirs ? [],
+      publicDefines ? [],
+      publicCxxFlags ? [],
+      tools ? [],
     }:
     let
-      rootPath = utils.sanitizePath { path = root; };
+      rootPath = sanitizePath { path = root; };
       rootHost = builtins.toString rootPath;
 
       # Process tools for generated headers
-      toolInfo = utils.processTools or (_: { public = utils.emptyPublic; }) tools;
-      libsPublic = utils.collectPublic libraries;
-      publicAggregate = mergePublic libsPublic (toolInfo.public or utils.emptyPublic);
+      toolInfo = processTools tools;
+      libsPublic = collectPublic libraries;
+      publicAggregate = mergePublic libsPublic (toolInfo.public or emptyPublic);
 
       publicIncludeStores = map (
         dir:
@@ -389,7 +529,7 @@ rec {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
         cxxFlags = publicCxxFlags;
-        linkFlags = [ ];
+        linkFlags = [];
       };
 
       combinedPublic = mergePublic publicAggregate basePublic;
@@ -399,6 +539,7 @@ rec {
       inherit name;
       public = combinedPublic;
       inherit libraries tools;
+      objectRefs = [];  # No objects for header-only
     };
 
   # ==========================================================================
@@ -411,7 +552,7 @@ rec {
     {
       target,
       toolchain ? null,
-      extraPackages ? [ ],
+      extraPackages ? [],
       linkCompileCommands ? true,
       symlinkName ? "compile_commands.json",
       includeTools ? true,
@@ -423,7 +564,7 @@ rec {
         else
           target.passthru.toolchain or (throw "mkDevShell: no toolchain provided or found in target");
 
-      compileCommands = target.passthru.compileCommands or null;
+      compileCommands = target.compileCommands or target.passthru.compileCommands or null;
 
       # Include common development tools
       devTools =
@@ -433,7 +574,7 @@ rec {
             pkgs.gdb
           ]
         else
-          [ ];
+          [];
 
       packages = lib.unique (
         tc.runtimeInputs
@@ -473,7 +614,7 @@ rec {
     {
       name,
       executable,
-      args ? [ ],
+      args ? [],
       stdin ? null,
       expectedOutput ? null,
     }:
@@ -490,7 +631,6 @@ rec {
           pkgs.gnugrep
           pkgs.findutils
         ];
-        # C++ runtime library must be available in sandbox for dynamically linked executables
         buildInputs = [ pkgs.stdenv.cc.cc.lib ];
       }
       ''

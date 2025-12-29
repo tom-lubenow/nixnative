@@ -74,7 +74,7 @@ let
   # ==========================================================================
 
   dynamic = import ./dynamic {
-    inherit pkgs lib utils scanner nixPackage;
+    inherit pkgs lib utils nixPackage;
   };
 
   # ==========================================================================
@@ -431,25 +431,13 @@ let
     platform = platformUtils;
   };
 
-  context = import ./builders/context.nix {
-    inherit
-      pkgs
-      lib
-      utils
-      flags
-      compile
-      scanner
-      dynamic
-      ;
-  };
-
   helpers = import ./builders/helpers.nix {
     inherit
       pkgs
       lib
       utils
-      context
       link
+      scanner
       dynamic
       ;
     platform = platformUtils;
@@ -562,7 +550,6 @@ in
   inherit (helpers) mkDevShell mkTest;
 
   # Lower-level builders
-  inherit (context) mkBuildContext;
   inherit (compile) compileTranslationUnit generateCompileCommands;
   inherit (link)
     mkLinkStep

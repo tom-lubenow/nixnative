@@ -43,6 +43,26 @@ mkdir -p "$TMPDIR/deps"
 cp -r "$src"/* "$work/" || true
 chmod -R u+w "$work"
 
+# Apply header overrides from tools
+if [[ -n "${headerOverridesPath:-}" && -f "$headerOverridesPath" ]]; then
+  # Read with || true to handle files without trailing newlines
+  while IFS='=' read -r rel target || [[ -n "$rel" ]]; do
+    [[ -z "$rel" ]] && continue
+    mkdir -p "$work/$(dirname "$rel")"
+    cp "$target" "$work/$rel"
+  done < "$headerOverridesPath"
+fi
+
+# Apply source overrides from tools
+if [[ -n "${sourceOverridesPath:-}" && -f "$sourceOverridesPath" ]]; then
+  # Read with || true to handle files without trailing newlines
+  while IFS='=' read -r rel target || [[ -n "$rel" ]]; do
+    [[ -z "$rel" ]] && continue
+    mkdir -p "$work/$(dirname "$rel")"
+    cp "$target" "$work/$rel"
+  done < "$sourceOverridesPath"
+fi
+
 cd "$work"
 
 # Function to scan source file for dependencies

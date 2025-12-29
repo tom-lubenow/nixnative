@@ -3,6 +3,11 @@
 # This module provides support for Nix dynamic derivations, eliminating
 # the need for IFD (Import From Derivation) during dependency scanning.
 #
+# Architecture:
+#   - mkCompileSet: Compiles sources to objects (NO linking)
+#   - mkLinkWrapper: Links object references into executable/shared library
+#   - mkArchiveWrapper: Creates static archive from object references
+#
 # Usage:
 #   native.executable {
 #     name = "app";
@@ -18,7 +23,6 @@
   pkgs,
   lib,
   utils,
-  scanner,
   nixPackage ? pkgs.nix,
 }:
 
@@ -26,11 +30,11 @@ let
   # Import sub-modules
   driver = import ./driver.nix { inherit pkgs lib utils nixPackage; };
 
-  dynamicContext = import ./context.nix {
-    inherit pkgs lib utils driver scanner;
-  };
+  compile = import ./compile.nix { inherit pkgs lib utils nixPackage; };
 
-  dynamicLink = import ./link.nix { inherit pkgs lib; };
+  link = import ./link.nix { inherit pkgs lib utils nixPackage; };
+
+  archive = import ./archive.nix { inherit pkgs lib utils nixPackage; };
 
 in
 {
@@ -45,38 +49,32 @@ in
   requireDynamicDerivations = driver.requireDynamicDerivations;
 
   # ==========================================================================
-  # Driver
+  # Compilation Primitives
   # ==========================================================================
 
-  # Create a dynamic driver derivation
-  inherit (driver)
-    mkDynamicDriver       # Sequential mode (single driver, simpler but not parallel)
-    mkParallelDriver      # Parallel mode (per-source wrappers, true parallelism)
-    mkCompileWrapper      # Create a single compile wrapper (for advanced use)
-    mkDynamicOutputRef
-    mkObjectsRef
+  # Compile sources to objects (NO linking)
+  inherit (compile)
+    mkCompileWrapper      # Single source -> object wrapper
+    mkCompileSet          # Multiple sources -> { wrappers, objectRefs, tus }
     ;
 
   # ==========================================================================
-  # Build Context
+  # Link Primitives
   # ==========================================================================
 
-  # Create a dynamic build context (alternative to mkBuildContext)
-  inherit (dynamicContext) mkDynamicBuildContext;
+  # Link object references into final artifacts
+  inherit (link)
+    mkLinkWrapper         # Generic linker (objectRefs -> executable/sharedLib)
+    mkExecutableLink      # Convenience: objectRefs -> executable
+    mkSharedLibLink       # Convenience: objectRefs -> shared library
+    ;
 
   # ==========================================================================
-  # Link Steps
+  # Archive Primitives
   # ==========================================================================
 
-  # Link from dynamic driver output
-  inherit (dynamicLink)
-    getDynamicOutput
-    mkDynamicExecutable
-    mkDynamicSharedLibrary
-    mkDynamicStaticArchive
-    # Backwards compatibility aliases
-    linkDynamicExecutable
-    linkDynamicSharedLibrary
-    createDynamicStaticArchive
+  # Create static archives from object references
+  inherit (archive)
+    mkArchiveWrapper      # objectRefs -> .a archive
     ;
 }

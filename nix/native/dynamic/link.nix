@@ -1,112 +1,182 @@
-# Dynamic link step for nixnative
+# Link primitive for nixnative dynamic derivations
 #
-# Provides functions to get references to dynamic derivation outputs.
+# This module provides mkLinkWrapper which creates a link derivation
+# from object references. It links objects into executables or shared libraries.
 #
-# The driver derivation (with outputHashMode = "text") outputs a .drv file
-# for the link step. We use builtins.outputOf to get a placeholder that
-# Nix resolves at build time by:
-# 1. Building the driver to get the link .drv
-# 2. Building the link .drv to get the final artifact
+# Requirements:
+#   experimental-features = nix-command dynamic-derivations ca-derivations recursive-nix
 #
 {
   pkgs,
   lib,
+  utils,
+  nixPackage ? pkgs.nix,
 }:
 
 let
   inherit (lib) concatStringsSep;
+  inherit (utils) sanitizeName;
+
+  # Scripts directory
+  scriptsDir = ./scripts;
 
 in
 rec {
   # ==========================================================================
-  # Dynamic Output Reference
+  # Link Wrapper
   # ==========================================================================
 
-  # Get a reference to the final linked output from a dynamic driver
+  # Create a link derivation from object references.
   #
-  # The driver outputs a .drv file (text mode). This function returns
-  # a placeholder that references the "out" output of that .drv.
+  # This creates a CA text-mode derivation that outputs a link .drv file.
+  # The link .drv, when built, links all objects into the final artifact.
   #
   # Arguments:
-  #   driverDrv - The driver derivation from mkDynamicDriver
+  #   name         - Target name
+  #   toolchain    - Toolchain from mkToolchain
+  #   objectRefs   - List of { wrapper, objectName, ref, path } from mkCompileSet
+  #                  or { path } for external libraries
+  #   outputType   - "executable" or "sharedLibrary"
+  #   ldflags      - Additional linker flags
+  #   linkFlags    - Library link flags (e.g., -lz, /path/to/lib.a)
+  #   flags        - Abstract flags (lto, sanitizers, etc.)
   #
   # Returns:
-  #   A string placeholder that Nix resolves at build time
+  #   {
+  #     drv = <link-wrapper-drv>;  # The wrapper derivation
+  #     out = <builtins.outputOf placeholder>;  # Reference to final artifact
+  #     executablePath = <placeholder>/bin/${name};  # For executables
+  #     sharedLibPath = <placeholder>/lib/lib${name}.so;  # For shared libs
+  #   }
   #
-  getDynamicOutput = driverDrv:
-    builtins.outputOf
-      (builtins.unsafeDiscardOutputDependency driverDrv.outPath)
+  mkLinkWrapper = {
+    name,
+    toolchain,
+    objectRefs,
+    outputType ? "executable",
+    ldflags ? [],
+    linkFlags ? [],
+    flags ? [],
+  }:
+  let
+    tc = toolchain;
+
+    # Separate objectRefs with wrappers (dynamic) from direct paths (external)
+    dynamicRefs = builtins.filter (ref: ref ? wrapper && ref.wrapper != null) objectRefs;
+    directPaths = builtins.filter (ref: !(ref ? wrapper) || ref.wrapper == null) objectRefs;
+
+    # Wrapper info for the script
+    wrapperInfo = map (ref: {
+      wrapper_drv = ref.wrapper.drvPath;
+      object_name = ref.objectName;
+    }) dynamicRefs;
+
+    wrapperInfoJson = builtins.toJSON wrapperInfo;
+
+    # Translate abstract flags (for LTO compatibility at link time)
+    translatedLinkFlags = tc.translateFlags flags;
+
+    # Platform linker flags
+    platformLinkerFlags = tc.getPlatformLinkerFlags;
+
+    # Link configuration
+    linkConfig = {
+      compiler = tc.getCompilerForLanguage "cpp";
+      linkerDriverFlag = tc.linker.driverFlag;
+      linkFlags = platformLinkerFlags ++ translatedLinkFlags ++ ldflags ++ linkFlags
+                  ++ (map (ref: ref.path) directPaths);
+      driverFlags = [];
+      linkerInputs = tc.linker.runtimeInputs or [];
+    };
+
+    linkConfigJson = builtins.toJSON linkConfig;
+
+    wrapper = pkgs.stdenv.mkDerivation ({
+      name = "${name}-link.drv";
+
+      # Content-addressed derivation with text output mode
+      __contentAddressed = true;
+      outputHashMode = "text";
+      outputHashAlgo = "sha256";
+
+      # Required for running nix commands inside the build
+      requiredSystemFeatures = [ "recursive-nix" ];
+
+      nativeBuildInputs = tc.runtimeInputs ++ [
+        nixPackage
+        pkgs.python3
+        pkgs.coreutils
+        pkgs.bash
+      ];
+
+      # Pass configuration
+      inherit wrapperInfoJson linkConfigJson;
+      passAsFile = [ "wrapperInfoJson" "linkConfigJson" ];
+
+      # Environment for link
+      BASH_PATH = "${pkgs.bash}/bin/bash";
+      COREUTILS_PATH = "${pkgs.coreutils}";
+      NIX_BIN = "${nixPackage}/bin/nix";
+
+      # Enable experimental features for nested nix commands
+      NIX_CONFIG = ''
+        extra-experimental-features = nix-command ca-derivations dynamic-derivations
+      '';
+
+      dontUnpack = true;
+      dontConfigure = true;
+      dontInstall = true;
+      dontFixup = true;
+
+      buildPhase = ''
+        runHook preBuild
+
+        # Generate link derivation using Python script
+        python3 ${scriptsDir}/generate-link-drv.py \
+          --name "${name}" \
+          --output-type "${outputType}" \
+          --compile-wrappers "$wrapperInfoJsonPath" \
+          --link-config "$linkConfigJsonPath" \
+          --system "${pkgs.stdenv.hostPlatform.system}" \
+          --output "$TMPDIR/link.json"
+
+        # Add to nix store
+        drv_path=$($NIX_BIN derivation add < "$TMPDIR/link.json")
+        echo "Created link derivation: $drv_path" >&2
+
+        # Output the .drv file itself (text mode)
+        cp "$drv_path" "$out"
+
+        runHook postBuild
+      '';
+
+      passthru = {
+        inherit outputType;
+      };
+    } // tc.environment);
+
+    # Reference to the wrapper's output (the link.drv path)
+    wrapperOut = builtins.outputOf
+      (builtins.unsafeDiscardOutputDependency wrapper.outPath)
       "out";
 
-  # Create a derivation that depends on a dynamic output
-  #
-  # This wraps the dynamic output reference in a simple derivation
-  # that can be used with standard Nix tooling.
-  #
-  # Arguments:
-  #   name      - Target name
-  #   driverDrv - The driver derivation from mkDynamicDriver
-  #
-  mkDynamicExecutable =
-    {
-      name,
-      driverDrv,
-    }:
-    let
-      outputRef = getDynamicOutput driverDrv;
-    in
-    pkgs.runCommand name {
-      # Reference the dynamic output
-      dynamicOutput = outputRef;
-    } ''
-      mkdir -p $out
-      cp -r "$dynamicOutput"/* $out/
-    '';
+    # Reference to the link.drv's output (the actual binary)
+    linkOut = builtins.outputOf wrapperOut "out";
 
-  # Alias for backwards compatibility
-  linkDynamicExecutable = mkDynamicExecutable;
+  in {
+    drv = wrapper;
+    out = linkOut;
+    executablePath = "${linkOut}/bin/${name}";
+    sharedLibPath = "${linkOut}/lib/lib${name}.so";
+  };
 
-  # Create a reference to a dynamic shared library
-  mkDynamicSharedLibrary =
-    {
-      name,
-      driverDrv,
-    }:
-    let
-      outputRef = getDynamicOutput driverDrv;
-    in
-    pkgs.runCommand "shared-${name}" {
-      dynamicOutput = outputRef;
-    } ''
-      mkdir -p $out
-      cp -r "$dynamicOutput"/* $out/
-    '' // {
-      sharedName = "lib${name}.so";
-      sharedLibrary = "${outputRef}/lib/lib${name}.so";
-    };
+  # ==========================================================================
+  # Convenience Wrappers
+  # ==========================================================================
 
-  # Alias for backwards compatibility
-  linkDynamicSharedLibrary = mkDynamicSharedLibrary;
+  # Create an executable from object references
+  mkExecutableLink = args: mkLinkWrapper (args // { outputType = "executable"; });
 
-  # Create a reference to a dynamic static archive
-  mkDynamicStaticArchive =
-    {
-      name,
-      driverDrv,
-    }:
-    let
-      outputRef = getDynamicOutput driverDrv;
-    in
-    pkgs.runCommand "archive-${name}" {
-      dynamicOutput = outputRef;
-    } ''
-      mkdir -p $out
-      cp -r "$dynamicOutput"/* $out/
-    '' // {
-      archiveName = "lib${name}.a";
-      archivePath = "${outputRef}/lib/lib${name}.a";
-    };
-
-  # Alias for backwards compatibility
-  createDynamicStaticArchive = mkDynamicStaticArchive;
+  # Create a shared library from object references
+  mkSharedLibLink = args: mkLinkWrapper (args // { outputType = "sharedLibrary"; });
 }

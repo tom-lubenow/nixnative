@@ -333,12 +333,12 @@ mkdir -p "$out/lib"
     standard_placeholder = compute_standard_placeholder("out")
 
     drv = {
-        "name": f"link-{name}",
+        "name": f"link-{name}.drv",
         "system": system,
         "builder": bash_path,
         "args": ["-c", builder_script.strip()],
         "env": {
-            "name": f"link-{name}",
+            "name": f"link-{name}.drv",
             "out": standard_placeholder,
         },
         "inputDrvs": input_drvs,
@@ -496,12 +496,12 @@ mkdir -p "$out/lib"
     standard_placeholder = compute_standard_placeholder("out")
 
     drv = {
-        "name": f"link-{name}",
+        "name": f"link-{name}.drv",
         "system": system,
         "builder": bash_path,
         "args": ["-c", builder_script.strip()],
         "env": {
-            "name": f"link-{name}",
+            "name": f"link-{name}.drv",
             "out": standard_placeholder,
         },
         "inputDrvs": input_drvs,

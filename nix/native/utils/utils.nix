@@ -672,4 +672,82 @@ rec {
       rootStr = builtins.toString root;
     in
     builtins.path { path = "${rootStr}/${file}"; };
+
+  # ==========================================================================
+  # Object Reference Collection (for dynamic derivations)
+  # ==========================================================================
+
+  # Recursively collect object references from library dependencies.
+  #
+  # This function gathers objectRefs from static libraries and converts
+  # legacy linkFlags (from archives, shared libs, external libs) to
+  # pseudo-refs that can be passed to the linker.
+  #
+  # Arguments:
+  #   libs - List of library dependencies
+  #
+  # Returns:
+  #   List of { wrapper?, objectName?, ref?, path } records
+  #   - Dynamic refs have: wrapper, objectName, ref, path
+  #   - Legacy/external refs have: path only
+  #
+  collectObjectRefs =
+    libs:
+    let
+      collectFromLib = lib:
+        if !(builtins.isAttrs lib) then
+          # Raw string (e.g., "-lz") - pass through as link flag, not object ref
+          []
+        else if lib ? objectRefs then
+          # New-style static library with object refs
+          let
+            # Recursively collect from transitive dependencies
+            transitiveRefs =
+              if lib ? libraries then collectObjectRefs lib.libraries
+              else [];
+          in
+          transitiveRefs ++ lib.objectRefs
+        else if lib ? public && lib.public ? linkFlags && lib.public.linkFlags != [] then
+          # Legacy library or archive - convert linkFlags to pseudo-refs
+          # These don't have compile wrappers, just direct paths
+          map (path: { inherit path; wrapper = null; }) lib.public.linkFlags
+          ++ (if lib ? libraries then collectObjectRefs lib.libraries else [])
+        else if lib ? libraries then
+          # Library without own linkFlags but with dependencies
+          collectObjectRefs lib.libraries
+        else
+          [];
+    in
+    concatMap collectFromLib libs;
+
+  # Collect legacy link flags from libraries.
+  # This handles external libraries (pkg-config, etc.) that don't use objectRefs.
+  #
+  # Arguments:
+  #   libs - List of library dependencies
+  #
+  # Returns:
+  #   List of link flag strings (e.g., ["-lz", "/path/to/lib.a"])
+  #
+  collectLinkFlags =
+    libs:
+    let
+      collectFromLib = lib:
+        if builtins.isString lib then
+          # Raw string link flag
+          [ lib ]
+        else if builtins.isAttrs lib then
+          # Skip objectRefs-style libs (handled by collectObjectRefs)
+          if lib ? objectRefs then
+            if lib ? libraries then collectLinkFlags lib.libraries else []
+          else if lib ? public && lib.public ? linkFlags then
+            lib.public.linkFlags ++ (if lib ? libraries then collectLinkFlags lib.libraries else [])
+          else if lib ? libraries then
+            collectLinkFlags lib.libraries
+          else
+            []
+        else
+          [];
+    in
+    unique (concatMap collectFromLib libs);
 }
