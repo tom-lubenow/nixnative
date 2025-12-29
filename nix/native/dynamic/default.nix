@@ -50,7 +50,9 @@ in
 
   # Create a dynamic driver derivation
   inherit (driver)
-    mkDynamicDriver
+    mkDynamicDriver       # Sequential mode (single driver, simpler but not parallel)
+    mkParallelDriver      # Parallel mode (per-source wrappers, true parallelism)
+    mkCompileWrapper      # Create a single compile wrapper (for advanced use)
     mkDynamicOutputRef
     mkObjectsRef
     ;

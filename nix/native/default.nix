@@ -578,7 +578,9 @@ in
   # Dynamic derivations internals (for advanced use)
   inherit (dynamic)
     hasDynamicDerivations
-    mkDynamicDriver
+    mkDynamicDriver       # Sequential mode
+    mkParallelDriver      # Parallel mode (recommended)
+    mkCompileWrapper      # Per-source wrapper
     mkDynamicBuildContext
     ;
 
