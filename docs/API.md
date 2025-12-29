@@ -8,15 +8,14 @@ nixnative provides two API levels:
 
 | API Level | Functions | When to Use |
 |-----------|-----------|-------------|
-| **High-level** | `executable`, `staticLib`, `sharedLib`, `headerOnly`, `devShell`, `test` | Most users - automatic toolchain selection |
+| **High-level** | `executable`, `staticLib`, `sharedLib`, `headerOnly`, `devShell`, `shell`, `test` | Most users - automatic toolchain selection |
 | **Low-level** | `mkExecutable`, `mkStaticLib`, `mkSharedLib`, `mkHeaderOnly`, `mkDevShell`, `mkTest` | Advanced users - explicit toolchain control |
 
 **Key differences:**
 
-- High-level API uses `tools` parameter for code generation
-- Low-level API uses `generators` parameter (same schema, different name)
 - High-level API accepts `compiler`/`linker` as strings (e.g., `"gcc"`, `"mold"`)
 - Low-level API requires explicit `toolchain` object
+- Both use `tools` parameter for code generation
 
 ---
 
@@ -32,26 +31,25 @@ native.executable {
   root = ./.;                   # Required: project root directory
   sources = [ "src/main.cc" ];  # Required: list of source files (relative to root)
 
-  # Optional: toolchain selection (defaults to clang + platform linker)
+  # Optional: toolchain selection (defaults to clang + lld)
   compiler = "clang";           # "clang", "gcc", or compiler object
   linker = "lld";               # "lld", "mold", "gold", "ld", or linker object
 
   # Optional build configuration
   includeDirs = [ "include" ];  # Include directories
   defines = [ "DEBUG" ];        # Preprocessor definitions
-  extraCxxFlags = [ "-O2" ];    # Additional compiler flags
+  compileFlags = [ "-O2" ];     # Additional compiler flags
+  langFlags = { cpp = [ "-std=c++20" ]; };  # Per-language flags
   ldflags = [ "-lm" ];          # Additional linker flags
   libraries = [ myLib ];        # Library dependencies
   tools = [ myTool ];           # Tool plugins (protobuf, jinja, etc.)
 
-  # Optional optimization flags
+  # Ergonomic optimization flags (alternative to `flags` list)
   lto = "thin";                 # false, true, "thin", or "full"
   sanitizers = [ "address" ];   # [ "address" "undefined" "thread" "memory" "leak" ]
   coverage = false;             # Enable code coverage
-
-  # Dependency manifest (pick one approach)
-  depsManifest = ./deps.nix;    # Strict mode: use checked-in manifest
-  # If not provided, auto-scanner runs via IFD
+  optimize = "2";               # "0", "1", "2", "3", "s", "z", "fast"
+  warnings = "all";             # "none", "default", "all", "extra", "pedantic"
 }
 ```
 
@@ -99,7 +97,7 @@ native.headerOnly {
 
 ### `devShell`
 
-Creates a development shell with toolchain and IDE support.
+Creates a development shell from a built target with toolchain and IDE support.
 
 ```nix
 native.devShell {
@@ -108,6 +106,21 @@ native.devShell {
   includeTools = true;          # Include clang-tools, gdb (default: true)
 }
 ```
+
+### `shell`
+
+Creates a standalone development shell without a target (just the toolchain).
+
+```nix
+native.shell {
+  compiler = "clang";           # "clang", "gcc", or compiler object
+  linker = "mold";              # "lld", "mold", "gold", "ld", or linker object
+  extraPackages = [ pkgs.cmake pkgs.ninja ];  # Additional packages
+  includeTools = true;          # Include clang-tools, gdb (default: true)
+}
+```
+
+This is useful when you want a development environment before defining any build targets.
 
 ### `test`
 
@@ -147,18 +160,17 @@ native.mkExecutable {
   # Optional arguments
   includeDirs = [ "include" ];
   defines = [ "DEBUG" ];
-  extraCxxFlags = [ "-O2" ];
+  compileFlags = [ "-O2" ];
+  langFlags = { cpp = [ "-std=c++20" ]; };
   ldflags = [ "-lm" ];
   libraries = [ myLib ];
-  generators = [ myGenerator ];  # Note: "generators" not "tools"
+  tools = [ myTool ];
 
-  # Optimization options
-  lto = false;
-  sanitizers = [ ];
-  coverage = false;
-
-  # Dependency manifest
-  depsManifest = ./deps.nix;
+  # Abstract flags (alternative to ergonomic params)
+  flags = [
+    (native.flags.lto "thin")
+    (native.flags.sanitizer "address")
+  ];
 }
 ```
 
@@ -172,15 +184,12 @@ native.mkExecutable {
 | `toolchain` | Yes | - | Toolchain from `mkToolchain` |
 | `includeDirs` | No | `[]` | Include directories |
 | `defines` | No | `[]` | Preprocessor definitions (strings or `{ name, value }` attrsets) |
-| `extraCxxFlags` | No | `[]` | Additional C++ compiler flags |
+| `compileFlags` | No | `[]` | Additional compiler flags (all languages) |
+| `langFlags` | No | `{}` | Per-language compiler flags (`{ c = [...]; cpp = [...]; }`) |
 | `ldflags` | No | `[]` | Additional linker flags |
 | `libraries` | No | `[]` | Library dependencies |
-| `generators` | No | `[]` | Code generators (see Generator Schema) |
-| `lto` | No | `false` | LTO mode: `false`, `true`/`"thin"`, or `"full"` |
-| `sanitizers` | No | `[]` | List of sanitizers to enable |
-| `coverage` | No | `false` | Enable coverage instrumentation |
-| `depsManifest` | No | `null` | Path to dependency manifest file |
-| `scanner` | No | `null` | Custom scanner derivation |
+| `tools` | No | `[]` | Code generators (see Tool Schema) |
+| `flags` | No | `[]` | Abstract flags (lto, sanitizers, etc.) |
 
 ### `mkStaticLib`
 
@@ -305,37 +314,18 @@ native.executable {
 
 ---
 
-## Internal Functions
+## Tool Schema
 
-### `mkDependencyScanner`
+Tools allow you to integrate code generation (e.g., Jinja templates, protobuf, FlatBuffers) into the build pipeline. Use the `tools` parameter with any builder.
 
-Creates a derivation that scans source files for dependencies using `clang -MMD`. Used internally by builders when no manifest is provided.
-
-### `mkBuildContext`
-
-(Internal) Prepares the build context (sources, flags, headers) for all builder types.
-
----
-
-## Generator Schema
-
-Generators (also called "tools" in the high-level API) allow you to integrate code generation (e.g., Jinja templates, protobuf, FlatBuffers) into the build pipeline.
-
-> **Note:** Use the `tools` parameter with the high-level API (`native.executable`, etc.) and `generators` with the low-level API (`native.mkExecutable`, etc.). Both accept the same schema.
-
-A generator is an attrset with the following shape:
+A tool is an attrset with the following shape:
 
 ```nix
 {
   # Optional: name for error messages
   name = "my-generator";
 
-  # Optional: dependency manifest for generated sources
-  manifest = ./generated.deps.nix;
-  # Or an inline manifest:
-  # manifest = { schema = 1; units = { "gen/file.cc" = { dependencies = [...]; }; }; };
-
-  # Optional: generated headers (will override headers from root)
+  # Optional: generated headers
   headers = [
     {
       rel = "gen/config.h";        # Relative path in the build tree
@@ -368,13 +358,10 @@ A generator is an attrset with the following shape:
     cxxFlags = [ ];      # Must be a list
     linkFlags = [ ];     # Must be a list
   };
-
-  # Optional: derivations needed at evaluation time (for IFD)
-  evalInputs = [ generatorDrv ];
 }
 ```
 
-### Generator Header/Source Entry Schema
+### Tool Header/Source Entry Schema
 
 Each entry in `headers` or `sources` must have:
 
@@ -383,7 +370,7 @@ Each entry in `headers` or `sources` must have:
 | `rel` (or `relative`) | Yes | Relative path in the build tree |
 | `path` or `store` | Yes | Actual file location (path or store path) |
 
-### Minimal Generator Example
+### Minimal Tool Example
 
 ```nix
 let
@@ -399,36 +386,6 @@ in {
   includeDirs = [ "include" ];
 }
 ```
-
----
-
-## Dependency Manifest Schema
-
-Manifests describe header dependencies for each translation unit:
-
-```nix
-{
-  schema = 1;  # Schema version (currently always 1)
-  units = {
-    "src/main.cc" = {
-      dependencies = [
-        "src/main.cc"        # The source itself
-        "include/foo.hpp"    # Headers it includes
-        "include/bar.h"
-      ];
-    };
-    "src/lib.cc" = {
-      dependencies = [ "src/lib.cc" "include/lib.h" ];
-    };
-  };
-}
-```
-
-Manifests can be:
-- `.nix` files (imported directly)
-- `.json` files (parsed with `builtins.fromJSON`)
-- Inline attrsets
-- Derivations that produce JSON output
 
 ---
 
@@ -517,7 +474,6 @@ myTool = native.mkTool {
     headers = [ { rel = "gen/output.h"; store = "${drv}/output.h"; } ];
     sources = [ { rel = "gen/output.cc"; store = "${drv}/output.cc"; } ];
     includeDirs = [ { path = drv; } ];
-    manifest = { schema = 1; units = {}; };
   };
 
   dependencies = [ "-lmylib" ];  # Runtime link dependencies

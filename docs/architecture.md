@@ -1,119 +1,187 @@
 # Architecture Notes
 
-## Build graph generation
+## Overview
 
-1. **Translation unit normalization**
-   - Inputs: `root`, list of relative source paths.
-   - Each source emits an attrset `{ relNorm, store, objectName }` where `store` is a content-addressed path for the file.
+nixnative uses [nix-ninja](https://github.com/aspect-build/nix-ninja) as its build driver. At Nix evaluation time, nixnative generates a ninja build file describing the compilation graph. At build time, nix-ninja parses this file and creates one derivation per source file using RFC 92 dynamic derivations.
 
-2. **Dependency capture**
-   - `mkDependencyScanner`: materialises a temporary tree, runs `clang++ -MMD`, and collapses the `.d` files into JSON.
-   - `depsManifest`: read-only JSON variant for strict builds. The format is stable and versioned (`schema = 1`).
+## Build Pipeline
 
-3. **Source projection**
-   - For each TU we create a `linkFarm` containing:
-     - The TU source file.
-     - Every declared dependency (headers, generated files).
-   - This keeps the build input surface minimal while preserving directory layout for `-I` lookup.
+```
+EVALUATION TIME (nixnative):
+  native.executable { name, sources, ... }
+    │
+    ├── Resolve toolchain (compiler, linker, flags)
+    ├── Process tool plugins (code generators)
+    ├── Normalize source paths
+    │
+    └── Generate build.ninja content
+        │
+        └── Create wrapper derivation that invokes nix-ninja
+            │
+            └── builtins.outputOf → placeholder for final output
 
-4. **Compilation derivations**
-   - Each TU compiles inside its own derivation via `clang++ -c` with:
-     - Toolchain default flags (`-std=c++20`, warnings, colour output).
-     - User-specified `cxxFlags`, `defines`, and `includeDirs` (resolved relative to the TU farm).
-   - Objects are exported as `$out/<tu-name>.o` and captured in `passthru.objectInfos` for downstream tooling.
+BUILD TIME (nix-ninja):
+  nix-ninja -f build.ninja <target>
+    │
+    ├── Parse ninja build file
+    ├── Scan headers per-source (deps = gcc)
+    ├── Create one derivation per source file
+    ├── Build each source → .o files
+    │
+    └── Link final executable/library
+```
 
-5. **Link step**
-   - A thin wrapper around `clang++` that links all object derivations with additional `ldflags`/`libraries`.
-   - Library helpers (`mkStaticLib`, `mkSharedLib`, `mkHeaderOnly`) expose `public` metadata (include dirs, defines, link flags) so executables and dependent libraries consume them without manual flag wiring.
+## Key Components
 
-## Tooling outputs
+### 1. High-Level API (`builders/api.nix`)
 
-- `compile_commands.json` is generated directly from the normalized TU metadata so editors can plug into clangd without extra configuration.
-- `mkDevShell` consumes any build target (library/executable/etc.) and spawns a shell with the matching toolchain, linking the target’s `compile_commands.json` automatically so `clangd` sees the right flags.
-- Each build target exposes:
-  - `passthru.objectInfos`: introspection (headers, include flags, TU source roots).
-  - `passthru.manifest`: the manifest JSON used for the build (helpful when comparing scanner output vs. checked-in data).
-  - `passthru.public`: propagated compile/link knobs inherited by downstream dependants.
-  - `passthru.generators`: the generator attrsets that fed generated headers/sources into the build.
-- The flake also publishes `nix run .#sync-manifest`, which copies a manifest derivation back into the workspace for strict mode updates.
+The user-facing API that handles:
+- Compiler/linker resolution from string names to objects
+- Abstract flag translation (e.g., `lto = "thin"` → `-flto=thin`)
+- Parameter validation and helpful error messages
 
-## IFD considerations
+### 2. Helpers (`builders/helpers.nix`)
 
-- Scanner mode performs Import From Derivation, so Hydra-style CI clusters may need to permit IFD. The strict mode (`depsManifest`) avoids IFD entirely by reading the checked-in JSON.
-- The JSON output is deterministic and stable, which makes it straightforward to check in or diff.
+Low-level builder functions that:
+- Normalize source paths and globs
+- Aggregate library dependencies and their public interfaces
+- Process tool plugins for generated sources/headers
+- Generate ninja file content
+- Create wrapper derivations
 
-## Extensibility hooks
+### 3. Ninja Generation (`ninja/generate.nix`)
 
-Future features can slot into the same shape:
+Pure functions that generate ninja build file content:
 
-- **Code generators** plug in via the `generators` array. Supply attrsets with `manifest`, `headers`, `sources`, etc.; the simple example demonstrates a Jinja-based renderer, but any derivation that produces files can participate.
-- **CPython extensions** can be built using `mkSharedLib` with appropriate Python include paths and link flags. See `examples/python-extension/` for a working example.
-- **Toolchains** are pluggable. All builders accept an optional `toolchain` attribute, so you can swap in a custom clang/LLVM package while keeping the per-TU graph intact.
-- **ThinLTO / PGO**: treat IR bitcode as another per-TU artefact, followed by a final optimization derivation.
-- **Batching**: group translation units by coarse granularity if derivation counts become excessive—`linkFarm` already supports merging multiple files per derivation.
+```ninja
+rule cpp
+  command = clang++ $FLAGS -MD -MF $out.d -c $in -o $out
+  deps = gcc
+  depfile = $out.d
 
-## Incremental builds
+build main.o: cpp /nix/store/xxx-src/main.cc
+  FLAGS = -std=c++20 -I/nix/store/yyy-includes -DFOO=1
 
-A core design goal is true per-file incremental compilation: changing one source file should only rebuild that file's object derivation plus downstream link steps.
+build app: link_exe main.o util.o
+  LDFLAGS = -lm
+```
 
-### Content-addressed source capture
+Key features:
+- All paths are absolute `/nix/store/...` paths
+- `deps = gcc` enables nix-ninja's header scanning
+- Per-language compile rules for C vs C++
 
-Each source file is captured individually using `builtins.path`, making it content-addressed:
+### 4. Ninja Wrapper (`ninja/wrapper.nix`)
+
+Creates the wrapper derivation that invokes nix-ninja:
 
 ```nix
-# Each source file is independently content-addressed
+mkNinjaDerivation = { name, ninjaContent, ... }:
+  pkgs.stdenv.mkDerivation {
+    __contentAddressed = true;
+    outputHashMode = "text";
+    requiredSystemFeatures = [ "recursive-nix" ];
+
+    buildPhase = ''
+      nix-ninja -f build.ninja ${target}
+      # Output is the generated .drv path
+    '';
+  };
+```
+
+### 5. Toolchain Abstraction (`core/toolchain.nix`)
+
+Composes compilers, linkers, and binutils:
+- Language-aware (C, C++, potentially Rust)
+- Flag translation for abstract flags
+- Platform-specific defaults
+
+### 6. Tool Plugins (`scanner/scanner.nix`, `tools/`)
+
+Code generators that produce headers and sources at eval time:
+- Built-in: Jinja2, protobuf, gRPC
+- Custom tools via `mkTool`
+- Outputs are merged into the ninja build graph
+
+## Incremental Build Strategy
+
+### Per-File Derivations
+
+nix-ninja creates one derivation per source file. This means:
+- Changing `src/foo.cc` only rebuilds `foo.o` + link step
+- Unchanged objects are fetched from the Nix store cache
+- Header changes trigger rebuilds via `deps = gcc` scanning
+
+### Source Capture
+
+Each source file is captured individually:
+
+```nix
 store = builtins.path { path = "${rootHost}/${relNorm}"; };
 ```
 
-This means:
-- Changing `src/foo.cc` only invalidates `foo.o`, not `bar.o`
-- The link step depends on object files, so it rebuilds when any object changes
-- Unchanged objects are fetched from the Nix store cache
+This makes each source content-addressed, so changing one file doesn't invalidate others.
 
-### Tool plugin file capture
+### Tool Plugin Capture
 
-**Critical anti-pattern**: Using `builtins.path { path = root; }` captures the _entire_ directory. Any file change invalidates all derivations that depend on it, defeating incremental builds.
-
-The `mkTool` infrastructure automatically captures only the specified input files:
+Tool plugins use `captureFiles` to avoid capturing the entire source tree:
 
 ```nix
-# Inside mkTool.run:
 capturedRoot = utils.captureFiles {
   inherit root;
-  files = normalizedFiles;  # Only the inputFiles, not everything
-  name = "${name}-inputs";
+  files = normalizedFiles;  # Only the input files
 };
 ```
 
-For custom tools that don't use `mkTool`, use `utils.captureFiles` or explicit `builtins.path` on individual files:
+## Library Dependencies
+
+Libraries expose a `public` attribute with:
+- `includeDirs` - Header paths for consumers
+- `defines` - Preprocessor definitions to propagate
+- `cxxFlags` - Compiler flags to propagate
+- `linkFlags` - Linker flags (e.g., `-lmylib`)
+
+When a target depends on a library, these are automatically merged into the build.
+
+## Outputs
+
+Each build target provides:
+- The built artifact (executable, library, etc.)
+- `compileCommands` - `compile_commands.json` for IDE integration
+- `passthru.toolchain` - The toolchain used for building
+- `passthru.target` - The `builtins.outputOf` reference to the actual output
+
+## Extensibility
+
+### Custom Toolchains
 
 ```nix
-# Good: capture only needed files
-templateFiles = utils.captureFiles {
-  root = ./.;
-  files = [ "templates/a.j2" "templates/b.j2" ];
-};
-
-# Also good: capture individual file
-singleFile = builtins.path { path = ./config.json; };
-
-# BAD: captures entire directory
-rootStore = builtins.path { path = root; };  # Don't do this!
+native.mkToolchain {
+  languages = {
+    c = native.compilers.gcc.c;
+    cpp = native.compilers.gcc.cpp;
+  };
+  linker = native.linkers.mold;
+  bintools = native.compilers.gcc.bintools;
+}
 ```
 
-### Dependency manifest role
-
-The dependency manifest (`depsManifest`) declares which headers each source file depends on. This allows the build system to create minimal source trees for each translation unit:
+### Custom Tools
 
 ```nix
-# Each TU gets only its declared dependencies
-srcTree = mkSourceTree { inherit tu headers; };
+native.mkTool {
+  name = "my-generator";
+  transform = { inputFiles, root, config }: pkgs.runCommand "gen" {} ''...';
+  outputs = { drv, ... }: { headers = [...]; sources = [...]; };
+}
 ```
 
-Changes to headers not in the manifest don't invalidate the TU's compilation.
+### Platform Support
 
-## Known gaps
+Currently Linux-only (x86_64 and aarch64). The linker and platform abstractions are designed to support additional platforms if needed.
 
-- Windows/MSVC backend is out-of-scope for this iteration; WSL + clang is the recommended path for now.
-- System library discovery: pkg-config is supported via `native.pkgConfig.mkPkgConfigLibrary` (or `makeLibrary` alias). macOS framework flags must be added manually when needed.
-- Error reporting from the scanner currently surfaces raw clang warnings (e.g., unused linker flags). We can tailor the toolchain wrapper to silence or adjust these diagnostics.
+## Known Limitations
+
+- Requires Nix with experimental features: `dynamic-derivations`, `ca-derivations`, `recursive-nix`
+- Windows/MSVC is not supported
+- IDE integration requires `compile_commands.json` which is generated at build time, not eval time

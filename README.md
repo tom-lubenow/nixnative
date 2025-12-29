@@ -1,12 +1,12 @@
 # nixnative
 
-Incremental C/C++ builds using Nix dynamic derivations.
+Incremental C/C++ builds using Nix dynamic derivations and nix-ninja.
 
 ## Overview
 
-nixnative implements minimal, incremental C/C++ build graphs natively in Nix using [RFC 92 dynamic derivations](https://github.com/NixOS/rfcs/blob/master/rfcs/0092-plan-dynamism.md). Each source file becomes its own derivation, enabling true per-file incrementality while eliminating IFD (Import From Derivation) during evaluation.
+nixnative provides a high-level API for building C/C++ projects with true per-file incrementality. It uses [nix-ninja](https://github.com/aspect-build/nix-ninja) as the build driver, which generates one derivation per source file at build time using [RFC 92 dynamic derivations](https://github.com/NixOS/rfcs/blob/master/rfcs/0092-plan-dynamism.md).
 
-**This project requires Nix with dynamic derivations support.** All builds use dynamic derivations—there is no fallback to traditional IFD-based builds.
+**This project requires Nix with dynamic derivations support.** All builds use nix-ninja for incremental compilation—there is no fallback to traditional builds.
 
 ## Requirements
 
@@ -34,31 +34,24 @@ Dynamic derivations solve this by deferring derivation creation to build time wh
 
 ## How It Works
 
-nixnative uses a two-phase architecture with separate compilation and linking:
+nixnative generates a ninja build file at Nix evaluation time, then uses nix-ninja to execute it with per-file derivations:
 
 ```
 EVALUATION TIME (instant):
-  sources → compile-wrapper.drv (per source file)
-                    ↓
-            builtins.outputOf → placeholder for .o
-                    ↓
-            link-wrapper.drv (references all placeholders)
-                    ↓
-            builtins.outputOf → placeholder for executable
+  native.executable { sources = [...]; }
+    → Generate build.ninja content (pure Nix)
+    → Create wrapper derivation that invokes nix-ninja
+    → builtins.outputOf → placeholder for final output
 
-BUILD TIME:
-  Phase 1 - Compile Wrappers:
-    1. Each compile-wrapper.drv scans headers (clang -MMD)
-    2. Generates a compile-<source>.drv via `nix derivation add`
-    3. Nix builds the generated .drv → produces .o file
-
-  Phase 2 - Link Wrapper:
-    1. link-wrapper.drv receives actual .o paths (placeholders resolved)
-    2. Generates link.drv via `nix derivation add`
-    3. Nix builds link.drv → produces final executable/library
+BUILD TIME (nix-ninja):
+  1. nix-ninja parses build.ninja
+  2. Scans headers per-source (deps = gcc)
+  3. Creates one derivation per source file
+  4. Compiles each source → .o files
+  5. Links final executable/library
 ```
 
-**Key insight**: Compile wrappers output `.drv` files (text mode), not object files directly. This allows Nix to resolve the `builtins.outputOf` placeholders and chain derivations together.
+**Key insight**: nix-ninja handles all the complexity of creating per-file derivations and tracking header dependencies. nixnative just generates the ninja build file.
 
 This architecture gives you:
 
@@ -123,6 +116,7 @@ See the `examples/` directory for working examples:
 - `examples/c-and-cpp` – Mixed C and C++ sources
 - `examples/devshell` – Development shell with clangd support
 - `examples/simple-tool` – Custom code generation tool plugin
+- `examples/python-extension` – Python C++ extension with pybind11
 
 Build and run an example:
 
@@ -139,8 +133,7 @@ nix flake check
 
 ## Platform Support
 
-- **Linux** (x86_64, aarch64): Primary supported platform
-- **macOS** (aarch64-darwin): Best-effort support
+- **Linux** (x86_64, aarch64): Fully supported
 
 ## Repository Layout
 
@@ -152,7 +145,7 @@ nix flake check
 │   ├── core/           # Compiler, linker, toolchain, and flag abstractions
 │   ├── compilers/      # Compiler implementations (clang, gcc)
 │   ├── linkers/        # Linker implementations (lld, mold, gold, ld)
-│   ├── dynamic/        # Dynamic derivations (compile/link wrappers)
+│   ├── ninja/          # nix-ninja integration (build file generation)
 │   ├── builders/       # High-level API (executable, staticLib, etc.)
 │   ├── scanner/        # Tool plugin processing
 │   ├── tools/          # Built-in tool plugins (protobuf, jinja, binary-blob)

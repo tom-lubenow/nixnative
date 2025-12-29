@@ -7,7 +7,6 @@ This example demonstrates building a plugin system with shared libraries and run
 - Building shared libraries with `native.sharedLib`
 - Building header-only libraries with `native.headerOnly`
 - Runtime plugin loading with `dlopen`/`dlsym`
-- Cross-platform support (Linux + macOS)
 
 ## Project Structure
 
@@ -113,13 +112,13 @@ plugin->doSomething();
 
 ### Shared Libraries
 
-Use `native.sharedLib` to build `.so` (Linux) or `.dylib` (macOS) files:
+Use `native.sharedLib` to build `.so` files:
 
 ```nix
 native.sharedLib {
   name = "my-lib";
   sources = [ "lib.cc" ];
-  # Output: lib/libmy-lib.so or lib/libmy-lib.dylib
+  # Output: lib/libmy-lib.so
 };
 ```
 
@@ -137,10 +136,9 @@ native.headerOnly {
 };
 ```
 
-### Platform Differences
+### Platform Notes
 
-- **Linux**: Requires `-ldl` for `dlopen`/`dlsym`
-- **macOS**: `dlopen`/`dlsym` are in libc (no extra flags needed)
+On Linux, `-ldl` is required for `dlopen`/`dlsym`.
 
 ## Next Steps
 

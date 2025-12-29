@@ -107,8 +107,6 @@ appAsan = native.executable {
 };
 ```
 
-ASan is disabled on macOS due to runtime issues with Nix sandboxing.
-
 ### Minimal Configuration Test
 
 ```nix

@@ -50,8 +50,7 @@ lcov --capture --directory . --output-file coverage.info
 genhtml coverage.info --output-directory coverage-report
 
 # Open the report
-open coverage-report/index.html  # macOS
-xdg-open coverage-report/index.html  # Linux
+xdg-open coverage-report/index.html
 ```
 
 ## How It Works
@@ -118,21 +117,7 @@ flags = [
 
 ## Platform Notes
 
-### Linux
-
-Coverage works out of the box with both Clang and GCC.
-
-### macOS
-
-Coverage works with Clang. Note that:
-- The `llvm-cov` tool is preferred over `gcov`
-- Use `llvm-profdata` for merging profile data
-
-```sh
-# macOS alternative workflow
-llvm-profdata merge -sparse default.profraw -o default.profdata
-llvm-cov show ./result/bin/coverage-example -instr-profile=default.profdata
-```
+Coverage works out of the box with both Clang and GCC on Linux.
 
 ## Interpreting Results
 
