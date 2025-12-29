@@ -414,11 +414,13 @@ let
   # High-level API (Option B style)
   api = import ./builders/api.nix {
     inherit
+      pkgs
       lib
       compilers
       linkers
       mkToolchain
       helpers
+      flags
       ;
   };
 
@@ -487,6 +489,7 @@ in
     sharedLib
     headerOnly
     devShell
+    shell
     test
     archive
     ;

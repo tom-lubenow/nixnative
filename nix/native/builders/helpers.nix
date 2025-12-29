@@ -181,8 +181,22 @@ rec {
       # Combine defines
       combinedDefines = defines ++ publicAggregate.defines ++ toolInfo.defines;
 
+      # Translate abstract flags to concrete compiler flags
+      translatedFlags = if flags != [] then tc.translateFlags flags else [];
+
+      # Some flags (sanitizers, coverage, LTO) need to be passed to both compiler and linker
+      # Extract these from the abstract flags for linking
+      linkRequiredFlags = lib.concatMap (flag:
+        if flag.type == "sanitizer" then [ "-fsanitize=${flag.value}" ]
+        else if flag.type == "coverage" then [ "--coverage" ]
+        else if flag.type == "lto" then
+          if flag.value == "thin" then [ "-flto=thin" ]
+          else [ "-flto" ]
+        else []
+      ) flags;
+
       # Combine compile flags
-      combinedCompileFlags = compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
+      combinedCompileFlags = translatedFlags ++ compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
 
       # Collect legacy link flags (for external libs like pkg-config)
       legacyLinkFlags = collectLinkFlags libraries;
@@ -213,7 +227,7 @@ rec {
           defines = combinedDefines;
           compileFlags = combinedCompileFlags;
           inherit langFlags;
-          ldflags = ldflags ++ legacyLinkFlags;
+          ldflags = linkRequiredFlags ++ ldflags ++ legacyLinkFlags;
         };
 
         # Collect library wrapper derivations for dependency tracking
@@ -273,7 +287,7 @@ rec {
       langFlags ? {},
       libraries ? [],
       tools ? [],
-      publicIncludeDirs ? [],
+      publicIncludeDirs ? null,  # Defaults to includeDirs if not specified
       publicDefines ? [],
       publicCxxFlags ? [],
       ...
@@ -303,8 +317,14 @@ rec {
       # Combine defines
       combinedDefines = defines ++ publicAggregate.defines ++ toolInfo.defines;
 
+      # Translate abstract flags to concrete compiler flags
+      translatedFlags = if flags != [] then tc.translateFlags flags else [];
+
       # Combine compile flags
-      combinedCompileFlags = compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
+      combinedCompileFlags = translatedFlags ++ compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
+
+      # Resolve public include directories (default to includeDirs if not specified)
+      resolvedPublicIncludeDirs = if publicIncludeDirs == null then includeDirs else publicIncludeDirs;
 
       # Normalize public include directories
       publicIncludeStores = map (
@@ -313,7 +333,7 @@ rec {
           inherit rootHost;
           inherit dir;
         }
-      ) (ensureList publicIncludeDirs);
+      ) (ensureList resolvedPublicIncludeDirs);
 
       # ----- NINJA PATH -----
       ninjaResult = let
@@ -434,7 +454,7 @@ rec {
       ldflags ? [],
       libraries ? [],
       tools ? [],
-      publicIncludeDirs ? [],
+      publicIncludeDirs ? null,  # Defaults to includeDirs if not specified
       publicDefines ? [],
       publicCxxFlags ? [],
       ...
@@ -466,11 +486,27 @@ rec {
       # Combine defines
       combinedDefines = defines ++ publicAggregate.defines ++ toolInfo.defines;
 
+      # Translate abstract flags to concrete compiler flags
+      translatedFlags = if flags != [] then tc.translateFlags flags else [];
+
+      # Some flags (sanitizers, coverage, LTO) need to be passed to both compiler and linker
+      linkRequiredFlags = lib.concatMap (flag:
+        if flag.type == "sanitizer" then [ "-fsanitize=${flag.value}" ]
+        else if flag.type == "coverage" then [ "--coverage" ]
+        else if flag.type == "lto" then
+          if flag.value == "thin" then [ "-flto=thin" ]
+          else [ "-flto" ]
+        else []
+      ) flags;
+
       # Combine compile flags
-      combinedCompileFlags = compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
+      combinedCompileFlags = translatedFlags ++ compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
 
       # Collect legacy link flags from library dependencies
       legacyLinkFlags = collectLinkFlags libraries;
+
+      # Resolve public include directories (default to includeDirs if not specified)
+      resolvedPublicIncludeDirs = if publicIncludeDirs == null then includeDirs else publicIncludeDirs;
 
       # Normalize public include directories
       publicIncludeStores = map (
@@ -479,7 +515,7 @@ rec {
           inherit rootHost;
           inherit dir;
         }
-      ) (ensureList publicIncludeDirs);
+      ) (ensureList resolvedPublicIncludeDirs);
 
       # Shared library name
       sharedName = "lib${name}.so";
@@ -510,7 +546,7 @@ rec {
           defines = combinedDefines;
           compileFlags = combinedCompileFlags;
           inherit langFlags;
-          ldflags = ldflags ++ legacyLinkFlags;
+          ldflags = linkRequiredFlags ++ ldflags ++ legacyLinkFlags;
         };
 
         # Collect library wrapper derivations for dependency tracking
@@ -577,7 +613,7 @@ rec {
       defines ? [],
       cxxFlags ? [],
       libraries ? [],
-      publicIncludeDirs ? [],
+      publicIncludeDirs ? null,  # Defaults to includeDirs if not specified
       publicDefines ? [],
       publicCxxFlags ? [],
       tools ? [],
@@ -591,13 +627,16 @@ rec {
       libsPublic = collectPublic libraries;
       publicAggregate = mergePublic libsPublic (toolInfo.public or emptyPublic);
 
+      # Resolve public include directories (default to includeDirs if not specified)
+      resolvedPublicIncludeDirs = if publicIncludeDirs == null then includeDirs else publicIncludeDirs;
+
       publicIncludeStores = map (
         dir:
         normalizeIncludeDir {
           inherit rootHost;
           inherit dir;
         }
-      ) (ensureList publicIncludeDirs);
+      ) (ensureList resolvedPublicIncludeDirs);
 
       basePublic = {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
