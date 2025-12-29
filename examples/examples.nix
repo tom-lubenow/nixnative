@@ -70,10 +70,6 @@ let
   pluginsChecks = import ./plugins/checks.nix { inherit pkgs native; packages = pluginsPackagesRaw; };
   pluginsPackages = materializeSet pluginsPackagesRaw;
 
-  installPackagesRaw = import ./install/project.nix { inherit pkgs native; };
-  installChecks = import ./install/checks.nix { inherit pkgs native; packages = installPackagesRaw; };
-  installPackages = materializeSet installPackagesRaw;
-
   multiBinaryPackagesRaw = import ./multi-binary/project.nix { inherit pkgs native; };
   multiBinaryChecks = import ./multi-binary/checks.nix { inherit pkgs native; packages = multiBinaryPackagesRaw; };
   multiBinaryPackages = materializeSet multiBinaryPackagesRaw;
@@ -112,7 +108,6 @@ in {
     coveragePackages
     # Libraries & Installation
     pluginsPackages
-    installPackages
     multiBinaryPackages
     # System Integration
     pkgConfigPackages
@@ -135,7 +130,6 @@ in {
     coverageChecks
     # Libraries & Installation
     pluginsChecks
-    installChecks
     multiBinaryChecks
     # System Integration
     pkgConfigChecks

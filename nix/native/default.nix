@@ -416,21 +416,11 @@ let
   # Builder Modules
   # ==========================================================================
 
-  compile = import ./builders/compile.nix {
-    inherit pkgs lib utils;
-  };
-
-  link = import ./builders/link.nix {
-    inherit pkgs lib;
-    platform = platformUtils;
-  };
-
   helpers = import ./builders/helpers.nix {
     inherit
       pkgs
       lib
       utils
-      link
       scanner
       dynamic
       ;
@@ -542,16 +532,6 @@ in
     mkArchive
     ;
   inherit (helpers) mkDevShell mkTest;
-
-  # Legacy low-level builders (prefer dynamic derivations API above)
-  # These are kept for backwards compatibility but not recommended for new code.
-  inherit (compile) compileTranslationUnit generateCompileCommands;
-  inherit (link)
-    mkLinkStep
-    linkExecutable
-    linkSharedLibrary
-    createStaticArchive
-    ;
 
   # Tool plugin processing
   inherit (scanner) processTools;

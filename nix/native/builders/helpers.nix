@@ -7,7 +7,6 @@
   pkgs,
   lib,
   utils,
-  link,
   platform,
   scanner,  # Tool processing
   dynamic,  # Dynamic compilation module (required)
@@ -32,7 +31,6 @@ let
     mkLinkWrapper
     mkArchiveWrapper
     ;
-  inherit (link) createStaticArchive;
 
 in
 rec {
@@ -286,65 +284,25 @@ rec {
     }:
     let
       tc = lib.passthru.toolchain;
-
-      # Get objectRefs from the library
       objectRefs = lib.objectRefs or [];
-
-      # If no objectRefs, fall back to legacy objectPaths
-      hasObjectRefs = objectRefs != [];
-
       archiveName = "lib${sanitizeName name}.a";
 
-    in
-    if hasObjectRefs then
-      # Dynamic derivations path - return archive wrapper directly
-      # NOTE: For dynamic derivations, the actual archive is built when
-      # the wrapper is built. Use the wrapper's output to get the archive.
-      let
-        archiveWrapper = mkArchiveWrapper {
-          inherit name objectRefs;
-          toolchain = tc;
-        };
-      in
-      archiveWrapper.drv // {
-        artifactType = "archive";
-        inherit name archiveName;
-        # Store the wrapper for dynamic output access
-        archiveWrapper = archiveWrapper;
-        # Headers come from the original lib
-        headers = lib;
-        # Public interface (can't use dynamic paths here)
-        public = lib.public;
-        passthru = {
-          toolchain = tc;
-          inherit archiveWrapper;
-        };
-      }
-    else
-      # Legacy fallback for non-dynamic derivations
-      let
-        objects = lib.objectPaths or lib.passthru.objectPaths or [];
-        archiveDrv = createStaticArchive {
-          toolchain = tc;
-          inherit name objects;
-        };
-
-        # Combine archive with headers from original lib
-        archive = pkgs.runCommand "archive-${name}" {} ''
-          set -euo pipefail
-          mkdir -p "$out/lib" "$out/include"
-          cp -r ${archiveDrv}/lib/* "$out/lib/" 2>/dev/null || true
-          cp -r ${lib}/include/. $out/include/ 2>/dev/null || true
-        '';
-      in
-      archive // {
-        artifactType = "archive";
-        inherit name;
-        archivePath = "${archive}/lib/${archiveName}";
-        public = lib.public // {
-          linkFlags = [ "${archive}/lib/${archiveName}" ];
-        };
+      archiveWrapper = mkArchiveWrapper {
+        inherit name objectRefs;
+        toolchain = tc;
       };
+    in
+    archiveWrapper.drv // {
+      artifactType = "archive";
+      inherit name archiveName;
+      archiveWrapper = archiveWrapper;
+      headers = lib;
+      public = lib.public;
+      passthru = {
+        toolchain = tc;
+        inherit archiveWrapper;
+      };
+    };
 
   # ==========================================================================
   # Shared Library Builder
