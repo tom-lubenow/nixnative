@@ -19,7 +19,7 @@ let
   execPackages = materializeSet execPackagesRaw;
 
   libraryPackagesRaw = import ./library/project.nix { inherit pkgs native; };
-  libraryChecks = import ./library/checks.nix { inherit pkgs; packages = libraryPackagesRaw; };
+  libraryChecks = import ./library/checks.nix { inherit pkgs native; packages = libraryPackagesRaw; };
   libraryPackages = materializeSet libraryPackagesRaw;
 
   headerOnlyPackagesRaw = import ./header-only/project.nix { inherit pkgs native; };

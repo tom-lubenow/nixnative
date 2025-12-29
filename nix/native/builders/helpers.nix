@@ -129,19 +129,12 @@ rec {
         inherit ldflags;
         linkFlags = legacyLinkFlags;
       };
-
-      # Create a derivation that wraps the linked output
-      drv = pkgs.runCommand name {
-        linkedOutput = linked.out;
-      } ''
-        mkdir -p $out
-        cp -r "$linkedOutput"/* $out/
-      '';
     in
-    drv // {
+    linked.drv // {
       artifactType = "executable";
       inherit name;
-      executablePath = "${drv}/bin/${name}";
+      out = linked.out;
+      executablePath = linked.executablePath;
       inherit (compileSet) objectRefs;
       compileCommands = null;  # TODO: generate at build time
       passthru = {
@@ -300,50 +293,58 @@ rec {
       # If no objectRefs, fall back to legacy objectPaths
       hasObjectRefs = objectRefs != [];
 
-      # Create archive using new primitive or legacy method
-      archiveResult =
-        if hasObjectRefs then
-          mkArchiveWrapper {
-            inherit name objectRefs;
-            toolchain = tc;
-          }
-        else
-          # Legacy fallback
-          let
-            objects = lib.objectPaths or lib.passthru.objectPaths or [];
-            archiveDrv = createStaticArchive {
-              toolchain = tc;
-              inherit name objects;
-            };
-          in {
-            drv = archiveDrv;
-            archivePath = "${archiveDrv}/lib/lib${sanitizeName name}.a";
-          };
-
       archiveName = "lib${sanitizeName name}.a";
 
-      # Combine archive with headers from original lib
-      archive = pkgs.runCommand "archive-${name}" {
-        archiveOutput = archiveResult.out or archiveResult.archivePath;
-      } ''
-        set -euo pipefail
-        mkdir -p "$out/lib" "$out/include"
-        if [ -d "$archiveOutput" ]; then
-          cp -r "$archiveOutput"/lib/* "$out/lib/" 2>/dev/null || true
-        else
-          cp "$archiveOutput" "$out/lib/${archiveName}"
-        fi
-        cp -r ${lib}/include/. $out/include/ 2>/dev/null || true
-      '';
     in
-    archive // {
-      artifactType = "archive";
-      inherit name;
-      archivePath = "${archive}/lib/${archiveName}";
-      public = lib.public // {
-        linkFlags = [ "${archive}/lib/${archiveName}" ];
+    if hasObjectRefs then
+      # Dynamic derivations path - return archive wrapper directly
+      # NOTE: For dynamic derivations, the actual archive is built when
+      # the wrapper is built. Use the wrapper's output to get the archive.
+      let
+        archiveWrapper = mkArchiveWrapper {
+          inherit name objectRefs;
+          toolchain = tc;
+        };
+      in
+      archiveWrapper.drv // {
+        artifactType = "archive";
+        inherit name archiveName;
+        # Store the wrapper for dynamic output access
+        archiveWrapper = archiveWrapper;
+        # Headers come from the original lib
+        headers = lib;
+        # Public interface (can't use dynamic paths here)
+        public = lib.public;
+        passthru = {
+          toolchain = tc;
+          inherit archiveWrapper;
+        };
+      }
+    else
+      # Legacy fallback for non-dynamic derivations
+      let
+        objects = lib.objectPaths or lib.passthru.objectPaths or [];
+        archiveDrv = createStaticArchive {
+          toolchain = tc;
+          inherit name objects;
+        };
+
+        # Combine archive with headers from original lib
+        archive = pkgs.runCommand "archive-${name}" {} ''
+          set -euo pipefail
+          mkdir -p "$out/lib" "$out/include"
+          cp -r ${archiveDrv}/lib/* "$out/lib/" 2>/dev/null || true
+          cp -r ${lib}/include/. $out/include/ 2>/dev/null || true
+        '';
+      in
+      archive // {
+        artifactType = "archive";
+        inherit name;
+        archivePath = "${archive}/lib/${archiveName}";
+        public = lib.public // {
+          linkFlags = [ "${archive}/lib/${archiveName}" ];
+        };
       };
-    };
 
   # ==========================================================================
   # Shared Library Builder
@@ -623,6 +624,14 @@ rec {
       escapedArgs = map lib.escapeShellArg args;
       expectedOutputFile =
         if expectedOutput != null then pkgs.writeText "expected-output" expectedOutput else null;
+
+      # Get the executable path - either from executablePath (dynamic derivations)
+      # or by looking in /bin directory (traditional derivations)
+      execPath =
+        if executable ? executablePath then
+          executable.executablePath
+        else
+          "${executable}/bin/${executable.name or "unknown"}";
     in
     pkgs.runCommand "test-${name}"
       {
@@ -637,13 +646,7 @@ rec {
         set -euo pipefail
         mkdir -p $out
 
-        # Locate the executable binary
-        BIN=$(find ${executable}/bin -type f -executable | head -n 1)
-        if [ -z "$BIN" ]; then
-          echo "Error: No executable found in ${executable}/bin"
-          exit 1
-        fi
-
+        BIN="${execPath}"
         echo "Running test: $BIN (${toString (builtins.length args)} args)"
 
         ${if stdin != null then "cat ${stdinFile} |" else ""} \

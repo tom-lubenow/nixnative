@@ -57,10 +57,12 @@ rec {
 
     # Build inputDrvs with dynamicOutputs for each wrapper
     # Format: { "/path/to.drv" = { outputs = []; dynamicOutputs = { "out" = { outputs = ["out"]; dynamicOutputs = {}; } }; }; }
+    # Note: We strip context from drvPath as it will be used as a key in inputDrvs,
+    # and the actual dependency is through the derivation structure, not string context
     inputDrvsJson = builtins.toJSON (
       builtins.listToAttrs (map (objRef:
         {
-          name = objRef.wrapper.drvPath;
+          name = builtins.unsafeDiscardStringContext objRef.wrapper.drvPath;
           value = {
             outputs = [];
             dynamicOutputs = {
@@ -78,8 +80,9 @@ rec {
     objectPaths = map (ref: ref.path) objectRefs;
 
     # Wrapper info for the script
+    # Strip context from drvPath - dependency tracked via inputDrvs, not string context
     wrapperInfo = map (ref: {
-      wrapper_drv = ref.wrapper.drvPath;
+      wrapper_drv = builtins.unsafeDiscardStringContext ref.wrapper.drvPath;
       object_name = ref.objectName;
     }) (builtins.filter (ref: ref.wrapper != null) objectRefs);
 
@@ -159,14 +162,12 @@ rec {
       };
     } // tc.environment);
 
-    # Reference to the wrapper's output (the archive.drv path)
-    wrapperOut = builtins.outputOf
+    # Reference to the archive.drv's output (the actual archive)
+    # The wrapper's output IS the archive.drv (text mode), so we only need
+    # one level of outputOf to get the archive
+    archiveOut = builtins.outputOf
       (builtins.unsafeDiscardOutputDependency wrapper.outPath)
       "out";
-
-    # Reference to the archive.drv's output (the actual archive)
-    # This is a computed output - we reference the output of the drv that the wrapper produces
-    archiveOut = builtins.outputOf wrapperOut "out";
 
   in {
     drv = wrapper;

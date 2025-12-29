@@ -66,8 +66,9 @@ rec {
     directPaths = builtins.filter (ref: !(ref ? wrapper) || ref.wrapper == null) objectRefs;
 
     # Wrapper info for the script
+    # Strip context from drvPath - dependency tracked via dynamicOutputs, not string context
     wrapperInfo = map (ref: {
-      wrapper_drv = ref.wrapper.drvPath;
+      wrapper_drv = builtins.unsafeDiscardStringContext ref.wrapper.drvPath;
       object_name = ref.objectName;
     }) dynamicRefs;
 
@@ -92,9 +93,11 @@ rec {
     linkConfigJson = builtins.toJSON linkConfig;
 
     wrapper = pkgs.stdenv.mkDerivation ({
+      # Name ends in .drv for text mode output to be recognized as derivation
       name = "${name}-link.drv";
 
       # Content-addressed derivation with text output mode
+      # The output IS the .drv file
       __contentAddressed = true;
       outputHashMode = "text";
       outputHashAlgo = "sha256";
@@ -155,13 +158,12 @@ rec {
       };
     } // tc.environment);
 
-    # Reference to the wrapper's output (the link.drv path)
-    wrapperOut = builtins.outputOf
+    # Reference to the link.drv's output (the actual binary)
+    # The wrapper's output IS the link.drv (text mode), so we only need
+    # one level of outputOf to get the binary
+    linkOut = builtins.outputOf
       (builtins.unsafeDiscardOutputDependency wrapper.outPath)
       "out";
-
-    # Reference to the link.drv's output (the actual binary)
-    linkOut = builtins.outputOf wrapperOut "out";
 
   in {
     drv = wrapper;

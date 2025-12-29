@@ -93,18 +93,15 @@ let
       };
 
   # Remove our special params from args before passing to mk* functions
-  # Always use dynamic mode (default scanMode)
   cleanArgs =
     args:
-    let
-      # Always use dynamic mode
-      withScanMode = args // { scanMode = "dynamic"; };
-    in
-    builtins.removeAttrs withScanMode [
+    builtins.removeAttrs args [
       "compiler"
       "linker"
       "toolchain"
       "contentAddressed"  # Handled by extractToolchain, stored in toolchain
+      "scanMode"          # Deprecated, all builds use dynamic mode now
+      "dynamic"           # Deprecated alias
     ];
 
   # ==========================================================================

@@ -3,6 +3,9 @@
 # Demonstrates using dynamic derivations to avoid IFD (Import From Derivation).
 # Requires Nix with experimental features: dynamic-derivations, ca-derivations
 #
+# With the refactored architecture, all builds use dynamic derivations by default.
+# Each source file gets its own compile wrapper, enabling true parallelism.
+#
 { pkgs, native }:
 
 let
@@ -14,24 +17,13 @@ let
     };
   };
 in {
-  # Sequential mode: single driver, simple but not parallel
-  sequentialExample = native.executable {
-    name = "sequential-example";
-    root = ./.;
-    sources = [ "src/*.cc" ];
-    includeDirs = [ ./include ];
-    dynamic = true;  # Uses mkDynamicDriver (sequential)
-  };
-
-  # Parallel mode: per-source wrappers, true parallelism
-  # This creates N compile wrapper derivations at eval time
-  # Nix builds them all in parallel!
-  parallelExample = native.mkParallelDriver {
+  # All executables now use dynamic derivations automatically
+  # Each source file gets a separate compile wrapper, built in parallel
+  parallelExample = native.executable {
     name = "parallel-example";
     root = ./.;
     sources = [ "src/*.cc" ];
     includeDirs = [ ./include ];
     inherit toolchain;
-    outputType = "executable";
   };
 }

@@ -565,10 +565,10 @@ in
   # Dynamic derivations internals (for advanced use)
   inherit (dynamic)
     hasDynamicDerivations
-    mkDynamicDriver       # Sequential mode
-    mkParallelDriver      # Parallel mode (recommended)
-    mkCompileWrapper      # Per-source wrapper
-    mkDynamicBuildContext
+    mkCompileWrapper      # Per-source compile wrapper
+    mkCompileSet          # Compile multiple sources
+    mkLinkWrapper         # Link objects into executable/shared lib
+    mkArchiveWrapper      # Create static archive from objects
     ;
 
   # Utilities (for advanced users)
