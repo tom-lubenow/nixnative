@@ -24,12 +24,10 @@ let
     ldflags = if pkgs.stdenv.isLinux then [ "-ldl" ] else [ ];
   };
 
-  # Wrapper script that runs host with plugin
-  runScript = pkgs.writeShellScriptBin "run-plugin-example" ''
-    ${hostApp}/bin/host-app ${myPlugin.sharedLibrary}
-  '';
-
 in {
-  inherit myPlugin hostApp runScript;
-  pluginsExample = runScript;
+  inherit myPlugin hostApp commonLib;
+  # With dynamic derivations, we can't create a runScript that references
+  # placeholder paths at evaluation time. The hostApp and myPlugin are
+  # available as separate packages that can be built and tested.
+  pluginsExample = hostApp;
 }

@@ -1,15 +1,10 @@
-{ pkgs, packages }:
+{ pkgs, native, packages }:
 
-let
-  exe = packages.executableExample;
-
-in
 {
-  executableExample = pkgs.runCommand "executable-example-check" { } ''
-    set -euo pipefail
-    output=$(${exe}/bin/executable-example)
-    test "$output" = "Hello from nixnative executable example"
-    mkdir -p "$out"
-    echo "$output" > "$out/result.txt"
-  '';
+  # Use native.test which handles dynamic derivations properly
+  executableExample = native.test {
+    name = "executable-example";
+    executable = packages.executableExample;
+    expectedOutput = "Hello from nixnative executable example";
+  };
 }

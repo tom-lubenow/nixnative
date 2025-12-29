@@ -6,7 +6,8 @@ let
     name = "mylib-static";
     root = ./.;
     sources = [ "lib.cc" ];
-    publicIncludeDirs = [ ./. ];
+    includeDirs = [ ./. ];  # For own compilation
+    publicIncludeDirs = [ ./. ];  # For consumers
   };
 
   # Static archive for installation/external distribution
@@ -17,7 +18,8 @@ let
     name = "mylib-shared";
     root = ./.;
     sources = [ "lib.cc" ];
-    publicIncludeDirs = [ ./. ];
+    includeDirs = [ ./. ];  # For own compilation
+    publicIncludeDirs = [ ./. ];  # For consumers
   };
 
 in {

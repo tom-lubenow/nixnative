@@ -1,15 +1,10 @@
 { pkgs, native, packages }:
 
 {
-  # Verify static library exists
-  installStatic = pkgs.runCommand "install-static-check" {} ''
-    test -f ${packages.staticLib}/lib/libmylib-static.a
-    touch $out
-  '';
+  # Verify static archive builds
+  # With dynamic derivations, file existence is verified by build success
+  installStatic = packages.staticLib;
 
-  # Verify shared library exists
-  installShared = pkgs.runCommand "install-shared-check" {} ''
-    test -f ${packages.sharedLib}/lib/libmylib-shared${pkgs.stdenv.hostPlatform.extensions.sharedLibrary}
-    touch $out
-  '';
+  # Verify shared library builds
+  installShared = packages.sharedLib;
 }

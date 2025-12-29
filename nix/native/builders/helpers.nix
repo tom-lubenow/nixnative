@@ -445,27 +445,24 @@ rec {
         }
       ) (ensureList publicIncludeDirs);
 
-      # Install headers
+      # Install headers only (separate from linked output)
       installHeaders = concatStringsSep "\n" (
         map (dir: "cp -r ${dir}/. $out/include/") publicIncludeStores
       );
 
-      # Combine link output + headers
-      sharedDrv = pkgs.runCommand "shared-${name}" {
-        linkedOutput = linked.out;
-      } ''
+      headersDrv = pkgs.runCommand "shared-${name}-headers" { } ''
         set -euo pipefail
-        mkdir -p "$out/lib" "$out/include"
-        cp -r "$linkedOutput"/lib/* "$out/lib/" 2>/dev/null || true
+        mkdir -p "$out/include"
         ${installHeaders}
       '';
 
       # Build public interface
+      # NOTE: linkFlags uses the placeholder path from linked.sharedLibPath
       basePublic = {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
         cxxFlags = publicCxxFlags;
-        linkFlags = [ "${sharedDrv}/lib/${sharedName}" ];
+        linkFlags = [ linked.sharedLibPath ];
       };
 
       # Merge headers/defines/cxxFlags from dependencies
@@ -476,13 +473,16 @@ rec {
         linkFlags = basePublic.linkFlags;
       };
     in
-    sharedDrv // {
+    # Return link wrapper directly (like mkExecutable)
+    linked.drv // {
       artifactType = "shared";
       inherit name;
-      sharedLibrary = "${sharedDrv}/lib/${sharedName}";
+      out = linked.out;
+      sharedLibrary = linked.sharedLibPath;
       inherit (compileSet) objectRefs;
       inherit libraries tools;
       public = combinedPublic;
+      headers = headersDrv;
       compileCommands = null;
       passthru = {
         inherit toolchain;
@@ -611,6 +611,9 @@ rec {
 
   # Create a test derivation that runs an executable
   #
+  # For dynamic derivations (executables built with mkExecutable), this creates
+  # a test wrapper that properly depends on the link output via dynamicOutputs.
+  #
   mkTest =
     {
       name,
@@ -620,58 +623,140 @@ rec {
       expectedOutput ? null,
     }:
     let
+      # Check if this is a dynamic derivation executable
+      isDynamic = executable ? passthru && executable.passthru ? wrappers;
+
       stdinFile = if stdin != null then pkgs.writeText "stdin" stdin else null;
       escapedArgs = map lib.escapeShellArg args;
-      expectedOutputFile =
-        if expectedOutput != null then pkgs.writeText "expected-output" expectedOutput else null;
 
-      # Get the executable path - either from executablePath (dynamic derivations)
-      # or by looking in /bin directory (traditional derivations)
-      execPath =
-        if executable ? executablePath then
-          executable.executablePath
-        else
-          "${executable}/bin/${executable.name or "unknown"}";
-    in
-    pkgs.runCommand "test-${name}"
-      {
-        nativeBuildInputs = [
-          pkgs.coreutils
-          pkgs.gnugrep
-          pkgs.findutils
-        ];
-        buildInputs = [ pkgs.stdenv.cc.cc.lib ];
-      }
-      ''
-        set -euo pipefail
-        mkdir -p $out
+      # Scripts directory for dynamic test generation
+      scriptsDir = ../dynamic/scripts;
 
-        BIN="${execPath}"
-        echo "Running test: $BIN (${toString (builtins.length args)} args)"
+      # Dynamic derivation test wrapper
+      dynamicTest = let
+        tc = executable.passthru.toolchain;
+        execName = executable.name;
+        linkWrapperDrv = builtins.unsafeDiscardStringContext executable.drvPath;
 
-        ${if stdin != null then "cat ${stdinFile} |" else ""} \
-        "$BIN" ${concatStringsSep " " escapedArgs} > output.log 2>&1 || {
-          echo "Test failed with exit code $?"
+        testConfig = {
+          bashPath = "${pkgs.bash}/bin/bash";
+          coreutilsPath = "${pkgs.coreutils}";
+          gccLibPath = "${pkgs.stdenv.cc.cc.lib}";
+          inherit args;
+          expectedOutput = expectedOutput;
+          stdinPath = if stdin != null then "${stdinFile}" else null;
+        };
+
+        testConfigJson = builtins.toJSON testConfig;
+
+        nixPackage = pkgs.nix;
+
+        wrapper = pkgs.stdenv.mkDerivation {
+          name = "test-${name}.drv";
+
+          __contentAddressed = true;
+          outputHashMode = "text";
+          outputHashAlgo = "sha256";
+
+          requiredSystemFeatures = [ "recursive-nix" ];
+
+          nativeBuildInputs = [
+            nixPackage
+            pkgs.python3
+            pkgs.coreutils
+            pkgs.bash
+          ];
+
+          inherit testConfigJson;
+          passAsFile = [ "testConfigJson" ];
+
+          NIX_BIN = "${nixPackage}/bin/nix";
+          NIX_CONFIG = ''
+            extra-experimental-features = nix-command ca-derivations dynamic-derivations
+          '';
+
+          dontUnpack = true;
+          dontConfigure = true;
+          dontInstall = true;
+          dontFixup = true;
+
+          buildPhase = ''
+            runHook preBuild
+
+            python3 ${scriptsDir}/generate-test-drv.py \
+              --name "${name}" \
+              --link-wrapper-drv "${linkWrapperDrv}" \
+              --exec-name "${execName}" \
+              --test-config "$testConfigJsonPath" \
+              --system "${pkgs.stdenv.hostPlatform.system}" \
+              --output "$TMPDIR/test.json"
+
+            drv_path=$($NIX_BIN derivation add < "$TMPDIR/test.json")
+            echo "Created test derivation: $drv_path" >&2
+
+            cp "$drv_path" "$out"
+
+            runHook postBuild
+          '';
+        };
+
+        # Reference to the test output
+        testOut = builtins.outputOf
+          (builtins.unsafeDiscardOutputDependency wrapper.outPath)
+          "out";
+      in
+      wrapper // {
+        out = testOut;
+        passthru = { inherit executable; };
+      };
+
+      # Traditional runCommand test for non-dynamic executables
+      traditionalTest = let
+        execPath = "${executable}/bin/${executable.name or "unknown"}";
+        expectedOutputFile =
+          if expectedOutput != null then pkgs.writeText "expected-output" expectedOutput else null;
+      in
+      pkgs.runCommand "test-${name}"
+        {
+          nativeBuildInputs = [
+            pkgs.coreutils
+            pkgs.gnugrep
+            pkgs.findutils
+          ];
+          buildInputs = [ pkgs.stdenv.cc.cc.lib ];
+        }
+        ''
+          set -euo pipefail
+          mkdir -p $out
+
+          BIN="${execPath}"
+          echo "Running test: $BIN (${toString (builtins.length args)} args)"
+
+          ${if stdin != null then "cat ${stdinFile} |" else ""} \
+          "$BIN" ${concatStringsSep " " escapedArgs} > output.log 2>&1 || {
+            echo "Test failed with exit code $?"
+            cat output.log
+            exit 1
+          }
+
           cat output.log
-          exit 1
-        }
 
-        cat output.log
+          ${
+            if expectedOutput != null then
+              ''
+                expected=$(cat ${expectedOutputFile})
+                if ! grep -qF "$expected" output.log; then
+                  echo "Test failed: Expected output not found."
+                  echo "Expected: $expected"
+                  exit 1
+                fi
+              ''
+            else
+              ""
+          }
 
-        ${
-          if expectedOutput != null then
-            ''
-              expected=$(cat ${expectedOutputFile})
-              if ! grep -qF "$expected" output.log; then
-                echo "Test failed: Expected output not found."
-                echo "Expected: $expected"
-                exit 1
-              fi
-            ''
-          else
-            ""
-        }
-
-        cp output.log $out/test.log
-      '';
+          cp output.log $out/test.log
+        '';
+    in
+    if isDynamic then dynamicTest else traditionalTest;
 }

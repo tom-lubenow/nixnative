@@ -15,7 +15,7 @@ let
   # ===========================================================================
 
   execPackagesRaw = import ./executable/project.nix { inherit pkgs native; };
-  execChecks = import ./executable/checks.nix { inherit pkgs; packages = execPackagesRaw; };
+  execChecks = import ./executable/checks.nix { inherit pkgs native; packages = execPackagesRaw; };
   execPackages = materializeSet execPackagesRaw;
 
   libraryPackagesRaw = import ./library/project.nix { inherit pkgs native; };
@@ -33,7 +33,7 @@ let
   libraryChainPackages = materializeSet libraryChainPackagesRaw;
 
   appPackagesRaw = import ./app-with-library/project.nix { inherit pkgs native; };
-  appChecks = import ./app-with-library/checks.nix { inherit pkgs; packages = appPackagesRaw; };
+  appChecks = import ./app-with-library/checks.nix { inherit pkgs native; packages = appPackagesRaw; };
   appPackages = materializeSet appPackagesRaw;
 
   multiToolchainPackagesRaw = import ./multi-toolchain/project.nix { inherit pkgs native; };
@@ -49,7 +49,7 @@ let
   testingPackages = materializeSet testingPackagesRaw;
 
   testLibrariesPackagesRaw = import ./test-libraries/project.nix { inherit pkgs native; };
-  testLibrariesChecks = import ./test-libraries/checks.nix { inherit pkgs; packages = testLibrariesPackagesRaw; };
+  testLibrariesChecks = import ./test-libraries/checks.nix { inherit pkgs native; packages = testLibrariesPackagesRaw; };
   testLibrariesPackages = materializeSet testLibrariesPackagesRaw;
 
   devshellPackagesRaw = import ./devshell/project.nix { inherit pkgs native; };
