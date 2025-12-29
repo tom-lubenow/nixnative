@@ -705,8 +705,10 @@ rec {
           # Raw string link flag
           [ lib ]
         else if builtins.isAttrs lib then
-          # Skip objectRefs-style libs (handled by collectObjectRefs)
-          if lib ? objectRefs then
+          # Skip objectRefs-style libs ONLY if objectRefs is non-empty
+          # (handled by collectObjectRefs). Ninja-built libs have objectRefs = []
+          # and should use linkFlags instead.
+          if lib ? objectRefs && lib.objectRefs != [] then
             if lib ? libraries then collectLinkFlags lib.libraries else []
           else if lib ? public && lib.public ? linkFlags then
             lib.public.linkFlags ++ (if lib ? libraries then collectLinkFlags lib.libraries else [])

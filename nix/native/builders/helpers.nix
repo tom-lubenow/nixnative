@@ -1,7 +1,7 @@
 # High-level build helpers for nixnative
 #
 # These functions provide the primary API for building C/C++ targets.
-# They use the dynamic compilation primitives and produce ready-to-use derivations.
+# Uses nix-ninja for incremental per-file compilation.
 #
 {
   pkgs,
@@ -9,11 +9,11 @@
   utils,
   platform,
   scanner,  # Tool processing
-  dynamic,  # Dynamic compilation module (required)
+  ninja,    # nix-ninja integration
 }:
 
 let
-  inherit (lib) concatStringsSep;
+  inherit (lib) concatStringsSep hasPrefix removePrefix;
   inherit (utils)
     sanitizePath
     sanitizeName
@@ -24,13 +24,100 @@ let
     emptyPublic
     collectObjectRefs
     collectLinkFlags
+    isGlob
+    expandGlob
     ;
   inherit (scanner) processTools;
-  inherit (dynamic)
-    mkCompileSet
-    mkLinkWrapper
-    mkArchiveWrapper
-    ;
+
+  # Collect ninja-built library derivations for dependency tracking
+  # Returns list of wrapper derivations that need to be realized before linking
+  collectLibraryInputs = libs:
+    let
+      collectFromLib = lib:
+        if builtins.isAttrs lib then
+          # Check if this is a ninja-built library (has passthru.target)
+          if lib ? passthru && lib.passthru ? target then
+            [ lib ] ++ (if lib ? libraries then collectLibraryInputs lib.libraries else [])
+          else if lib ? libraries then
+            collectLibraryInputs lib.libraries
+          else
+            []
+        else
+          [];
+    in
+    lib.unique (lib.concatMap collectFromLib libs);
+
+  # Language detection for source files
+  detectLanguage = path:
+    let
+      ext = lib.last (lib.splitString "." (toString path));
+    in
+    if builtins.elem ext [ "c" "h" ] then "c"
+    else if builtins.elem ext [ "cc" "cpp" "cxx" "C" "hpp" "hxx" ] then "cpp"
+    else null;
+
+  # Normalize a source file for ninja consumption
+  # Returns: { store, relNorm, objectName, lang }
+  normalizeSourceForNinja = { root, source }:
+    let
+      rootPath = sanitizePath { path = root; };
+      rootStr = builtins.toString rootPath;
+
+      # Handle different source formats
+      srcInfo =
+        if builtins.isString source then
+          { rel = source; path = rootPath + "/${source}"; store = null; }
+        else if builtins.isPath source then
+          let
+            pathStr = builtins.toString source;
+            rel = if hasPrefix rootStr pathStr
+              then removePrefix (rootStr + "/") pathStr
+              else builtins.baseNameOf pathStr;
+          in
+          { inherit rel; path = source; store = null; }
+        else if source ? rel then
+          { rel = source.rel; path = source.path or (rootPath + "/${source.rel}"); store = source.store or null; }
+        else
+          throw "Invalid source format: ${builtins.toJSON source}";
+
+      relNorm = if hasPrefix "./" srcInfo.rel
+        then removePrefix "./" srcInfo.rel
+        else srcInfo.rel;
+
+      lang = detectLanguage relNorm;
+      objectName = sanitizeName (lib.removeSuffix ".${lib.last (lib.splitString "." relNorm)}" relNorm) + ".o";
+
+      # For tool-generated sources, extract the store base from the full path
+      # by removing the relative path suffix
+      storeBase =
+        if srcInfo.store != null then
+          let
+            pathStr = builtins.toString srcInfo.path;
+            # Remove the relative path suffix to get the store directory
+            # e.g., "/nix/store/xxx/generated/foo.cc" - "generated/foo.cc" = "/nix/store/xxx"
+            storeDir = lib.removeSuffix "/${relNorm}" pathStr;
+          in
+          storeDir
+        else
+          rootPath;
+    in
+    {
+      store = storeBase;
+      inherit relNorm objectName lang;
+    };
+
+  # Normalize all sources for ninja (with glob expansion)
+  normalizeSourcesForNinja = { root, sources }:
+    let
+      # Expand globs first
+      expandedSources = lib.concatMap (source:
+        if isGlob source then
+          expandGlob { inherit root; pattern = source; }
+        else
+          [ source ]
+      ) sources;
+    in
+    map (source: normalizeSourceForNinja { inherit root source; }) expandedSources;
 
 in
 rec {
@@ -97,50 +184,72 @@ rec {
       # Combine compile flags
       combinedCompileFlags = compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
 
-      # Compile own sources
-      compileSet = mkCompileSet {
-        inherit name root toolchain flags;
-        sources = allSources;
-        includeDirs = combinedIncludeDirs;
-        defines = combinedDefines;
-        compileFlags = combinedCompileFlags;
-        inherit langFlags;
-        headerOverrides = toolInfo.headerOverrides;
-        sourceOverrides = toolInfo.sourceOverrides;
-        extraInputs = toolInfo.evalInputs;
-      };
-
-      # Collect object refs from libraries
-      libObjectRefs = collectObjectRefs libraries;
-
       # Collect legacy link flags (for external libs like pkg-config)
       legacyLinkFlags = collectLinkFlags libraries;
 
-      # All object references (own + from libraries)
-      allObjectRefs = compileSet.objectRefs ++ libObjectRefs;
+      # ----- NINJA PATH (when nix-ninja is available) -----
+      ninjaResult = let
+        # Normalize sources for ninja
+        normalizedSources = normalizeSourcesForNinja {
+          inherit root;
+          sources = allSources;
+        };
 
-      # Link into executable
-      linked = mkLinkWrapper {
-        inherit name toolchain flags;
-        objectRefs = allObjectRefs;
-        outputType = "executable";
-        inherit ldflags;
-        linkFlags = legacyLinkFlags;
+        # Resolve include directories to store paths
+        resolvedIncludeDirs = map (d:
+          if builtins.isPath d then builtins.toString d
+          else if builtins.isString d then
+            if hasPrefix "/" d then d
+            else builtins.toString (rootPath + "/${d}")
+          else if d ? path then builtins.toString d.path
+          else throw "Invalid include dir: ${builtins.toJSON d}"
+        ) combinedIncludeDirs;
+
+        # Generate ninja file content
+        ninjaContent = ninja.generateExecutable {
+          inherit name toolchain;
+          sources = normalizedSources;
+          includeDirs = resolvedIncludeDirs;
+          defines = combinedDefines;
+          compileFlags = combinedCompileFlags;
+          inherit langFlags;
+          ldflags = ldflags ++ legacyLinkFlags;
+        };
+
+        # Collect library wrapper derivations for dependency tracking
+        libraryInputs = collectLibraryInputs libraries;
+
+        # Create wrapper derivation
+        wrapper = ninja.mkNinjaDerivation {
+          inherit name ninjaContent libraryInputs;
+          target = name;
+          sourceInputs = [ rootPath ];
+          toolInputs = tc.runtimeInputs;
+          outputType = "executable";
+        };
+
+        # The actual target output (accessed via dynamic derivation output)
+        targetOut = wrapper.passthru.target;
+      in
+      # Return the wrapper derivation with extra attributes merged in
+      wrapper // {
+        artifactType = "executable";
+        inherit name;
+        # The target output path (via dynamic derivation)
+        out = targetOut;
+        executablePath = "${targetOut}/bin/${name}";
+        objectRefs = [];  # Not tracked with ninja
+        compileCommands = null;
+        passthru = wrapper.passthru // {
+          inherit toolchain;
+          wrappers = [];
+          tus = normalizedSources;
+          inherit libraries tools;
+          ninjaContent = ninjaContent;
+        };
       };
     in
-    linked.drv // {
-      artifactType = "executable";
-      inherit name;
-      out = linked.out;
-      executablePath = linked.executablePath;
-      inherit (compileSet) objectRefs;
-      compileCommands = null;  # TODO: generate at build time
-      passthru = {
-        inherit toolchain;
-        inherit (compileSet) wrappers tus;
-        inherit libraries tools;
-      };
-    };
+    ninjaResult;
 
   # ==========================================================================
   # Static Library Builder
@@ -148,10 +257,8 @@ rec {
 
   # Build a static library from C/C++ sources
   #
-  # Objects are compiled but NOT linked. The objectRefs are exposed for
-  # consumers (executables, shared libs) to collect and link.
-  #
-  # Use mkArchive if you need an actual .a archive file.
+  # With ninja: Produces a .a archive directly.
+  # With dynamic: Objects are compiled and objectRefs exposed for consumers.
   #
   mkStaticLib =
     {
@@ -199,19 +306,6 @@ rec {
       # Combine compile flags
       combinedCompileFlags = compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
 
-      # Compile sources (NO linking!)
-      compileSet = mkCompileSet {
-        inherit name root toolchain flags;
-        sources = allSources;
-        includeDirs = combinedIncludeDirs;
-        defines = combinedDefines;
-        compileFlags = combinedCompileFlags;
-        inherit langFlags;
-        headerOverrides = toolInfo.headerOverrides;
-        sourceOverrides = toolInfo.sourceOverrides;
-        extraInputs = toolInfo.evalInputs;
-      };
-
       # Normalize public include directories
       publicIncludeStores = map (
         dir:
@@ -221,51 +315,81 @@ rec {
         }
       ) (ensureList publicIncludeDirs);
 
-      # Install headers only (no archive - objects are passed via objectRefs)
-      installHeaders = concatStringsSep "\n" (
-        map (dir: "cp -r ${dir}/. $out/include/") publicIncludeStores
-      );
+      # ----- NINJA PATH -----
+      ninjaResult = let
+        # Normalize sources for ninja
+        normalizedSources = normalizeSourcesForNinja {
+          inherit root;
+          sources = allSources;
+        };
 
-      headersDrv = pkgs.runCommand "lib-${name}" { } ''
-        set -euo pipefail
-        mkdir -p "$out/include"
-        ${installHeaders}
-      '';
+        # Resolve include directories to store paths
+        resolvedIncludeDirs = map (d:
+          if builtins.isPath d then builtins.toString d
+          else if builtins.isString d then
+            if hasPrefix "/" d then d
+            else builtins.toString (rootPath + "/${d}")
+          else if d ? path then builtins.toString d.path
+          else throw "Invalid include dir: ${builtins.toJSON d}"
+        ) combinedIncludeDirs;
 
-      # Build public interface
-      # NOTE: linkFlags is EMPTY - consumers get objects via objectRefs
-      basePublic = {
-        includeDirs = map (dir: { path = dir; }) publicIncludeStores;
-        defines = publicDefines;
-        cxxFlags = publicCxxFlags;
-        linkFlags = [];  # No linkFlags - use objectRefs instead
-      };
+        archiveName = "lib${name}.a";
 
-      # Merge headers/defines/cxxFlags from dependencies
-      combinedPublic = {
-        includeDirs = publicAggregate.includeDirs ++ basePublic.includeDirs;
-        defines = publicAggregate.defines ++ basePublic.defines;
-        cxxFlags = publicAggregate.cxxFlags ++ basePublic.cxxFlags;
-        linkFlags = [];  # Consumers use objectRefs
+        # Generate ninja file content
+        ninjaContent = ninja.generateStaticLib {
+          inherit name toolchain;
+          sources = normalizedSources;
+          includeDirs = resolvedIncludeDirs;
+          defines = combinedDefines;
+          compileFlags = combinedCompileFlags;
+          inherit langFlags;
+        };
+
+        # Create wrapper derivation
+        wrapper = ninja.mkNinjaDerivation {
+          inherit name ninjaContent;
+          target = archiveName;
+          sourceInputs = [ rootPath ];
+          toolInputs = tc.runtimeInputs;
+          outputType = "staticLib";
+        };
+
+        # The actual archive output (accessed via dynamic derivation output)
+        archiveOut = wrapper.passthru.target;
+
+        # Build public interface with archive path
+        basePublic = {
+          includeDirs = map (dir: { path = dir; }) publicIncludeStores;
+          defines = publicDefines;
+          cxxFlags = publicCxxFlags;
+          linkFlags = [ "${archiveOut}/${archiveName}" ];
+        };
+
+        combinedPublic = {
+          includeDirs = publicAggregate.includeDirs ++ basePublic.includeDirs;
+          defines = publicAggregate.defines ++ basePublic.defines;
+          cxxFlags = publicAggregate.cxxFlags ++ basePublic.cxxFlags;
+          linkFlags = basePublic.linkFlags;
+        };
+      in
+      wrapper // {
+        artifactType = "static";
+        inherit name;
+        out = archiveOut;
+        archivePath = "${archiveOut}/${archiveName}";
+        objectRefs = [];  # Not tracked with ninja - use archivePath instead
+        inherit libraries tools;
+        public = combinedPublic;
+        compileCommands = null;
+        passthru = wrapper.passthru // {
+          inherit toolchain;
+          wrappers = [];
+          tus = normalizedSources;
+          ninjaContent = ninjaContent;
+        };
       };
     in
-    headersDrv // {
-      artifactType = "static";
-      inherit name;
-
-      # Expose object references for consumers
-      inherit (compileSet) objectRefs;
-
-      # Keep reference to libraries for transitive dependency resolution
-      inherit libraries tools;
-
-      public = combinedPublic;
-      compileCommands = null;  # TODO: generate at build time
-      passthru = {
-        inherit toolchain;
-        inherit (compileSet) wrappers tus;
-      };
-    };
+    ninjaResult;
 
   # ==========================================================================
   # Static Archive Builder
@@ -273,9 +397,7 @@ rec {
 
   # Create a static archive (.a) from a static library
   #
-  # Use this when you need an actual .a file for:
-  # - External distribution/installation
-  # - Traditional archive link semantics (selective object inclusion)
+  # With nix-ninja, mkStaticLib already produces an archive, so this is a pass-through.
   #
   mkArchive =
     {
@@ -283,25 +405,13 @@ rec {
       name ? lib.name,
     }:
     let
-      tc = lib.passthru.toolchain;
-      objectRefs = lib.objectRefs or [];
       archiveName = "lib${sanitizeName name}.a";
-
-      archiveWrapper = mkArchiveWrapper {
-        inherit name objectRefs;
-        toolchain = tc;
-      };
     in
-    archiveWrapper.drv // {
+    # Library already has an archive, just return it with archive interface
+    lib // {
       artifactType = "archive";
       inherit name archiveName;
-      archiveWrapper = archiveWrapper;
       headers = lib;
-      public = lib.public;
-      passthru = {
-        toolchain = tc;
-        inherit archiveWrapper;
-      };
     };
 
   # ==========================================================================
@@ -359,40 +469,8 @@ rec {
       # Combine compile flags
       combinedCompileFlags = compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
 
-      # Compile sources
-      compileSet = mkCompileSet {
-        inherit name root toolchain flags;
-        sources = allSources;
-        includeDirs = combinedIncludeDirs;
-        defines = combinedDefines;
-        compileFlags = combinedCompileFlags;
-        inherit langFlags;
-        headerOverrides = toolInfo.headerOverrides;
-        sourceOverrides = toolInfo.sourceOverrides;
-        extraInputs = toolInfo.evalInputs;
-      };
-
-      # Collect object refs from libraries
-      libObjectRefs = collectObjectRefs libraries;
-
-      # Collect legacy link flags
+      # Collect legacy link flags from library dependencies
       legacyLinkFlags = collectLinkFlags libraries;
-
-      # All object references (own + from libraries)
-      allObjectRefs = compileSet.objectRefs ++ libObjectRefs;
-
-      # Link into shared library
-      linked = mkLinkWrapper {
-        inherit name toolchain flags;
-        objectRefs = allObjectRefs;
-        outputType = "sharedLibrary";
-        inherit ldflags;
-        linkFlags = legacyLinkFlags;
-      };
-
-      # Determine shared library name
-      sharedExt = builtins.substring 1 100 (platform.sharedLibExtension targetPlatform);
-      sharedName = "lib${name}.${sharedExt}";
 
       # Normalize public include directories
       publicIncludeStores = map (
@@ -403,50 +481,87 @@ rec {
         }
       ) (ensureList publicIncludeDirs);
 
-      # Install headers only (separate from linked output)
-      installHeaders = concatStringsSep "\n" (
-        map (dir: "cp -r ${dir}/. $out/include/") publicIncludeStores
-      );
+      # Shared library name (Linux only - we don't support Darwin)
+      sharedName = "lib${name}.so";
 
-      headersDrv = pkgs.runCommand "shared-${name}-headers" { } ''
-        set -euo pipefail
-        mkdir -p "$out/include"
-        ${installHeaders}
-      '';
+      # ----- NINJA PATH -----
+      ninjaResult = let
+        # Normalize sources for ninja
+        normalizedSources = normalizeSourcesForNinja {
+          inherit root;
+          sources = allSources;
+        };
 
-      # Build public interface
-      # NOTE: linkFlags uses the placeholder path from linked.sharedLibPath
-      basePublic = {
-        includeDirs = map (dir: { path = dir; }) publicIncludeStores;
-        defines = publicDefines;
-        cxxFlags = publicCxxFlags;
-        linkFlags = [ linked.sharedLibPath ];
-      };
+        # Resolve include directories to store paths
+        resolvedIncludeDirs = map (d:
+          if builtins.isPath d then builtins.toString d
+          else if builtins.isString d then
+            if hasPrefix "/" d then d
+            else builtins.toString (rootPath + "/${d}")
+          else if d ? path then builtins.toString d.path
+          else throw "Invalid include dir: ${builtins.toJSON d}"
+        ) combinedIncludeDirs;
 
-      # Merge headers/defines/cxxFlags from dependencies
-      combinedPublic = {
-        includeDirs = publicAggregate.includeDirs ++ basePublic.includeDirs;
-        defines = publicAggregate.defines ++ basePublic.defines;
-        cxxFlags = publicAggregate.cxxFlags ++ basePublic.cxxFlags;
-        linkFlags = basePublic.linkFlags;
+        # Generate ninja file content
+        ninjaContent = ninja.generateSharedLib {
+          inherit name toolchain;
+          sources = normalizedSources;
+          includeDirs = resolvedIncludeDirs;
+          defines = combinedDefines;
+          compileFlags = combinedCompileFlags;
+          inherit langFlags;
+          ldflags = ldflags ++ legacyLinkFlags;
+        };
+
+        # Collect library wrapper derivations for dependency tracking
+        libraryInputs = collectLibraryInputs libraries;
+
+        # Create wrapper derivation
+        wrapper = ninja.mkNinjaDerivation {
+          inherit name ninjaContent libraryInputs;
+          target = sharedName;
+          sourceInputs = [ rootPath ];
+          toolInputs = tc.runtimeInputs;
+          outputType = "sharedLib";
+        };
+
+        # The actual shared lib output (accessed via dynamic derivation output)
+        sharedOut = wrapper.passthru.target;
+        sharedLibPath = "${sharedOut}/${sharedName}";
+
+        # Build public interface with shared lib path
+        basePublic = {
+          includeDirs = map (dir: { path = dir; }) publicIncludeStores;
+          defines = publicDefines;
+          cxxFlags = publicCxxFlags;
+          linkFlags = [ sharedLibPath ];
+        };
+
+        combinedPublic = {
+          includeDirs = publicAggregate.includeDirs ++ basePublic.includeDirs;
+          defines = publicAggregate.defines ++ basePublic.defines;
+          cxxFlags = publicAggregate.cxxFlags ++ basePublic.cxxFlags;
+          linkFlags = basePublic.linkFlags;
+        };
+      in
+      wrapper // {
+        artifactType = "shared";
+        inherit name;
+        out = sharedOut;
+        sharedLibrary = sharedLibPath;
+        objectRefs = [];  # Not tracked with ninja
+        inherit libraries tools;
+        public = combinedPublic;
+        compileCommands = null;
+        passthru = wrapper.passthru // {
+          inherit toolchain;
+          wrappers = [];
+          tus = normalizedSources;
+          ninjaContent = ninjaContent;
+        };
       };
     in
-    # Return link wrapper directly (like mkExecutable)
-    linked.drv // {
-      artifactType = "shared";
-      inherit name;
-      out = linked.out;
-      sharedLibrary = linked.sharedLibPath;
-      inherit (compileSet) objectRefs;
-      inherit libraries tools;
-      public = combinedPublic;
-      headers = headersDrv;
-      compileCommands = null;
-      passthru = {
-        inherit toolchain;
-        inherit (compileSet) wrappers tus;
-      };
-    };
+    ninjaResult;
 
   # ==========================================================================
   # Header-Only Library
@@ -569,8 +684,8 @@ rec {
 
   # Create a test derivation that runs an executable
   #
-  # For dynamic derivations (executables built with mkExecutable), this creates
-  # a test wrapper that properly depends on the link output via dynamicOutputs.
+  # For nix-ninja built executables, uses ninja.mkNinjaTest.
+  # For traditional executables, uses a simple runCommand.
   #
   mkTest =
     {
@@ -581,94 +696,20 @@ rec {
       expectedOutput ? null,
     }:
     let
-      # Check if this is a dynamic derivation executable
-      isDynamic = executable ? passthru && executable.passthru ? wrappers;
+      # Check if this is a ninja-built executable
+      isNinjaBuilt = executable ? passthru && executable.passthru ? target;
 
       stdinFile = if stdin != null then pkgs.writeText "stdin" stdin else null;
       escapedArgs = map lib.escapeShellArg args;
 
-      # Scripts directory for dynamic test generation
-      scriptsDir = ../dynamic/scripts;
-
-      # Dynamic derivation test wrapper
-      dynamicTest = let
-        tc = executable.passthru.toolchain;
-        execName = executable.name;
-        linkWrapperDrv = builtins.unsafeDiscardStringContext executable.drvPath;
-
-        testConfig = {
-          bashPath = "${pkgs.bash}/bin/bash";
-          coreutilsPath = "${pkgs.coreutils}";
-          gccLibPath = "${pkgs.stdenv.cc.cc.lib}";
-          inherit args;
-          expectedOutput = expectedOutput;
-          stdinPath = if stdin != null then "${stdinFile}" else null;
-        };
-
-        testConfigJson = builtins.toJSON testConfig;
-
-        nixPackage = pkgs.nix;
-
-        wrapper = pkgs.stdenv.mkDerivation {
-          name = "test-${name}.drv";
-
-          __contentAddressed = true;
-          outputHashMode = "text";
-          outputHashAlgo = "sha256";
-
-          requiredSystemFeatures = [ "recursive-nix" ];
-
-          nativeBuildInputs = [
-            nixPackage
-            pkgs.python3
-            pkgs.coreutils
-            pkgs.bash
-          ];
-
-          inherit testConfigJson;
-          passAsFile = [ "testConfigJson" ];
-
-          NIX_BIN = "${nixPackage}/bin/nix";
-          NIX_CONFIG = ''
-            extra-experimental-features = nix-command ca-derivations dynamic-derivations
-          '';
-
-          dontUnpack = true;
-          dontConfigure = true;
-          dontInstall = true;
-          dontFixup = true;
-
-          buildPhase = ''
-            runHook preBuild
-
-            python3 ${scriptsDir}/generate-test-drv.py \
-              --name "${name}" \
-              --link-wrapper-drv "${linkWrapperDrv}" \
-              --exec-name "${execName}" \
-              --test-config "$testConfigJsonPath" \
-              --system "${pkgs.stdenv.hostPlatform.system}" \
-              --output "$TMPDIR/test.json"
-
-            drv_path=$($NIX_BIN derivation add < "$TMPDIR/test.json")
-            echo "Created test derivation: $drv_path" >&2
-
-            cp "$drv_path" "$out"
-
-            runHook postBuild
-          '';
-        };
-
-        # Reference to the test output
-        testOut = builtins.outputOf
-          (builtins.unsafeDiscardOutputDependency wrapper.outPath)
-          "out";
-      in
-      wrapper // {
-        out = testOut;
-        passthru = { inherit executable; };
+      # Ninja-built executable test
+      ninjaTest = ninja.mkNinjaTest {
+        inherit name args;
+        executable = executable;
+        inherit expectedOutput;
       };
 
-      # Traditional runCommand test for non-dynamic executables
+      # Traditional runCommand test for non-ninja executables
       traditionalTest = let
         execPath = "${executable}/bin/${executable.name or "unknown"}";
         expectedOutputFile =
@@ -716,5 +757,5 @@ rec {
           cp output.log $out/test.log
         '';
     in
-    if isDynamic then dynamicTest else traditionalTest;
+    if isNinjaBuilt then ninjaTest else traditionalTest;
 }

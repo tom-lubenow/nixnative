@@ -28,7 +28,8 @@ rec {
       mkLinker {
         name = "gold";
         binary = "${pkgs.binutils}/bin/ld.gold";
-        driverFlag = "-fuse-ld=gold";
+        # Use full path so compiler doesn't need ld.gold on PATH
+        driverFlag = "-fuse-ld=${pkgs.binutils}/bin/ld.gold";
 
         capabilities = goldCapabilities;
 

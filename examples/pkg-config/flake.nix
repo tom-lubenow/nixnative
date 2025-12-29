@@ -19,7 +19,7 @@
     let
       systems = [
         "x86_64-linux"
-        "aarch64-darwin"
+       
         "aarch64-linux"
       ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
@@ -29,7 +29,12 @@
         system:
         let
           pkgs = import nixpkgs { inherit system; };
-          native = nixnative.lib.native { inherit pkgs; };
+          nixPackage = nixnative.inputs.nix.packages.${system}.default;
+          ninjaPackages = nixnative.inputs.nix-ninja.packages.${system};
+          native = nixnative.lib.native {
+            inherit pkgs nixPackage;
+            inherit (ninjaPackages) nix-ninja nix-ninja-task;
+          };
           packages = import ./project.nix { inherit pkgs native; };
         in
         packages // { default = packages.demo; }
@@ -39,7 +44,12 @@
         system:
         let
           pkgs = import nixpkgs { inherit system; };
-          native = nixnative.lib.native { inherit pkgs; };
+          nixPackage = nixnative.inputs.nix.packages.${system}.default;
+          ninjaPackages = nixnative.inputs.nix-ninja.packages.${system};
+          native = nixnative.lib.native {
+            inherit pkgs nixPackage;
+            inherit (ninjaPackages) nix-ninja nix-ninja-task;
+          };
           packages = import ./project.nix { inherit pkgs native; };
         in
         import ./checks.nix { inherit pkgs native packages; }

@@ -1,13 +1,16 @@
-# nixnative - Incremental C/C++ builds using Nix dynamic derivations
+# nixnative - Incremental C/C++ builds using nix-ninja
 #
 # Main entry point. Import this to get access to all nixnative functionality.
 #
-# Requires Nix with dynamic derivations support:
+# Requires Nix with dynamic derivations and recursive-nix support:
 #   experimental-features = nix-command dynamic-derivations ca-derivations recursive-nix
 #
 # Usage:
 #   let
-#     native = nixnative.lib.native { inherit pkgs nixPackage; };
+#     native = nixnative.lib.native {
+#       inherit pkgs nixPackage;
+#       inherit (nix-ninja.packages.${system}) nix-ninja nix-ninja-task;
+#     };
 #   in
 #   native.executable { ... }
 #
@@ -16,6 +19,9 @@
   lib ? pkgs.lib,
   # Nix package with dynamic derivations support (optional, defaults to pkgs.nix)
   nixPackage ? pkgs.nix,
+  # nix-ninja packages for incremental builds
+  nix-ninja ? null,
+  nix-ninja-task ? null,
 }:
 
 let
@@ -64,11 +70,11 @@ let
   };
 
   # ==========================================================================
-  # Dynamic Derivations Module (Experimental)
+  # Ninja Module (nix-ninja integration)
   # ==========================================================================
 
-  dynamic = import ./dynamic {
-    inherit pkgs lib utils nixPackage;
+  ninja = import ./ninja {
+    inherit pkgs lib nixPackage nix-ninja nix-ninja-task;
   };
 
   # ==========================================================================
@@ -422,7 +428,7 @@ let
       lib
       utils
       scanner
-      dynamic
+      ninja
       ;
     platform = platformUtils;
   };
@@ -535,15 +541,6 @@ in
 
   # Tool plugin processing
   inherit (scanner) processTools;
-
-  # Dynamic derivations internals (for advanced use)
-  inherit (dynamic)
-    hasDynamicDerivations
-    mkCompileWrapper      # Per-source compile wrapper
-    mkCompileSet          # Compile multiple sources
-    mkLinkWrapper         # Link objects into executable/shared lib
-    mkArchiveWrapper      # Create static archive from objects
-    ;
 
   # Utilities (for advanced users)
   inherit utils;

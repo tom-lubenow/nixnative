@@ -14,7 +14,6 @@
       systems = [
         "x86_64-linux"
         "aarch64-linux"
-        "aarch64-darwin"
       ];
       forAllSystems =
         f:
@@ -22,7 +21,13 @@
           system:
           let
             pkgs = import nixpkgs { inherit system; };
-            native = nixnative.lib.native { inherit pkgs; };
+            # Get nix and nix-ninja from nixnative's inputs
+            nixPackage = nixnative.inputs.nix.packages.${system}.default;
+            ninjaPackages = nixnative.inputs.nix-ninja.packages.${system};
+            native = nixnative.lib.native {
+              inherit pkgs nixPackage;
+              inherit (ninjaPackages) nix-ninja nix-ninja-task;
+            };
             packages = import ./project.nix { inherit pkgs native; };
             checks = import ./checks.nix { inherit pkgs packages; };
           in

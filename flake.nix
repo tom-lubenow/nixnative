@@ -8,11 +8,17 @@
   inputs.nix.url = "github:NixOS/nix/d904921eecbc17662fef67e8162bd3c7d1a54ce0";
   inputs.nix.inputs.nixpkgs.follows = "nixpkgs";
 
+  # nix-ninja: Incremental builds with per-file derivations
+  # Using local path with bash/sandbox fixes
+  inputs.nix-ninja.url = "path:/home/tom/git/nix-ninja";
+  inputs.nix-ninja.inputs.nixpkgs.follows = "nixpkgs";
+
   outputs =
     {
       self,
       nixpkgs,
       nix,
+      nix-ninja,
     }:
     let
       systems = [
@@ -28,7 +34,12 @@
             pkgs = import nixpkgs { inherit system; };
             # Nix package with dynamic derivations support
             nixPackage = nix.packages.${system}.default;
-            native = import ./nix/native { inherit pkgs nixPackage; };
+            # nix-ninja packages for incremental builds
+            ninjaPackages = nix-ninja.packages.${system};
+            native = import ./nix/native {
+              inherit pkgs nixPackage;
+              inherit (ninjaPackages) nix-ninja nix-ninja-task;
+            };
             examples = import ./examples/examples.nix {
               inherit pkgs native system;
             };

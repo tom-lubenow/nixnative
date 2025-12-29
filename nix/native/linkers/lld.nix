@@ -25,7 +25,8 @@ let
     mkLinker {
       inherit name;
       binary = "${llvm.lld}/bin/ld.lld";
-      driverFlag = "-fuse-ld=lld";
+      # Use full path so clang doesn't need lld on PATH
+      driverFlag = "-fuse-ld=${llvm.lld}/bin/ld.lld";
 
       capabilities = lldCapabilities;
 

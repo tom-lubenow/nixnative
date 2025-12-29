@@ -29,7 +29,8 @@ rec {
       mkLinker {
         name = "mold";
         binary = "${pkgs.mold}/bin/mold";
-        driverFlag = "-fuse-ld=mold";
+        # Use full path so compiler doesn't need mold on PATH
+        driverFlag = "-fuse-ld=${pkgs.mold}/bin/mold";
 
         capabilities = moldCapabilities;
 
