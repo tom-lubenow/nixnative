@@ -87,15 +87,15 @@ let
       lang = detectLanguage relNorm;
       objectName = sanitizeName (lib.removeSuffix ".${lib.last (lib.splitString "." relNorm)}" relNorm) + ".o";
 
-      # For tool-generated sources, extract the store base from the full path
+      # For tool-generated sources, extract the store base from the store path
       # by removing the relative path suffix
       storeBase =
         if srcInfo.store != null then
           let
-            pathStr = builtins.toString srcInfo.path;
+            storeStr = builtins.toString srcInfo.store;
             # Remove the relative path suffix to get the store directory
             # e.g., "/nix/store/xxx/generated/foo.cc" - "generated/foo.cc" = "/nix/store/xxx"
-            storeDir = lib.removeSuffix "/${relNorm}" pathStr;
+            storeDir = lib.removeSuffix "/${relNorm}" storeStr;
           in
           storeDir
         else
