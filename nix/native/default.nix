@@ -54,18 +54,12 @@ let
   # Scanner Modules
   # ==========================================================================
 
-  manifest = import ./scanner/manifest.nix { inherit lib utils; };
-
-  parsers = import ./scanner/parsers.nix { inherit lib; };
-
   scanner = import ./scanner/scanner.nix {
     inherit
       pkgs
       lib
       utils
-      manifest
       language
-      parsers
       ;
   };
 
@@ -549,7 +543,8 @@ in
     ;
   inherit (helpers) mkDevShell mkTest;
 
-  # Lower-level builders
+  # Legacy low-level builders (prefer dynamic derivations API above)
+  # These are kept for backwards compatibility but not recommended for new code.
   inherit (compile) compileTranslationUnit generateCompileCommands;
   inherit (link)
     mkLinkStep
@@ -560,7 +555,6 @@ in
 
   # Tool plugin processing
   inherit (scanner) processTools;
-  inherit (manifest) mkManifest emptyManifest mergeManifests;
 
   # Dynamic derivations internals (for advanced use)
   inherit (dynamic)

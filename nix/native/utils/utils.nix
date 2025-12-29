@@ -493,38 +493,6 @@ rec {
     map mkEntry expandedSources;
 
   # ==========================================================================
-  # Header Set Building
-  # ==========================================================================
-
-  headerSet =
-    {
-      root,
-      manifest,
-      tu,
-      overrides ? { },
-    }:
-    let
-      rootPath = sanitizePath { path = root; };
-      rootHost = builtins.toString rootPath;
-      entry = manifest.units.${tu.relNorm} or null;
-      deps = if entry == null then [ ] else entry.dependencies or [ ];
-      mkHeader =
-        path:
-        let
-          rel = if hasPrefix "./" path then removePrefix "./" path else path;
-          override = overrides.${rel} or null;
-          storePath =
-            if override != null then toPathLike override else builtins.path { path = "${rootHost}/${rel}"; };
-          host = if override != null then builtins.toString storePath else "${rootHost}/${rel}";
-        in
-        {
-          inherit rel host;
-          store = storePath;
-        };
-    in
-    map mkHeader deps;
-
-  # ==========================================================================
   # Source Tree Building
   # ==========================================================================
 

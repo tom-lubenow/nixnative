@@ -7,9 +7,7 @@
   pkgs,
   lib,
   utils,
-  manifest,
   language,
-  parsers,
 }:
 
 let
@@ -21,12 +19,9 @@ let
     showValue
     validatePublic
     ;
-  inherit (manifest) mkManifest emptyManifest mergeManifests;
 
 in
 rec {
-  # Re-export manifest functions (used by dynamic context)
-  inherit mkManifest emptyManifest mergeManifests;
 
   # ==========================================================================
   # Tool Plugin Processing
@@ -40,7 +35,6 @@ rec {
   #
   # Each tool can provide:
   #   name       - Tool name (for error messages)
-  #   manifest   - Dependency manifest for generated files
   #   headers    - List of { rel, path/store } for generated headers
   #   sources    - List of { rel, path/store } for generated sources
   #   includeDirs - Additional include directories
@@ -103,9 +97,6 @@ rec {
         let
           toolName = tool.name or "<unnamed tool>";
 
-          # Get manifest from tool
-          toolManifest = if tool ? manifest then mkManifest tool.manifest else emptyManifest;
-
           # Get header overrides
           overrides = if tool ? headers then builtins.listToAttrs (map toOverrideEntry tool.headers) else { };
 
@@ -141,7 +132,6 @@ rec {
           includeDirs = acc.includeDirs ++ toolIncludeDirs;
           defines = acc.defines ++ toolDefines;
           cxxFlags = acc.cxxFlags ++ toolCxxFlags;
-          manifest = mergeManifests acc.manifest toolManifest;
           public = mergePublic acc.public toolPublic;
           headerOverrides = acc.headerOverrides // overrides;
           sourceOverrides = acc.sourceOverrides // sourceOverridesMap;
@@ -153,7 +143,6 @@ rec {
       includeDirs = [ ];
       defines = [ ];
       cxxFlags = [ ];
-      manifest = emptyManifest;
       public = emptyPublic;
       headerOverrides = { };
       sourceOverrides = { };

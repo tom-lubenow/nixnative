@@ -96,22 +96,6 @@ let
     simpleToolExample = materialize simpleToolPackagesRaw.simpleToolExample;
   };
 
-  # ===========================================================================
-  # Dynamic Derivations - The core feature
-  # ===========================================================================
-
-  dynamicDerivationsPackagesRaw =
-    if native.hasDynamicDerivations then
-      import ./dynamic-derivations/project.nix { inherit pkgs native; }
-    else
-      { };
-  dynamicDerivationsChecks =
-    if native.hasDynamicDerivations then
-      import ./dynamic-derivations/checks.nix { inherit pkgs native; packages = dynamicDerivationsPackagesRaw; }
-    else
-      { };
-  dynamicDerivationsPackages = materializeSet dynamicDerivationsPackagesRaw;
-
 in {
   packages = mergeAttrs [
     # Core C/C++ examples
@@ -134,8 +118,6 @@ in {
     pkgConfigPackages
     cAndCppPackages
     simpleToolPackages
-    # Dynamic Derivations
-    dynamicDerivationsPackages
   ];
 
   checks = mergeAttrs [
@@ -159,8 +141,6 @@ in {
     pkgConfigChecks
     cAndCppChecks
     simpleToolChecks
-    # Dynamic Derivations
-    dynamicDerivationsChecks
   ];
 
   defaults = {
