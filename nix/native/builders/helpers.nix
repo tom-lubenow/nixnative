@@ -245,11 +245,12 @@ rec {
         # The actual target output (accessed via dynamic derivation output)
         targetOut = wrapper.passthru.target;
       in
-      # Return the wrapper derivation with extra attributes merged in
+      # Return wrapper with outPath overridden to the target output
+      # This way `nix build` produces the actual output, not a .drv file
       wrapper // {
         artifactType = "executable";
         inherit name;
-        # The target output path (via dynamic derivation)
+        outPath = targetOut;
         out = targetOut;
         executablePath = "${targetOut}/bin/${name}";
         objectRefs = [];  # Not tracked with ninja
@@ -392,9 +393,11 @@ rec {
           linkFlags = basePublic.linkFlags;
         };
       in
+      # Return wrapper with outPath overridden to the target output
       wrapper // {
         artifactType = "static";
         inherit name;
+        outPath = archiveOut;
         out = archiveOut;
         archivePath = "${archiveOut}/${archiveName}";
         objectRefs = [];  # Not tracked with ninja - use archivePath instead
@@ -580,9 +583,11 @@ rec {
           linkFlags = basePublic.linkFlags;
         };
       in
+      # Return wrapper with outPath overridden to the target output
       wrapper // {
         artifactType = "shared";
         inherit name;
+        outPath = sharedOut;
         out = sharedOut;
         sharedLibrary = sharedLibPath;
         objectRefs = [];  # Not tracked with ninja
