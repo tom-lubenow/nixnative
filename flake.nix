@@ -9,8 +9,8 @@
   inputs.nix.inputs.nixpkgs.follows = "nixpkgs";
 
   # nix-ninja: Incremental builds with per-file derivations
-  # Using local path with bash/sandbox fixes
-  inputs.nix-ninja.url = "path:/home/tom/git/nix-ninja";
+  # Fork with patchelf fix for system libraries
+  inputs.nix-ninja.url = "git+ssh://git@github.com/tom-lubenow/nix-ninja";
   inputs.nix-ninja.inputs.nixpkgs.follows = "nixpkgs";
 
   outputs =
