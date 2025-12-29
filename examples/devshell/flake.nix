@@ -63,7 +63,7 @@
         {
           default = pkgs.mkShell {
             packages = clangd.packages ++ [
-              (if pkgs.stdenv.hostPlatform.isDarwin then pkgs.lldb else pkgs.gdb)
+              pkgs.gdb
             ];
             shellHook = ''
               ${clangd.shellHook}

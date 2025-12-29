@@ -116,11 +116,6 @@ let
     inherit (linkerCore) mkLinker ldCapabilities;
   };
 
-  darwinLinkers = import ./linkers/darwin-ld.nix {
-    inherit pkgs;
-    inherit (linkerCore) mkLinker;
-  };
-
   # ==========================================================================
   # Tool Plugins
   # ==========================================================================
@@ -207,11 +202,8 @@ let
     gnuLd = gnuLdLinkers.gnuLd;
     bfd = gnuLdLinkers.bfd;
 
-    # Darwin ld64
-    darwinLd = darwinLinkers.darwinLd;
-
     # Default linker for platform
-    default = if pkgs.stdenv.targetPlatform.isDarwin then darwinLinkers.darwinLd else lldLinkers.lld;
+    default = lldLinkers.lld;
   };
 
   # Assembled tool plugins
@@ -335,19 +327,6 @@ let
       else
         null;
 
-    # Clang + Darwin ld64 (macOS)
-    clang-darwin =
-      if darwinLinkers.isAvailable then
-        mkToolchain {
-          languages = {
-            c = compilers.clang.c;
-            cpp = compilers.clang.cpp;
-          };
-          linker = linkers.darwinLd;
-          bintools = compilers.clang.bintools;
-        }
-      else
-        null;
 
     # ========================================================================
     # GCC Toolchains
@@ -414,8 +393,7 @@ let
     # ========================================================================
 
     # Default toolchain for current platform
-    default =
-      if pkgs.stdenv.targetPlatform.isDarwin then toolchains.clang-darwin else toolchains.clang-lld;
+    default = toolchains.clang-lld;
   };
 
   # ==========================================================================

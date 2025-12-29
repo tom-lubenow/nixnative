@@ -41,9 +41,7 @@
             packages = [
               pkgs.lcov       # Coverage report generation
               pkgs.gcovr      # Alternative coverage tool
-            ] ++ (if pkgs.stdenv.hostPlatform.isDarwin
-              then [ ]  # llvm-cov is part of clang on Darwin
-              else [ pkgs.lcov ]);
+            ];
 
             shellHook = ''
               echo "Coverage development shell"

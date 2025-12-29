@@ -481,7 +481,7 @@ rec {
         }
       ) (ensureList publicIncludeDirs);
 
-      # Shared library name (Linux only - we don't support Darwin)
+      # Shared library name
       sharedName = "lib${name}.so";
 
       # ----- NINJA PATH -----

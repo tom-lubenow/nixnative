@@ -1,6 +1,7 @@
 # Platform detection and utilities for nixnative
 #
 # Provides helpers for platform-specific logic in toolchains and builders.
+# Currently Linux-only.
 #
 { lib }:
 
@@ -9,17 +10,8 @@ rec {
   # Platform Detection
   # ==========================================================================
 
-  # Check if a platform is Darwin (macOS)
-  isDarwin = platform: platform.isDarwin or false;
-
   # Check if a platform is Linux
   isLinux = platform: platform.isLinux or false;
-
-  # Check if a platform is Windows
-  isWindows = platform: platform.isWindows or false;
-
-  # Check if a platform is BSD (FreeBSD, OpenBSD, etc.)
-  isBSD = platform: platform.isBSD or false;
 
   # ==========================================================================
   # Architecture Detection
@@ -39,43 +31,16 @@ rec {
   # ==========================================================================
 
   # Get default shared library extension
-  sharedLibExtension =
-    platform:
-    if isDarwin platform then
-      ".dylib"
-    else if isWindows platform then
-      ".dll"
-    else
-      ".so";
+  sharedLibExtension = _platform: ".so";
 
   # Get default static library extension
   staticLibExtension = _: ".a";
 
   # Get default executable extension
-  executableExtension = platform: if isWindows platform then ".exe" else "";
+  executableExtension = _platform: "";
 
   # Get default object file extension
   objectExtension = _: ".o";
-
-  # ==========================================================================
-  # Darwin-Specific Helpers
-  # ==========================================================================
-
-  # Get default deployment target for Darwin
-  defaultDeploymentTarget =
-    platform: if isDarwin platform then if isAarch64 platform then "11.0" else "10.15" else null;
-
-  # Framework search path flag
-  frameworkSearchPath = path: [
-    "-F"
-    path
-  ];
-
-  # Link a framework
-  linkFramework = name: [
-    "-framework"
-    name
-  ];
 
   # ==========================================================================
   # Platform-Specific Compiler Flags
@@ -90,13 +55,9 @@ rec {
   # On x86_64, -fPIC has essentially zero performance overhead.
   # Modern Linux distributions enable PIE by default for security (ASLR).
   #
-  # Darwin: Position independence is handled differently via Mach-O format
-  # and doesn't require explicit -fPIC for most use cases.
-  #
   defaultCompileFlags = platform: if isLinux platform then [ "-fPIC" ] else [ ];
 
   # Get platform-specific flags required for linking (beyond linker defaults)
-  # Reserved for future platform-specific link requirements
   defaultLinkFlags = _platform: [ ];
 
   # ==========================================================================
@@ -104,8 +65,7 @@ rec {
   # ==========================================================================
 
   # Get rpath flag syntax
-  rpathFlag =
-    platform: path: if isDarwin platform then [ "-Wl,-rpath,${path}" ] else [ "-Wl,-rpath,${path}" ];
+  rpathFlag = _platform: path: [ "-Wl,-rpath,${path}" ];
 
   # Linux library group flags (for circular dependencies)
   startLibraryGroup = platform: if isLinux platform then [ "-Wl,--start-group" ] else [ ];
@@ -130,17 +90,7 @@ rec {
   describePlatform =
     platform:
     let
-      os =
-        if isDarwin platform then
-          "macOS"
-        else if isLinux platform then
-          "Linux"
-        else if isWindows platform then
-          "Windows"
-        else if isBSD platform then
-          "BSD"
-        else
-          "Unknown";
+      os = if isLinux platform then "Linux" else "Unknown";
       arch =
         if isX86_64 platform then
           "x86_64"

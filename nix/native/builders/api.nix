@@ -55,7 +55,7 @@ let
     if spec == null then
       linkers.default
     else if builtins.isString spec then
-      linkers.${spec} or (throw "Unknown linker: '${spec}'. Available: lld, mold, gold, ld, darwinLd")
+      linkers.${spec} or (throw "Unknown linker: '${spec}'. Available: lld, mold, gold, ld")
     else if builtins.isAttrs spec && spec ? driverFlag then
       spec # Already a linker object
     else
