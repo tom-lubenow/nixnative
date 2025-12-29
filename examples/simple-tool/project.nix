@@ -8,7 +8,8 @@ let
     (builtins.split "\\." (pkgs.lib.removeSuffix "\n" versionStr));
 
   # Generate version header
-  versionHeader = pkgs.writeText "version.h" ''
+  # Use writeTextDir to create a directory with the header, so include paths work
+  versionHeaderDir = pkgs.writeTextDir "version.h" ''
     #pragma once
 
     #define VERSION_MAJOR ${builtins.elemAt versionParts 0}
@@ -21,9 +22,9 @@ let
   versionGenerator = {
     name = "version-generator";
     headers = [
-      { rel = "version.h"; store = "${versionHeader}"; }
+      { rel = "version.h"; store = "${versionHeaderDir}/version.h"; }
     ];
-    includeDirs = [ { path = builtins.dirOf "${versionHeader}"; } ];
+    includeDirs = [ { path = versionHeaderDir; } ];
   };
 
   # App using the generator

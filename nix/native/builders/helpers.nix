@@ -703,9 +703,14 @@ rec {
       escapedArgs = map lib.escapeShellArg args;
 
       # Ninja-built executable test
+      # Get the executable name from the wrapper (strip .drv suffix if present)
+      exeName = lib.removeSuffix ".drv" (executable.name or "unknown");
       ninjaTest = ninja.mkNinjaTest {
         inherit name args;
-        executable = executable;
+        # Pass both the wrapper (for dependency) and target (for path resolution)
+        wrapper = executable;
+        target = executable.passthru.target;
+        executableName = exeName;
         inherit expectedOutput;
       };
 

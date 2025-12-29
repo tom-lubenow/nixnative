@@ -99,20 +99,20 @@ in
   # Create a test derivation that runs an executable built with nix-ninja
   mkNinjaTest = {
     name,
-    executable,      # Derivation from mkNinjaDerivation
+    wrapper,         # Wrapper derivation from mkNinjaDerivation (for dependency)
+    target,          # builtins.outputOf reference to the actual target
+    executableName,  # Actual executable name (from wrapper.name)
     args ? [],       # Command-line arguments
     expectedOutput ? null,  # Expected output substring
   }:
+    let
+      escapedArgs = concatStringsSep " " (map lib.escapeShellArg args);
+    in
     pkgs.stdenv.mkDerivation {
       name = "test-${name}";
 
-      __contentAddressed = true;
-      outputHashMode = "text";
-      outputHashAlgo = "sha256";
-
-      requiredSystemFeatures = [ "recursive-nix" ];
-
-      nativeBuildInputs = [ nixPackage.out pkgs.coreutils ];
+      # The target placeholder ensures Nix builds the wrapper and then the dynamic output
+      buildInputs = [ target ];
 
       dontUnpack = true;
       dontConfigure = true;
@@ -122,27 +122,36 @@ in
       buildPhase = ''
         runHook preBuild
 
-        export NIX_CONFIG="extra-experimental-features = nix-command ca-derivations dynamic-derivations"
+        # The target is now directly accessible as a path
+        exe_path="${target}"
 
-        # Realize the executable derivation
-        exe_path=$(nix build --no-link --print-out-paths ${executable})
+        # nix-ninja outputs executables at root, not in bin/
+        exe="$exe_path/${executableName}"
 
         # Run the test
-        echo "Running: $exe_path/bin/${name} ${concatStringsSep " " args}"
-        output=$("$exe_path/bin/${name}" ${concatStringsSep " " args} 2>&1) || true
+        echo "Running: $exe ${escapedArgs}"
+        output=$("$exe" ${escapedArgs} 2>&1) || true
 
         echo "Output: $output"
 
         ${lib.optionalString (expectedOutput != null) ''
-          if echo "$output" | grep -q "${expectedOutput}"; then
+          # Use grep -F for fixed string matching (no regex interpretation)
+          # Write expected to file to avoid all shell escaping issues
+          cat > expected.txt <<'EXPECTED_EOF'
+${expectedOutput}
+EXPECTED_EOF
+          if grep -qF -f expected.txt <<< "$output"; then
             echo "Test passed: found expected output"
           else
-            echo "Test failed: expected '${expectedOutput}' not found"
+            echo "Test failed: expected output not found"
+            echo "Expected: $(cat expected.txt)"
+            echo "Got: $output"
             exit 1
           fi
         ''}
 
-        echo "Test passed" > "$out"
+        mkdir -p $out
+        echo "Test passed" > $out/result
 
         runHook postBuild
       '';
