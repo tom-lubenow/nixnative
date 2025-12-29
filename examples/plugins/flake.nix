@@ -19,6 +19,7 @@
       packages = forAllSystems (system:
         let
           pkgs = import nixpkgs { inherit system; };
+          lib = pkgs.lib;
           nixPackage = nixnative.inputs.nix.packages.${system}.default;
           ninjaPackages = nixnative.inputs.nix-ninja.packages.${system};
           native = nixnative.lib.native {
@@ -26,8 +27,10 @@
             inherit (ninjaPackages) nix-ninja nix-ninja-task;
           };
           packages = import ./project.nix { inherit pkgs native; };
+          # Filter out header-only libraries (they're not derivations)
+          derivationPackages = lib.filterAttrs (_: v: lib.isDerivation v) packages;
         in
-        packages // { default = packages.runScript; }
+        derivationPackages // { default = packages.hostApp; }
       );
 
       checks = forAllSystems (system:

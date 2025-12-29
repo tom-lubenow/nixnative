@@ -17,7 +17,7 @@
             inherit (ninjaPackages) nix-ninja nix-ninja-task;
           };
           packages = import ./project.nix { inherit pkgs native; };
-          checks = import ./checks.nix { inherit pkgs; packages = packages; };
+          checks = import ./checks.nix { inherit pkgs native packages; };
         in f { inherit pkgs native packages checks; }
       );
     in {

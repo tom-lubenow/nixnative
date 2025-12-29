@@ -310,14 +310,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1766980587,
-        "narHash": "sha256-hEerpktipdvhd36Ci+9OOpx+wddFHC0VzxcckYqlR9U=",
-        "path": "/home/tom/git/nix-ninja",
-        "type": "path"
+        "lastModified": 1766982151,
+        "narHash": "sha256-hjxygpY0VC+EuKUJzOX3muHDVHdOke1N2wmGWfHdiJ4=",
+        "ref": "refs/heads/main",
+        "rev": "06e6a826257dadbb94ebcff88781ead51fb979ef",
+        "revCount": 23,
+        "type": "git",
+        "url": "ssh://git@github.com/tom-lubenow/nix-ninja"
       },
       "original": {
-        "path": "/home/tom/git/nix-ninja",
-        "type": "path"
+        "type": "git",
+        "url": "ssh://git@github.com/tom-lubenow/nix-ninja"
       }
     },
     "nix_2": {
