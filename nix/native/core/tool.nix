@@ -229,4 +229,86 @@ rec {
       throw "nixnative: tool output missing required fields: ${lib.concatStringsSep ", " missing}"
     else
       output;
+
+  # ==========================================================================
+  # Simplified Tool API
+  # ==========================================================================
+
+  # Create a tool from a pre-built derivation
+  #
+  # This is the simple API for when you already have a derivation that
+  # produces generated code and just want to integrate it into the build.
+  #
+  # Usage:
+  #   versionTool = native.mkGeneratedSources {
+  #     name = "version-header";
+  #     drv = pkgs.runCommand "gen-version" {} ''
+  #       mkdir -p $out
+  #       echo '#define VERSION "1.0.0"' > $out/version.h
+  #     '';
+  #     headers = [ "version.h" ];
+  #   };
+  #
+  #   protobufTool = native.mkGeneratedSources {
+  #     name = "proto-gen";
+  #     drv = myProtobufDerivation;
+  #     headers = [ "foo.pb.h" "bar.pb.h" ];
+  #     sources = [ "foo.pb.cc" "bar.pb.cc" ];
+  #     includeDir = "proto";  # Subdirectory within drv for includes
+  #   };
+  #
+  mkGeneratedSources =
+    {
+      name,
+      drv,
+      # Files within drv
+      headers ? [],
+      sources ? [],
+      # Where to look for includes (subdirectory within drv, or null for drv root)
+      includeDir ? null,
+      # Additional public interface
+      defines ? [],
+      cxxFlags ? [],
+      linkFlags ? [],
+    }:
+    let
+      # Determine the include directory path
+      includePath = if includeDir != null
+        then "${drv}/${includeDir}"
+        else "${drv}";
+
+      # Convert relative file paths to source entries
+      mkSourceEntry = rel: {
+        inherit rel;
+        store = "${drv}/${rel}";
+      };
+
+      headerEntries = map mkSourceEntry headers;
+      sourceEntries = map mkSourceEntry sources;
+    in
+    {
+      inherit drv name;
+
+      # Generated files
+      headers = headerEntries;
+      sources = sourceEntries;
+
+      # Include directories for generated headers
+      includeDirs = [ { path = includePath; } ];
+
+      # Dependency manifest (empty - no deps tracking for pre-built)
+      manifest = {
+        schema = 1;
+        units = {};
+      };
+
+      # Public interface for consumers
+      public = {
+        includeDirs = [ { path = includePath; } ];
+        inherit defines cxxFlags linkFlags;
+      };
+
+      # Evaluation inputs (for Nix to track)
+      evalInputs = [ drv ];
+    };
 }

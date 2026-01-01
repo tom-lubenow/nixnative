@@ -202,24 +202,35 @@ rec {
       includeDirs ? [],
       defines ? [],
       compileFlags ? [],
+      # New name (preferred)
+      languageFlags ? {},
+      # Old name (deprecated alias)
       langFlags ? {},
+      # New name (preferred)
+      linkFlags ? [],
+      # Old name (deprecated alias)
       ldflags ? [],
       libraries ? [],
       tools ? [],
       ...
     }@args:
     let
+      # Support both old and new names (new names take precedence)
+      effectiveLangFlags = if languageFlags != {} then languageFlags else langFlags;
+      effectiveLinkFlags = if linkFlags != [] then linkFlags else ldflags;
+
       prep = prepareTarget {
         inherit toolchain root sources includeDirs defines compileFlags libraries tools;
       };
 
       ninjaContent = ninja.generateExecutable {
-        inherit name toolchain langFlags;
+        inherit name toolchain;
+        langFlags = effectiveLangFlags;
         sources = prep.normalizedSources;
         includeDirs = prep.resolvedIncludeDirs;
         defines = prep.combinedDefines;
         compileFlags = prep.combinedCompileFlags;
-        ldflags = ldflags ++ prep.legacyLinkFlags;
+        ldflags = effectiveLinkFlags ++ prep.legacyLinkFlags;
       };
 
       wrapper = ninja.mkNinjaDerivation {
@@ -261,15 +272,25 @@ rec {
       includeDirs ? [],
       defines ? [],
       compileFlags ? [],
+      # New name (preferred)
+      languageFlags ? {},
+      # Old name (deprecated alias)
       langFlags ? {},
       libraries ? [],
       tools ? [],
       publicIncludeDirs ? null,  # Defaults to includeDirs if not specified
       publicDefines ? [],
+      # New name (preferred)
+      publicCompileFlags ? [],
+      # Old name (deprecated alias)
       publicCxxFlags ? [],
       ...
     }@args:
     let
+      # Support both old and new names (new names take precedence)
+      effectiveLangFlags = if languageFlags != {} then languageFlags else langFlags;
+      effectivePublicCompileFlags = if publicCompileFlags != [] then publicCompileFlags else publicCxxFlags;
+
       prep = prepareTarget {
         inherit toolchain root sources includeDirs defines compileFlags libraries tools;
       };
@@ -286,7 +307,8 @@ rec {
       archiveName = "lib${name}.a";
 
       ninjaContent = ninja.generateStaticLib {
-        inherit name toolchain langFlags;
+        inherit name toolchain;
+        langFlags = effectiveLangFlags;
         sources = prep.normalizedSources;
         includeDirs = prep.resolvedIncludeDirs;
         defines = prep.combinedDefines;
@@ -306,7 +328,7 @@ rec {
       basePublic = {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
-        cxxFlags = publicCxxFlags;
+        cxxFlags = effectivePublicCompileFlags;
         linkFlags = [ "${archiveOut}/${archiveName}" ];
       };
 
@@ -367,16 +389,30 @@ rec {
       includeDirs ? [],
       defines ? [],
       compileFlags ? [],
+      # New name (preferred)
+      languageFlags ? {},
+      # Old name (deprecated alias)
       langFlags ? {},
+      # New name (preferred)
+      linkFlags ? [],
+      # Old name (deprecated alias)
       ldflags ? [],
       libraries ? [],
       tools ? [],
       publicIncludeDirs ? null,  # Defaults to includeDirs if not specified
       publicDefines ? [],
+      # New name (preferred)
+      publicCompileFlags ? [],
+      # Old name (deprecated alias)
       publicCxxFlags ? [],
       ...
     }@args:
     let
+      # Support both old and new names (new names take precedence)
+      effectiveLangFlags = if languageFlags != {} then languageFlags else langFlags;
+      effectiveLinkFlags = if linkFlags != [] then linkFlags else ldflags;
+      effectivePublicCompileFlags = if publicCompileFlags != [] then publicCompileFlags else publicCxxFlags;
+
       prep = prepareTarget {
         inherit toolchain root sources includeDirs defines compileFlags libraries tools;
       };
@@ -393,12 +429,13 @@ rec {
       sharedName = "lib${name}.so";
 
       ninjaContent = ninja.generateSharedLib {
-        inherit name toolchain langFlags;
+        inherit name toolchain;
+        langFlags = effectiveLangFlags;
         sources = prep.normalizedSources;
         includeDirs = prep.resolvedIncludeDirs;
         defines = prep.combinedDefines;
         compileFlags = prep.combinedCompileFlags;
-        ldflags = ldflags ++ prep.legacyLinkFlags;
+        ldflags = effectiveLinkFlags ++ prep.legacyLinkFlags;
       };
 
       wrapper = ninja.mkNinjaDerivation {
@@ -416,7 +453,7 @@ rec {
       basePublic = {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
-        cxxFlags = publicCxxFlags;
+        cxxFlags = effectivePublicCompileFlags;
         linkFlags = [ sharedLibPath ];
       };
 

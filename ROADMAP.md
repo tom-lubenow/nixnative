@@ -47,7 +47,7 @@ ldflags = [ "-flto=thin" "-fsanitize=address" ];
 
 ---
 
-## Phase 2: Project Defaults
+## Phase 2: Project Defaults ✓ DONE
 
 **Problem**: Real projects repeat the same settings across every target:
 ```nix
@@ -104,7 +104,7 @@ sinfo = project.executable {
 
 ---
 
-## Phase 3: Simplify Tool Plugin API
+## Phase 3: Simplify Tool Plugin API ✓ DONE
 
 **Problem**: Creating a custom tool requires ~80 lines of boilerplate with manual management of `headers`, `sources`, `includeDirs`, `public`, `evalInputs`.
 
@@ -140,7 +140,7 @@ The current manual tool format remains for advanced use cases, but most users sh
 
 ---
 
-## Phase 4: Naming Consistency
+## Phase 4: Naming Consistency ✓ DONE
 
 **Problem**: Inconsistent naming across the API.
 
@@ -162,7 +162,7 @@ Document clearly:
 
 ---
 
-## Phase 5: Installation / Packaging
+## Phase 5: Installation / Packaging ✓ DONE
 
 **Problem**: No standard way to create an installable package with `bin/`, `lib/`, `include/`.
 
@@ -216,11 +216,11 @@ native' = native.extend {
 
 ## Implementation Order
 
-1. **Phase 1** (Remove abstract flags) - Simplifies everything else
-2. **Phase 2** (Project defaults) - Biggest ergonomic win
-3. **Phase 3** (Tool API) - Important for real projects
-4. **Phase 4** (Naming) - Can do incrementally
-5. **Phase 5** (Installation) - Nice to have
+1. **Phase 1** (Remove abstract flags) ✓ Complete
+2. **Phase 2** (Project defaults) ✓ Complete
+3. **Phase 3** (Tool API) ✓ Complete
+4. **Phase 4** (Naming) ✓ Complete
+5. **Phase 5** (Installation) ✓ Complete
 
 ---
 

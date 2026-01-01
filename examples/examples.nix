@@ -92,6 +92,14 @@ let
     simpleToolExample = materialize simpleToolPackagesRaw.simpleToolExample;
   };
 
+  # ===========================================================================
+  # Project Defaults (mkProject example)
+  # ===========================================================================
+
+  projectDefaultsPackagesRaw = import ./project-defaults/project.nix { inherit pkgs native; };
+  projectDefaultsChecks = import ./project-defaults/checks.nix { inherit pkgs native; packages = projectDefaultsPackagesRaw; };
+  projectDefaultsPackages = materializeSet projectDefaultsPackagesRaw;
+
 in {
   packages = mergeAttrs [
     # Core C/C++ examples
@@ -113,6 +121,8 @@ in {
     pkgConfigPackages
     cAndCppPackages
     simpleToolPackages
+    # Project Defaults
+    projectDefaultsPackages
   ];
 
   checks = mergeAttrs [
@@ -135,6 +145,8 @@ in {
     pkgConfigChecks
     cAndCppChecks
     simpleToolChecks
+    # Project Defaults
+    projectDefaultsChecks
   ];
 
   defaults = {

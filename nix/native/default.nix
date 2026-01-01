@@ -362,6 +362,16 @@ let
       ;
   };
 
+  # Project defaults
+  project = import ./builders/project.nix {
+    inherit lib api helpers;
+  };
+
+  # Installation packaging
+  installation = import ./builders/installation.nix {
+    inherit pkgs lib;
+  };
+
 in
 {
   # ==========================================================================
@@ -391,8 +401,8 @@ in
     testLibs
     ;
 
-  # Tool factory (for custom tools)
-  inherit (toolCore) mkTool;
+  # Tool factories (for custom tools)
+  inherit (toolCore) mkTool mkGeneratedSources;
 
   # Test library factory (for custom test frameworks)
   inherit (testLibCore) mkTestLib;
@@ -427,6 +437,12 @@ in
     test
     archive
     ;
+
+  # Project defaults - create scoped builders with shared settings
+  inherit (project) mkProject;
+
+  # Installation packaging - create installable packages
+  inherit (installation) mkInstallation;
 
   # Expose resolvers for advanced use
   inherit (api) resolveCompiler resolveLinker;
