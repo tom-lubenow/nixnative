@@ -19,7 +19,7 @@ let
       compileFlags = [ "-Wall" "-Wextra" ];
 
       # Per-language flags
-      langFlags = {
+      languageFlags = {
         cpp = [ "-std=c++17" ];
       };
 

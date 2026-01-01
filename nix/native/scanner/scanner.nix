@@ -39,7 +39,7 @@ rec {
   #   sources    - List of { rel, path/store } for generated sources
   #   includeDirs - Additional include directories
   #   defines    - Additional preprocessor defines
-  #   cxxFlags   - Additional compile flags
+  #   compileFlags   - Additional compile flags
   #   evalInputs - Derivations to add as build inputs
   #   public     - Public interface for consumers
   #
@@ -118,7 +118,7 @@ rec {
           toolSources = tool.sources or [ ];
           toolIncludeDirs = tool.includeDirs or [ ];
           toolDefines = tool.defines or [ ];
-          toolCxxFlags = tool.cxxFlags or [ ];
+          toolCxxFlags = tool.compileFlags or [ ];
           toolEvalInputs =
             if tool ? evalInputs then
               tool.evalInputs
@@ -131,7 +131,7 @@ rec {
           sources = acc.sources ++ toolSources;
           includeDirs = acc.includeDirs ++ toolIncludeDirs;
           defines = acc.defines ++ toolDefines;
-          cxxFlags = acc.cxxFlags ++ toolCxxFlags;
+          compileFlags = acc.compileFlags ++ toolCxxFlags;
           public = mergePublic acc.public toolPublic;
           headerOverrides = acc.headerOverrides // overrides;
           sourceOverrides = acc.sourceOverrides // sourceOverridesMap;
@@ -142,7 +142,7 @@ rec {
       sources = [ ];
       includeDirs = [ ];
       defines = [ ];
-      cxxFlags = [ ];
+      compileFlags = [ ];
       public = emptyPublic;
       headerOverrides = { };
       sourceOverrides = { };

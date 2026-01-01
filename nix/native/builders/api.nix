@@ -128,8 +128,8 @@ let
   #   includeDirs  - Include directories
   #   defines      - Preprocessor defines
   #   compileFlags - Raw compile flags (all languages)
-  #   langFlags    - Per-language raw flags { c = [...]; cpp = [...]; }
-  #   ldflags      - Additional linker flags
+  #   languageFlags - Per-language raw flags { c = [...]; cpp = [...]; }
+  #   linkFlags    - Additional linker flags
   #   libraries    - Library dependencies
   #   tools        - Tool plugins (code generators, etc.)
   #
@@ -167,7 +167,7 @@ let
   # Build a shared library (.so/.dylib)
   #
   # Arguments same as staticLib, plus:
-  #   ldflags - Additional linker flags
+  #   linkFlags - Additional linker flags
   #
   sharedLib =
     args:

@@ -70,7 +70,7 @@ ${toolchain.getCXX} ${includeFlags} main.cc ${linkFlags} -o test
 Libraries expose a `public` attribute containing:
 - `includeDirs` - Include paths for consumers
 - `defines` - Preprocessor definitions to propagate
-- `cxxFlags` - Compiler flags to propagate
+- `compileFlags` - Compiler flags to propagate
 - `linkFlags` - Linker flags (includes the library itself)
 
 ## Shared Library Variant

@@ -27,7 +27,7 @@ rec {
   # - sources: Generated source files
   # - includeDirs: Include paths for generated headers
   # - manifest: Dependency manifest for generated files
-  # - public: Public interface (defines, cxxFlags, linkFlags)
+  # - public: Public interface (defines, compileFlags, linkFlags)
   #
   mkTool =
     {
@@ -130,7 +130,7 @@ rec {
           public = {
             includeDirs = outputInfo.includeDirs or [ { path = drv; } ];
             defines = outputInfo.defines or [ ];
-            cxxFlags = outputInfo.cxxFlags or [ ];
+            compileFlags = outputInfo.compileFlags or [ ];
             linkFlags =
               (outputInfo.linkFlags or [ ])
               ++ (map (dep: if builtins.isString dep then dep else dep.linkFlags or [ ]) dependencies);
@@ -161,7 +161,7 @@ rec {
         units = { };
       };
       defines = [ ];
-      cxxFlags = [ ];
+      compileFlags = [ ];
       linkFlags = [ ];
     };
 
@@ -268,7 +268,7 @@ rec {
       includeDir ? null,
       # Additional public interface
       defines ? [],
-      cxxFlags ? [],
+      compileFlags ? [],
       linkFlags ? [],
     }:
     let
@@ -305,7 +305,7 @@ rec {
       # Public interface for consumers
       public = {
         includeDirs = [ { path = includePath; } ];
-        inherit defines cxxFlags linkFlags;
+        inherit defines compileFlags linkFlags;
       };
 
       # Evaluation inputs (for Nix to track)

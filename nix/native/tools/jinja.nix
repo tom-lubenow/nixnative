@@ -201,7 +201,7 @@ let
         );
       };
       defines = [ ];
-      cxxFlags = [ ];
+      compileFlags = [ ];
       linkFlags = [ ];
     };
 

@@ -14,7 +14,7 @@ let
     root = ./.;
     sources = [ "main.cc" ];
     compileFlags = [ "-flto=thin" ];
-    ldflags = [ "-flto=thin" ];
+    linkFlags = [ "-flto=thin" ];
   };
 
   # Minimal config build
@@ -24,7 +24,7 @@ let
     sources = [ "main.cc" ];
     includeDirs = [ ];
     defines = [ ];
-    extraCxxFlags = [ ];
+    compileFlags = [ ];
     libraries = [ ];
     tools = [ ];
   };
@@ -35,7 +35,7 @@ let
     root = ./.;
     sources = [ "main.cc" ];
     compileFlags = [ "-fsanitize=address,undefined" ];
-    ldflags = [ "-fsanitize=address,undefined" ];
+    linkFlags = [ "-fsanitize=address,undefined" ];
   };
 
 in {

@@ -72,7 +72,7 @@ PY
       public = {
         includeDirs = [ includeDir ];
         defines = [ ];
-        cxxFlags = [ ];
+        compileFlags = [ ];
         linkFlags = [ ];
       };
       evalInputs = [ renderDrv ];

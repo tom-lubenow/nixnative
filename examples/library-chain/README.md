@@ -122,7 +122,7 @@ Each library exposes a `public` attribute:
 {
   includeDirs = [ { path = "/nix/store/..."; } ];
   defines = [ "SOME_DEFINE" ];
-  cxxFlags = [ ];
+  compileFlags = [ ];
   linkFlags = [ "/nix/store/.../libutil.a" ];
 }
 ```

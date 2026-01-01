@@ -157,7 +157,7 @@ let
       combinedDefines = defines ++ publicAggregate.defines ++ toolInfo.defines;
 
       # Combine compile flags
-      combinedCompileFlags = compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
+      combinedCompileFlags = compileFlags ++ publicAggregate.compileFlags ++ toolInfo.compileFlags;
 
       # Collect legacy link flags (for external libs like pkg-config)
       legacyLinkFlags = collectLinkFlags libraries;
@@ -202,35 +202,24 @@ rec {
       includeDirs ? [],
       defines ? [],
       compileFlags ? [],
-      # New name (preferred)
       languageFlags ? {},
-      # Old name (deprecated alias)
-      langFlags ? {},
-      # New name (preferred)
       linkFlags ? [],
-      # Old name (deprecated alias)
-      ldflags ? [],
       libraries ? [],
       tools ? [],
       ...
     }@args:
     let
-      # Support both old and new names (new names take precedence)
-      effectiveLangFlags = if languageFlags != {} then languageFlags else langFlags;
-      effectiveLinkFlags = if linkFlags != [] then linkFlags else ldflags;
-
       prep = prepareTarget {
         inherit toolchain root sources includeDirs defines compileFlags libraries tools;
       };
 
       ninjaContent = ninja.generateExecutable {
-        inherit name toolchain;
-        langFlags = effectiveLangFlags;
+        inherit name toolchain languageFlags;
         sources = prep.normalizedSources;
         includeDirs = prep.resolvedIncludeDirs;
         defines = prep.combinedDefines;
         compileFlags = prep.combinedCompileFlags;
-        ldflags = effectiveLinkFlags ++ prep.legacyLinkFlags;
+        linkFlags = linkFlags ++ prep.legacyLinkFlags;
       };
 
       wrapper = ninja.mkNinjaDerivation {
@@ -272,25 +261,15 @@ rec {
       includeDirs ? [],
       defines ? [],
       compileFlags ? [],
-      # New name (preferred)
       languageFlags ? {},
-      # Old name (deprecated alias)
-      langFlags ? {},
       libraries ? [],
       tools ? [],
       publicIncludeDirs ? null,  # Defaults to includeDirs if not specified
       publicDefines ? [],
-      # New name (preferred)
       publicCompileFlags ? [],
-      # Old name (deprecated alias)
-      publicCxxFlags ? [],
       ...
     }@args:
     let
-      # Support both old and new names (new names take precedence)
-      effectiveLangFlags = if languageFlags != {} then languageFlags else langFlags;
-      effectivePublicCompileFlags = if publicCompileFlags != [] then publicCompileFlags else publicCxxFlags;
-
       prep = prepareTarget {
         inherit toolchain root sources includeDirs defines compileFlags libraries tools;
       };
@@ -307,8 +286,7 @@ rec {
       archiveName = "lib${name}.a";
 
       ninjaContent = ninja.generateStaticLib {
-        inherit name toolchain;
-        langFlags = effectiveLangFlags;
+        inherit name toolchain languageFlags;
         sources = prep.normalizedSources;
         includeDirs = prep.resolvedIncludeDirs;
         defines = prep.combinedDefines;
@@ -328,14 +306,14 @@ rec {
       basePublic = {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
-        cxxFlags = effectivePublicCompileFlags;
+        compileFlags = publicCompileFlags;
         linkFlags = [ "${archiveOut}/${archiveName}" ];
       };
 
       combinedPublic = {
         includeDirs = prep.publicAggregate.includeDirs ++ basePublic.includeDirs;
         defines = prep.publicAggregate.defines ++ basePublic.defines;
-        cxxFlags = prep.publicAggregate.cxxFlags ++ basePublic.cxxFlags;
+        compileFlags = prep.publicAggregate.compileFlags ++ basePublic.compileFlags;
         linkFlags = basePublic.linkFlags;
       };
     in
@@ -389,30 +367,16 @@ rec {
       includeDirs ? [],
       defines ? [],
       compileFlags ? [],
-      # New name (preferred)
       languageFlags ? {},
-      # Old name (deprecated alias)
-      langFlags ? {},
-      # New name (preferred)
       linkFlags ? [],
-      # Old name (deprecated alias)
-      ldflags ? [],
       libraries ? [],
       tools ? [],
       publicIncludeDirs ? null,  # Defaults to includeDirs if not specified
       publicDefines ? [],
-      # New name (preferred)
       publicCompileFlags ? [],
-      # Old name (deprecated alias)
-      publicCxxFlags ? [],
       ...
     }@args:
     let
-      # Support both old and new names (new names take precedence)
-      effectiveLangFlags = if languageFlags != {} then languageFlags else langFlags;
-      effectiveLinkFlags = if linkFlags != [] then linkFlags else ldflags;
-      effectivePublicCompileFlags = if publicCompileFlags != [] then publicCompileFlags else publicCxxFlags;
-
       prep = prepareTarget {
         inherit toolchain root sources includeDirs defines compileFlags libraries tools;
       };
@@ -429,13 +393,12 @@ rec {
       sharedName = "lib${name}.so";
 
       ninjaContent = ninja.generateSharedLib {
-        inherit name toolchain;
-        langFlags = effectiveLangFlags;
+        inherit name toolchain languageFlags;
         sources = prep.normalizedSources;
         includeDirs = prep.resolvedIncludeDirs;
         defines = prep.combinedDefines;
         compileFlags = prep.combinedCompileFlags;
-        ldflags = effectiveLinkFlags ++ prep.legacyLinkFlags;
+        linkFlags = linkFlags ++ prep.legacyLinkFlags;
       };
 
       wrapper = ninja.mkNinjaDerivation {
@@ -453,14 +416,14 @@ rec {
       basePublic = {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
-        cxxFlags = effectivePublicCompileFlags;
+        compileFlags = publicCompileFlags;
         linkFlags = [ sharedLibPath ];
       };
 
       combinedPublic = {
         includeDirs = prep.publicAggregate.includeDirs ++ basePublic.includeDirs;
         defines = prep.publicAggregate.defines ++ basePublic.defines;
-        cxxFlags = prep.publicAggregate.cxxFlags ++ basePublic.cxxFlags;
+        compileFlags = prep.publicAggregate.compileFlags ++ basePublic.compileFlags;
         linkFlags = basePublic.linkFlags;
       };
     in
@@ -488,11 +451,11 @@ rec {
       root ? ./.,
       includeDirs ? [],
       defines ? [],
-      cxxFlags ? [],
+      compileFlags ? [],
       libraries ? [],
       publicIncludeDirs ? null,  # Defaults to includeDirs if not specified
       publicDefines ? [],
-      publicCxxFlags ? [],
+      publicCompileFlags ? [],
       tools ? [],
     }:
     let
@@ -518,7 +481,7 @@ rec {
       basePublic = {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
-        cxxFlags = publicCxxFlags;
+        compileFlags = publicCompileFlags;
         linkFlags = [];
       };
 

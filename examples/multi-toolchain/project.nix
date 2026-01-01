@@ -51,14 +51,14 @@ let
     name = "demo-lto-thin";
     inherit root sources;
     compileFlags = [ "-O2" "-flto=thin" ];
-    ldflags = [ "-flto=thin" ];
+    linkFlags = [ "-flto=thin" ];
   };
 
   withLtoFull = native.executable {
     name = "demo-lto-full";
     inherit root sources;
     compileFlags = [ "-O2" "-flto" ];
-    ldflags = [ "-flto" ];
+    linkFlags = [ "-flto" ];
   };
 
   withDebug = native.executable {
@@ -72,7 +72,7 @@ let
     name = "demo-asan";
     inherit root sources;
     compileFlags = [ "-fsanitize=address,undefined" ];
-    ldflags = [ "-fsanitize=address,undefined" ];
+    linkFlags = [ "-fsanitize=address,undefined" ];
   };
 
   # ============================================================================

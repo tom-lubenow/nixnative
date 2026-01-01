@@ -114,7 +114,7 @@ let
         );
       };
       defines = [ ];
-      cxxFlags = [ ];
+      compileFlags = [ ];
       linkFlags = [ ];
     };
 
@@ -253,7 +253,7 @@ rec {
           units = { };
         };
         defines = [ ];
-        cxxFlags = [ ];
+        compileFlags = [ ];
         linkFlags = [ ];
       };
 

@@ -9,7 +9,7 @@
 #     defaults = {
 #       defines = [ "HAVE_CONFIG_H" ];
 #       compileFlags = [ "-Wall" ];
-#       langFlags = { c = [ "-std=gnu11" ]; };
+#       languageFlags = { c = [ "-std=gnu11" ]; };
 #     };
 #   };
 #
@@ -74,9 +74,9 @@ let
       root,
 
       # Default settings applied to all targets
-      # Supported fields: defines, compileFlags, langFlags, ldflags,
+      # Supported fields: defines, compileFlags, languageFlags, linkFlags,
       #                   includeDirs, libraries, tools, publicDefines,
-      #                   publicIncludeDirs, publicCxxFlags
+      #                   publicIncludeDirs, publicCompileFlags
       defaults ? {},
 
       # Optional: compiler/linker for all targets

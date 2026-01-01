@@ -10,7 +10,7 @@ let
     root = ./.;
     inherit sources includeDirs;
     compileFlags = [ "--coverage" "-g" "-O0" ];
-    ldflags = [ "--coverage" ];
+    linkFlags = [ "--coverage" ];
   };
 
   # Non-coverage build
@@ -27,7 +27,7 @@ let
     root = ./.;
     inherit sources includeDirs;
     compileFlags = [ "--coverage" "-fsanitize=address,undefined" "-g" "-O0" ];
-    ldflags = [ "--coverage" "-fsanitize=address,undefined" ];
+    linkFlags = [ "--coverage" "-fsanitize=address,undefined" ];
   };
 
 in {

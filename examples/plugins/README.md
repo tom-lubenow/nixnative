@@ -95,7 +95,7 @@ hostApp = native.executable {
   root = ./.;
   sources = [ "host/main.cc" ];
   libraries = [ commonLib ];
-  ldflags = if pkgs.stdenv.isLinux then [ "-ldl" ] else [ ];
+  linkFlags = if pkgs.stdenv.isLinux then [ "-ldl" ] else [ ];
 };
 ```
 

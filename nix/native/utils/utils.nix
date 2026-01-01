@@ -57,7 +57,7 @@ rec {
           true;
       _ = checkField "includeDirs" "list";
       __ = checkField "defines" "list";
-      ___ = checkField "cxxFlags" "list";
+      ___ = checkField "compileFlags" "list";
       ____ = checkField "linkFlags" "list";
     in
     public;
@@ -163,14 +163,14 @@ rec {
   emptyPublic = {
     includeDirs = [ ];
     defines = [ ];
-    cxxFlags = [ ];
+    compileFlags = [ ];
     linkFlags = [ ];
   };
 
   mergePublic = a: b: {
     includeDirs = a.includeDirs ++ b.includeDirs;
     defines = a.defines ++ b.defines;
-    cxxFlags = a.cxxFlags ++ b.cxxFlags;
+    compileFlags = a.compileFlags ++ b.compileFlags;
     linkFlags = a.linkFlags ++ b.linkFlags;
   };
 

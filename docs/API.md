@@ -39,8 +39,8 @@ native.executable {
   includeDirs = [ "include" ];  # Include directories
   defines = [ "DEBUG" ];        # Preprocessor definitions
   compileFlags = [ "-O2" ];     # Additional compiler flags
-  langFlags = { cpp = [ "-std=c++20" ]; };  # Per-language flags
-  ldflags = [ "-lm" ];          # Additional linker flags
+  languageFlags = { cpp = [ "-std=c++20" ]; };  # Per-language flags
+  linkFlags = [ "-lm" ];          # Additional linker flags
   libraries = [ myLib ];        # Library dependencies
   tools = [ myTool ];           # Tool plugins (protobuf, jinja, etc.)
 
@@ -161,8 +161,8 @@ native.mkExecutable {
   includeDirs = [ "include" ];
   defines = [ "DEBUG" ];
   compileFlags = [ "-O2" ];
-  langFlags = { cpp = [ "-std=c++20" ]; };
-  ldflags = [ "-lm" ];
+  languageFlags = { cpp = [ "-std=c++20" ]; };
+  linkFlags = [ "-lm" ];
   libraries = [ myLib ];
   tools = [ myTool ];
 
@@ -185,8 +185,8 @@ native.mkExecutable {
 | `includeDirs` | No | `[]` | Include directories |
 | `defines` | No | `[]` | Preprocessor definitions (strings or `{ name, value }` attrsets) |
 | `compileFlags` | No | `[]` | Additional compiler flags (all languages) |
-| `langFlags` | No | `{}` | Per-language compiler flags (`{ c = [...]; cpp = [...]; }`) |
-| `ldflags` | No | `[]` | Additional linker flags |
+| `languageFlags` | No | `{}` | Per-language compiler flags (`{ c = [...]; cpp = [...]; }`) |
+| `linkFlags` | No | `[]` | Additional linker flags |
 | `libraries` | No | `[]` | Library dependencies |
 | `tools` | No | `[]` | Code generators (see Tool Schema) |
 | `flags` | No | `[]` | Abstract flags (lto, sanitizers, etc.) |
@@ -349,13 +349,13 @@ A tool is an attrset with the following shape:
   defines = [ "GENERATED_CODE=1" ];
 
   # Optional: additional compiler flags
-  cxxFlags = [ ];
+  compileFlags = [ ];
 
   # Optional: public flags propagated to dependents
   public = {
     includeDirs = [ ];   # Must be a list
     defines = [ ];       # Must be a list
-    cxxFlags = [ ];      # Must be a list
+    compileFlags = [ ];  # Must be a list
     linkFlags = [ ];     # Must be a list
   };
 }
@@ -397,7 +397,7 @@ Libraries expose a `public` attribute that propagates flags to dependents:
 {
   includeDirs = [ ];   # List of include directories (paths or { path = ...; } attrsets)
   defines = [ ];       # List of preprocessor definitions
-  cxxFlags = [ ];      # List of compiler flags
+  compileFlags = [ ];  # List of compiler flags
   linkFlags = [ ];     # List of linker flags (e.g., library paths, -l flags)
 }
 ```
