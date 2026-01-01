@@ -121,14 +121,13 @@ let
     map (source: normalizeSourceForNinja { inherit root source; }) expandedSources;
 
   # Common preparation for all target types
-  # Returns: { normalizedSources, resolvedIncludeDirs, combinedDefines, combinedCompileFlags, linkRequiredFlags, legacyLinkFlags, libraryInputs }
+  # Returns: { normalizedSources, resolvedIncludeDirs, combinedDefines, combinedCompileFlags, legacyLinkFlags, libraryInputs }
   prepareTarget = {
     toolchain,
     root,
     sources,
     includeDirs,
     defines,
-    flags,
     compileFlags,
     libraries,
     tools,
@@ -157,21 +156,8 @@ let
       # Combine defines
       combinedDefines = defines ++ publicAggregate.defines ++ toolInfo.defines;
 
-      # Translate abstract flags to concrete compiler flags
-      translatedFlags = if flags != [] then tc.translateFlags flags else [];
-
-      # Some flags (sanitizers, coverage, LTO) need to be passed to both compiler and linker
-      linkRequiredFlags = lib.concatMap (flag:
-        if flag.type == "sanitizer" then [ "-fsanitize=${flag.value}" ]
-        else if flag.type == "coverage" then [ "--coverage" ]
-        else if flag.type == "lto" then
-          if flag.value == "thin" then [ "-flto=thin" ]
-          else [ "-flto" ]
-        else []
-      ) flags;
-
       # Combine compile flags
-      combinedCompileFlags = translatedFlags ++ compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
+      combinedCompileFlags = compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
 
       # Collect legacy link flags (for external libs like pkg-config)
       legacyLinkFlags = collectLinkFlags libraries;
@@ -196,7 +182,7 @@ let
       libraryInputs = collectLibraryInputs libraries;
     in {
       inherit normalizedSources resolvedIncludeDirs combinedDefines combinedCompileFlags;
-      inherit linkRequiredFlags legacyLinkFlags libraryInputs;
+      inherit legacyLinkFlags libraryInputs;
       inherit rootPath publicAggregate;
       runtimeInputs = tc.runtimeInputs;
     };
@@ -215,7 +201,6 @@ rec {
       sources,
       includeDirs ? [],
       defines ? [],
-      flags ? [],
       compileFlags ? [],
       langFlags ? {},
       ldflags ? [],
@@ -225,7 +210,7 @@ rec {
     }@args:
     let
       prep = prepareTarget {
-        inherit toolchain root sources includeDirs defines flags compileFlags libraries tools;
+        inherit toolchain root sources includeDirs defines compileFlags libraries tools;
       };
 
       ninjaContent = ninja.generateExecutable {
@@ -234,7 +219,7 @@ rec {
         includeDirs = prep.resolvedIncludeDirs;
         defines = prep.combinedDefines;
         compileFlags = prep.combinedCompileFlags;
-        ldflags = prep.linkRequiredFlags ++ ldflags ++ prep.legacyLinkFlags;
+        ldflags = ldflags ++ prep.legacyLinkFlags;
       };
 
       wrapper = ninja.mkNinjaDerivation {
@@ -275,7 +260,6 @@ rec {
       sources,
       includeDirs ? [],
       defines ? [],
-      flags ? [],
       compileFlags ? [],
       langFlags ? {},
       libraries ? [],
@@ -287,7 +271,7 @@ rec {
     }@args:
     let
       prep = prepareTarget {
-        inherit toolchain root sources includeDirs defines flags compileFlags libraries tools;
+        inherit toolchain root sources includeDirs defines compileFlags libraries tools;
       };
 
       rootHost = builtins.toString prep.rootPath;
@@ -382,7 +366,6 @@ rec {
       sources,
       includeDirs ? [],
       defines ? [],
-      flags ? [],
       compileFlags ? [],
       langFlags ? {},
       ldflags ? [],
@@ -395,7 +378,7 @@ rec {
     }@args:
     let
       prep = prepareTarget {
-        inherit toolchain root sources includeDirs defines flags compileFlags libraries tools;
+        inherit toolchain root sources includeDirs defines compileFlags libraries tools;
       };
 
       rootHost = builtins.toString prep.rootPath;
@@ -415,7 +398,7 @@ rec {
         includeDirs = prep.resolvedIncludeDirs;
         defines = prep.combinedDefines;
         compileFlags = prep.combinedCompileFlags;
-        ldflags = prep.linkRequiredFlags ++ ldflags ++ prep.legacyLinkFlags;
+        ldflags = ldflags ++ prep.legacyLinkFlags;
       };
 
       wrapper = ninja.mkNinjaDerivation {

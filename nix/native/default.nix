@@ -37,9 +37,7 @@ let
   # Core Modules
   # ==========================================================================
 
-  flags = import ./core/flags.nix { inherit lib; };
-
-  compilerCore = import ./core/compiler.nix { inherit lib flags; };
+  compilerCore = import ./core/compiler.nix { inherit lib; };
 
   linkerCore = import ./core/linker.nix { inherit lib; };
 
@@ -48,7 +46,7 @@ let
   language = import ./core/language.nix { inherit lib; };
 
   toolchainCore = import ./core/toolchain.nix {
-    inherit lib flags language;
+    inherit lib language;
     platform = platformUtils;
   };
 
@@ -361,7 +359,6 @@ let
       linkers
       mkToolchain
       helpers
-      flags
       ;
   };
 
@@ -378,9 +375,6 @@ in
 
   # Local mkToolchain with defaults (see let block)
   inherit mkToolchain;
-
-  # Flag system
-  inherit flags;
 
   # Platform utilities
   platform = platformUtils;

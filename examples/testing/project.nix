@@ -13,7 +13,8 @@ let
     name = "test-app-lto";
     root = ./.;
     sources = [ "main.cc" ];
-    flags = [ { type = "lto"; value = "thin"; } ];
+    compileFlags = [ "-flto=thin" ];
+    ldflags = [ "-flto=thin" ];
   };
 
   # Minimal config build
@@ -33,10 +34,8 @@ let
     name = "test-app-asan";
     root = ./.;
     sources = [ "main.cc" ];
-    flags = [
-      { type = "sanitizer"; value = "address"; }
-      { type = "sanitizer"; value = "undefined"; }
-    ];
+    compileFlags = [ "-fsanitize=address,undefined" ];
+    ldflags = [ "-fsanitize=address,undefined" ];
   };
 
 in {

@@ -38,64 +38,41 @@ let
   };
 
   # ============================================================================
-  # ABSTRACT FLAGS EXAMPLES
+  # COMPILE FLAGS EXAMPLES
   # ============================================================================
 
   withO3 = native.executable {
     name = "demo-o3";
     inherit root sources;
-    flags = [
-      { type = "optimize"; value = "3"; }
-    ];
+    compileFlags = [ "-O3" ];
   };
 
   withLtoThin = native.executable {
     name = "demo-lto-thin";
     inherit root sources;
-    flags = [
-      { type = "lto"; value = "thin"; }
-      { type = "optimize"; value = "2"; }
-    ];
+    compileFlags = [ "-O2" "-flto=thin" ];
+    ldflags = [ "-flto=thin" ];
   };
 
   withLtoFull = native.executable {
     name = "demo-lto-full";
     inherit root sources;
-    flags = [
-      { type = "lto"; value = "full"; }
-      { type = "optimize"; value = "2"; }
-    ];
+    compileFlags = [ "-O2" "-flto" ];
+    ldflags = [ "-flto" ];
   };
 
   withDebug = native.executable {
     name = "demo-debug";
     inherit root sources;
-    flags = [
-      { type = "debug"; value = "full"; }
-      { type = "optimize"; value = "0"; }
-    ];
+    compileFlags = [ "-g" "-O0" ];
   };
 
   # Sanitizers (Linux only)
   withAsan = native.executable {
     name = "demo-asan";
     inherit root sources;
-    flags = [
-      { type = "sanitizer"; value = "address"; }
-      { type = "sanitizer"; value = "undefined"; }
-    ];
-  };
-
-  # Combined: GCC + mold + LTO + O3
-  optimizedGcc = native.executable {
-    compiler = "gcc";
-    linker = "mold";
-    name = "demo-optimized-gcc";
-    inherit root sources;
-    flags = [
-      { type = "lto"; value = "full"; }
-      { type = "optimize"; value = "3"; }
-    ];
+    compileFlags = [ "-fsanitize=address,undefined" ];
+    ldflags = [ "-fsanitize=address,undefined" ];
   };
 
   # ============================================================================
@@ -119,9 +96,7 @@ let
     };
     name = "demo-lowlevel-custom";
     inherit root sources;
-    flags = [
-      { type = "optimize"; value = "2"; }
-    ];
+    compileFlags = [ "-O2" ];
   };
 
   # ============================================================================

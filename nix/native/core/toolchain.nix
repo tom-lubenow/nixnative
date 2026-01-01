@@ -25,7 +25,6 @@
 #
 {
   lib,
-  flags,
   platform,
   language,
 }:
@@ -209,20 +208,6 @@ rec {
 
       # Get platform-specific linker flags
       getPlatformLinkerFlags = linker.platformFlags targetPlatform;
-
-      # =======================================================================
-      # Flag Translation
-      # =======================================================================
-
-      # Translate abstract flags using the first available C/C++ compiler
-      translateFlags = flagList:
-        let
-          lang =
-            if languages ? cpp then languages.cpp
-            else if languages ? c then languages.c
-            else throw "nixnative: toolchain '${finalName}' has no C/C++ compiler for flag translation";
-        in
-        flags.translateFlags { compiler = lang; flags = flagList; };
 
       # =======================================================================
       # Environment

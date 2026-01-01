@@ -34,10 +34,7 @@ let
     sources = [ "tests/main.cc" ];
     libraries = [ commonLib ];
     defines = [ "TEST_MODE" ];
-    flags = [
-      { type = "debug"; value = "full"; }
-      { type = "optimize"; value = "0"; }
-    ];
+    compileFlags = [ "-g" "-O0" ];  # Full debug info, no optimization
   };
 
   # Combined package - need to use .passthru.target for dynamic derivation outputs
