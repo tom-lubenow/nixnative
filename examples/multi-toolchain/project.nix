@@ -138,12 +138,12 @@ let
       ];
 
       availableConfigs = builtins.filter (cfg:
-        # mold is Linux-only
-        if cfg.linker == "mold" then isLinux
         # GCC doesn't support -fuse-ld=/full/path (only works with linker names)
-        # So gcc+lld doesn't work with our current approach
-        else if cfg.compiler == "gcc" && cfg.linker == "lld" then false
+        # So gcc + any alternative linker doesn't work with our current approach
+        if cfg.compiler == "gcc" && cfg.linker != "ld" then false
         else if cfg.compiler == "gcc" then native.compilers.gcc != null
+        # mold is Linux-only
+        else if cfg.linker == "mold" then isLinux
         else true
       ) configs;
 
@@ -166,6 +166,7 @@ in
 }
 // buildMatrix
 # Linux-only packages
+# Note: withGccMold and optimizedGcc removed - GCC doesn't support -fuse-ld=/path
 // (if isLinux then {
-  inherit withClangMold withGccMold withAsan optimizedGcc;
+  inherit withClangMold withAsan;
 } else {})

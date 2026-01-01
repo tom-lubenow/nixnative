@@ -6,7 +6,7 @@
 { lib }:
 
 let
-  inherit (lib) concatStringsSep concatMapStringsSep escapeShellArg;
+  inherit (lib) concatStringsSep concatMapStringsSep;
 
   # Escape a string for use in ninja files
   # Ninja uses $ as escape character: $$ for literal $, $: for :, etc.
@@ -34,33 +34,12 @@ let
     concatMapStringsSep " " escapeNinja flags;
 
   # Generate a compile rule for a specific language
-  mkCompileRule = { name, compiler, defaultFlags, depfileFlag ? "-MF" }: ''
+  mkCompileRule = { name, compiler }: ''
     rule ${name}
-      command = ${compiler} $FLAGS ${depfileFlag} $out.d -MD -c $in -o $out
+      command = ${compiler} $FLAGS -MF $out.d -MD -c $in -o $out
       deps = gcc
       depfile = $out.d
       description = Compiling $in
-  '';
-
-  # Generate a link rule for executables
-  mkLinkExeRule = { compiler, linkerFlag }: ''
-    rule link_exe
-      command = ${compiler} ${linkerFlag} $in $LDFLAGS -o $out
-      description = Linking executable $out
-  '';
-
-  # Generate a link rule for shared libraries
-  mkLinkSharedRule = { compiler, linkerFlag }: ''
-    rule link_shared
-      command = ${compiler} ${linkerFlag} -shared $in $LDFLAGS -o $out
-      description = Linking shared library $out
-  '';
-
-  # Generate an archive rule for static libraries
-  mkArchiveRule = { ar, ranlib }: ''
-    rule archive
-      command = rm -f $out && ${ar} rcs $out $in && ${ranlib} $out
-      description = Creating static library $out
   '';
 
   # Generate a build statement for a source file
@@ -69,96 +48,85 @@ let
       FLAGS = ${flags}
   '';
 
+  # Common setup for all generators - extracts compilers, filters sources, formats flags
+  prepareCompilation = { name, sources, toolchain, includeDirs, defines, compileFlags, langFlags, extraCFlags ? [] }:
+    let
+      cCompiler = toolchain.getCompilerForLanguage "c";
+      cxxCompiler = toolchain.getCompilerForLanguage "cpp";
+
+      cSources = builtins.filter (s: s.lang == "c") sources;
+      cppSources = builtins.filter (s: s.lang == "cpp") sources;
+
+      baseIncludeDefines = formatIncludes includeDirs + " " + formatDefines defines;
+      cFlags = formatFlags (extraCFlags ++ compileFlags ++ (langFlags.c or [])) + " " + baseIncludeDefines;
+      cppFlags = formatFlags (extraCFlags ++ compileFlags ++ (langFlags.cpp or [])) + " " + baseIncludeDefines;
+
+      allObjects = map (s: s.objectName) sources;
+
+      compileRules = ''
+        ${mkCompileRule { name = "cc"; compiler = cCompiler; }}
+
+        ${mkCompileRule { name = "cxx"; compiler = cxxCompiler; }}
+      '';
+
+      buildStatements = ''
+        # C sources
+        ${concatMapStringsSep "\n" (src:
+          mkBuildStatement { source = src; rule = "cc"; objectName = src.objectName; flags = cFlags; }
+        ) cSources}
+
+        # C++ sources
+        ${concatMapStringsSep "\n" (src:
+          mkBuildStatement { source = src; rule = "cxx"; objectName = src.objectName; flags = cppFlags; }
+        ) cppSources}
+      '';
+    in {
+      inherit cxxCompiler allObjects compileRules buildStatements;
+      linkerFlag = toolchain.linker.driverFlag or "";
+      cxxRuntimeLibPath = toolchain.cxxRuntimeLibPath or null;
+    };
+
 in
 {
-  inherit escapeNinja formatIncludes formatDefines formatFlags;
-  inherit mkCompileRule mkLinkExeRule mkLinkSharedRule mkArchiveRule mkBuildStatement;
+  inherit escapeNinja formatIncludes formatDefines formatFlags mkBuildStatement;
 
   # Generate complete ninja file for an executable
   generateExecutable = {
     name,
-    sources,       # [ { store, relNorm, objectName, lang } ]
+    sources,
     toolchain,
-    includeDirs,   # [ path ]
-    defines,       # [ string or { name, value? } ]
-    compileFlags,  # [ string ]
-    langFlags,     # { c = [...]; cpp = [...]; }
-    ldflags,       # [ string ]
+    includeDirs,
+    defines,
+    compileFlags,
+    langFlags,
+    ldflags,
   }:
     let
-      cCompiler = toolchain.getCompilerForLanguage "c";
-      cxxCompiler = toolchain.getCompilerForLanguage "cpp";
-      linkerFlag = toolchain.linker.driverFlag or "";
-
-      # Get C++ runtime library path for RPATH
-      cxxRuntimeLibPath = toolchain.cxxRuntimeLibPath or null;
-      rpathFlags = if cxxRuntimeLibPath != null
-        then [ "-Wl,-rpath,${cxxRuntimeLibPath}" ]
+      prep = prepareCompilation { inherit name sources toolchain includeDirs defines compileFlags langFlags; };
+      rpathFlags = if prep.cxxRuntimeLibPath != null
+        then [ "-Wl,-rpath,${prep.cxxRuntimeLibPath}" ]
         else [];
-
-      # Separate sources by language
-      cSources = builtins.filter (s: s.lang == "c") sources;
-      cppSources = builtins.filter (s: s.lang == "cpp") sources;
-
-      # Build flags for each language
-      cFlags = formatFlags (compileFlags ++ (langFlags.c or []))
-        + " " + formatIncludes includeDirs
-        + " " + formatDefines defines;
-      cppFlags = formatFlags (compileFlags ++ (langFlags.cpp or []))
-        + " " + formatIncludes includeDirs
-        + " " + formatDefines defines;
-
-      allObjects = map (s: s.objectName) sources;
     in
     ''
       # Auto-generated by nixnative
       # Target: ${name}
 
-      ${mkCompileRule {
-        name = "cc";
-        compiler = cCompiler;
-        defaultFlags = "";
-      }}
+      ${prep.compileRules}
 
-      ${mkCompileRule {
-        name = "cxx";
-        compiler = cxxCompiler;
-        defaultFlags = "";
-      }}
+      rule link_exe
+        command = ${prep.cxxCompiler} ${prep.linkerFlag} $in $LDFLAGS -o $out
+        description = Linking executable $out
 
-      ${mkLinkExeRule {
-        compiler = cxxCompiler;
-        inherit linkerFlag;
-      }}
-
-      # C sources
-      ${concatMapStringsSep "\n" (src:
-        mkBuildStatement {
-          source = src;
-          rule = "cc";
-          objectName = src.objectName;
-          flags = cFlags;
-        }
-      ) cSources}
-
-      # C++ sources
-      ${concatMapStringsSep "\n" (src:
-        mkBuildStatement {
-          source = src;
-          rule = "cxx";
-          objectName = src.objectName;
-          flags = cppFlags;
-        }
-      ) cppSources}
+      ${prep.buildStatements}
 
       # Link executable
-      build ${name}: link_exe ${concatStringsSep " " allObjects}
+      build ${name}: link_exe ${concatStringsSep " " prep.allObjects}
         LDFLAGS = ${formatFlags (rpathFlags ++ ldflags)}
 
       default ${name}
     '';
 
-  # Generate complete ninja file for a static library (compile only, no link)
+  # Generate complete ninja file for a static library
   generateStaticLib = {
     name,
     sources,
@@ -169,20 +137,7 @@ in
     langFlags,
   }:
     let
-      cCompiler = toolchain.getCompilerForLanguage "c";
-      cxxCompiler = toolchain.getCompilerForLanguage "cpp";
-
-      cSources = builtins.filter (s: s.lang == "c") sources;
-      cppSources = builtins.filter (s: s.lang == "cpp") sources;
-
-      cFlags = formatFlags (compileFlags ++ (langFlags.c or []))
-        + " " + formatIncludes includeDirs
-        + " " + formatDefines defines;
-      cppFlags = formatFlags (compileFlags ++ (langFlags.cpp or []))
-        + " " + formatIncludes includeDirs
-        + " " + formatDefines defines;
-
-      allObjects = map (s: s.objectName) sources;
+      prep = prepareCompilation { inherit name sources toolchain includeDirs defines compileFlags langFlags; };
       archiveName = "lib${name}.a";
       ar = toolchain.bintools.ar;
       ranlib = toolchain.bintools.ranlib;
@@ -191,42 +146,16 @@ in
       # Auto-generated by nixnative
       # Target: ${name} (static library)
 
-      ${mkCompileRule {
-        name = "cc";
-        compiler = cCompiler;
-        defaultFlags = "";
-      }}
+      ${prep.compileRules}
 
-      ${mkCompileRule {
-        name = "cxx";
-        compiler = cxxCompiler;
-        defaultFlags = "";
-      }}
+      rule archive
+        command = rm -f $out && ${ar} rcs $out $in && ${ranlib} $out
+        description = Creating static library $out
 
-      ${mkArchiveRule { inherit ar ranlib; }}
-
-      # C sources
-      ${concatMapStringsSep "\n" (src:
-        mkBuildStatement {
-          source = src;
-          rule = "cc";
-          objectName = src.objectName;
-          flags = cFlags;
-        }
-      ) cSources}
-
-      # C++ sources
-      ${concatMapStringsSep "\n" (src:
-        mkBuildStatement {
-          source = src;
-          rule = "cxx";
-          objectName = src.objectName;
-          flags = cppFlags;
-        }
-      ) cppSources}
+      ${prep.buildStatements}
 
       # Create archive
-      build ${archiveName}: archive ${concatStringsSep " " allObjects}
+      build ${archiveName}: archive ${concatStringsSep " " prep.allObjects}
 
       default ${archiveName}
     '';
@@ -243,73 +172,30 @@ in
     ldflags,
   }:
     let
-      cCompiler = toolchain.getCompilerForLanguage "c";
-      cxxCompiler = toolchain.getCompilerForLanguage "cpp";
-      linkerFlag = toolchain.linker.driverFlag or "";
-
-      # Get C++ runtime library path for RPATH
-      cxxRuntimeLibPath = toolchain.cxxRuntimeLibPath or null;
-      rpathFlags = if cxxRuntimeLibPath != null
-        then [ "-Wl,-rpath,${cxxRuntimeLibPath}" ]
+      # Pass -fPIC as extra compile flag for shared libraries
+      prep = prepareCompilation {
+        inherit name sources toolchain includeDirs defines compileFlags langFlags;
+        extraCFlags = [ "-fPIC" ];
+      };
+      rpathFlags = if prep.cxxRuntimeLibPath != null
+        then [ "-Wl,-rpath,${prep.cxxRuntimeLibPath}" ]
         else [];
-
-      cSources = builtins.filter (s: s.lang == "c") sources;
-      cppSources = builtins.filter (s: s.lang == "cpp") sources;
-
-      # Add -fPIC for shared libraries
-      cFlags = formatFlags (["-fPIC"] ++ compileFlags ++ (langFlags.c or []))
-        + " " + formatIncludes includeDirs
-        + " " + formatDefines defines;
-      cppFlags = formatFlags (["-fPIC"] ++ compileFlags ++ (langFlags.cpp or []))
-        + " " + formatIncludes includeDirs
-        + " " + formatDefines defines;
-
-      allObjects = map (s: s.objectName) sources;
       sharedLibName = "lib${name}.so";
     in
     ''
       # Auto-generated by nixnative
       # Target: ${name} (shared library)
 
-      ${mkCompileRule {
-        name = "cc";
-        compiler = cCompiler;
-        defaultFlags = "";
-      }}
+      ${prep.compileRules}
 
-      ${mkCompileRule {
-        name = "cxx";
-        compiler = cxxCompiler;
-        defaultFlags = "";
-      }}
+      rule link_shared
+        command = ${prep.cxxCompiler} ${prep.linkerFlag} -shared $in $LDFLAGS -o $out
+        description = Linking shared library $out
 
-      ${mkLinkSharedRule {
-        compiler = cxxCompiler;
-        inherit linkerFlag;
-      }}
-
-      # C sources
-      ${concatMapStringsSep "\n" (src:
-        mkBuildStatement {
-          source = src;
-          rule = "cc";
-          objectName = src.objectName;
-          flags = cFlags;
-        }
-      ) cSources}
-
-      # C++ sources
-      ${concatMapStringsSep "\n" (src:
-        mkBuildStatement {
-          source = src;
-          rule = "cxx";
-          objectName = src.objectName;
-          flags = cppFlags;
-        }
-      ) cppSources}
+      ${prep.buildStatements}
 
       # Link shared library
-      build ${sharedLibName}: link_shared ${concatStringsSep " " allObjects}
+      build ${sharedLibName}: link_shared ${concatStringsSep " " prep.allObjects}
         LDFLAGS = ${formatFlags (rpathFlags ++ ldflags)}
 
       default ${sharedLibName}

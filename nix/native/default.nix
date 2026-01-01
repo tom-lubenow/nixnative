@@ -106,10 +106,6 @@ let
     inherit (linkerCore) mkLinker moldCapabilities;
   };
 
-  goldLinkers = import ./linkers/gold.nix {
-    inherit pkgs lib;
-    inherit (linkerCore) mkLinker goldCapabilities;
-  };
 
   gnuLdLinkers = import ./linkers/ld.nix {
     inherit pkgs lib;
@@ -194,10 +190,7 @@ let
     # Mold (Linux only, fast)
     inherit (moldLinkers) mold;
 
-    # Gold (Linux only)
-    gold = goldLinkers.gold;
-
-    # GNU ld (Linux only)
+    # GNU ld
     ld = gnuLdLinkers.ld;
     gnuLd = gnuLdLinkers.gnuLd;
     bfd = gnuLdLinkers.bfd;
@@ -313,54 +306,16 @@ let
       else
         null;
 
-    # Clang + Gold
-    clang-gold =
-      if goldLinkers.isAvailable then
-        mkToolchain {
-          languages = {
-            c = compilers.clang.c;
-            cpp = compilers.clang.cpp;
-          };
-          linker = linkers.gold;
-          bintools = compilers.clang.bintools;
-        }
-      else
-        null;
-
-
     # ========================================================================
     # GCC Toolchains
     # ========================================================================
+    #
+    # Note: GCC only works with GNU ld because it doesn't support the
+    # -fuse-ld=/full/path syntax that nixnative uses for alternative linkers.
+    # GCC requires just the linker name (e.g., -fuse-ld=lld) which doesn't
+    # work reliably with Nix store paths.
 
-    # GCC + Mold (fast linking)
-    gcc-mold =
-      if moldLinkers.isAvailable && compilers.gcc != null then
-        mkToolchain {
-          languages = {
-            c = compilers.gcc.c;
-            cpp = compilers.gcc.cpp;
-          };
-          linker = linkers.mold;
-          bintools = compilers.gcc.bintools;
-        }
-      else
-        null;
-
-    # GCC + Gold
-    gcc-gold =
-      if goldLinkers.isAvailable && compilers.gcc != null then
-        mkToolchain {
-          languages = {
-            c = compilers.gcc.c;
-            cpp = compilers.gcc.cpp;
-          };
-          linker = linkers.gold;
-          bintools = compilers.gcc.bintools;
-        }
-      else
-        null;
-
-    # GCC + GNU ld (classic)
+    # GCC + GNU ld (the only working GCC combination)
     gcc-ld =
       if gnuLdLinkers.isAvailable && compilers.gcc != null then
         mkToolchain {
@@ -369,20 +324,6 @@ let
             cpp = compilers.gcc.cpp;
           };
           linker = linkers.ld;
-          bintools = compilers.gcc.bintools;
-        }
-      else
-        null;
-
-    # GCC + LLD
-    gcc-lld =
-      if compilers.gcc != null then
-        mkToolchain {
-          languages = {
-            c = compilers.gcc.c;
-            cpp = compilers.gcc.cpp;
-          };
-          linker = linkers.lld;
           bintools = compilers.gcc.bintools;
         }
       else
@@ -467,7 +408,6 @@ in
     inherit (linkerCore)
       lldCapabilities
       moldCapabilities
-      goldCapabilities
       ldCapabilities
       ;
   };

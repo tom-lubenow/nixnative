@@ -51,13 +51,14 @@ let
       throw "compiler must be a string name (e.g., \"clang\") or a compiler family object";
 
   # Resolve a linker specification to a linker object
-  # Accepts: string name ("lld", "mold", "gold", "ld") or linker object or null
+  # Accepts: string name ("lld", "mold", "ld") or linker object or null
+  # Note: gold support removed (deprecated upstream)
   resolveLinker =
     spec:
     if spec == null then
-      linkers.default
+      null  # Return null to let extractToolchain pick based on compiler
     else if builtins.isString spec then
-      linkers.${spec} or (throw "Unknown linker: '${spec}'. Available: lld, mold, gold, ld")
+      linkers.${spec} or (throw "Unknown linker: '${spec}'. Available: lld, mold, ld")
     else if builtins.isAttrs spec && spec ? driverFlag then
       spec # Already a linker object
     else
@@ -82,7 +83,13 @@ let
       # Build toolchain from compiler/linker
       let
         compilerFamily = resolveCompiler (args.compiler or null);
-        linker = resolveLinker (args.linker or null);
+        explicitLinker = resolveLinker (args.linker or null);
+        # GCC doesn't support -fuse-ld=/full/path, so default to GNU ld for GCC
+        # Clang defaults to LLD
+        isGcc = args.compiler or null == "gcc";
+        linker = if explicitLinker != null then explicitLinker
+                 else if isGcc then linkers.ld
+                 else linkers.default;
         contentAddressed = args.contentAddressed or false;
       in
       mkToolchain {
