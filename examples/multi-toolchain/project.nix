@@ -138,7 +138,11 @@ let
       ];
 
       availableConfigs = builtins.filter (cfg:
+        # mold is Linux-only
         if cfg.linker == "mold" then isLinux
+        # GCC doesn't support -fuse-ld=/full/path (only works with linker names)
+        # So gcc+lld doesn't work with our current approach
+        else if cfg.compiler == "gcc" && cfg.linker == "lld" then false
         else if cfg.compiler == "gcc" then native.compilers.gcc != null
         else true
       ) configs;

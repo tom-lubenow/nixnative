@@ -40,10 +40,14 @@ let
     ];
   };
 
-  # Combined package
+  # Combined package - need to use .passthru.target for dynamic derivation outputs
   combined = pkgs.symlinkJoin {
     name = "myapp";
-    paths = [ cli daemon tests ];
+    paths = [
+      cli.passthru.target
+      daemon.passthru.target
+      tests.passthru.target
+    ];
   };
 
 in {

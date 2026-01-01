@@ -51,16 +51,39 @@
         native = import ./nix/native;
       };
 
+      # Build all examples as a check
+      # Note: Dynamic derivation outputs don't create result symlinks.
+      # Use --print-out-paths or legacyPackages for actual outputs.
       packages = forAllSystems (
+        { pkgs, native, examples, ... }:
+        {
+          default = native.mkBuildAllCheck pkgs "nixnative-examples" (builtins.attrValues examples.packages);
+        }
+      );
+
+      # legacyPackages exposes the actual build outputs (builtins.outputOf results)
+      # This is the recommended way to build nixnative targets:
+      #   nix build .#executableExample --print-out-paths
+      #
+      # Note: Dynamic derivations don't create result symlinks.
+      # Use --print-out-paths to get the store path.
+      legacyPackages = forAllSystems (
         {
           pkgs,
           native,
           examples,
           ...
         }:
-        examples.packages
+        let
+          # Extract .passthru.target from packages that have it
+          realizeTarget = pkg:
+            if pkg ? passthru && pkg.passthru ? target
+            then pkg.passthru.target
+            else pkg;
+        in
+        pkgs.lib.mapAttrs (_: realizeTarget) examples.packages
         // {
-          default = examples.defaults.app;
+          default = realizeTarget examples.defaults.app;
         }
       );
 

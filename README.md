@@ -85,9 +85,16 @@ This architecture gives you:
 Build and run:
 
 ```sh
-nix build
-./result/bin/hello
+# Build and get the output path in one command
+nix build --print-out-paths
+# Output: /nix/store/xxx-hello
+
+# Run directly from the store path
+$(nix build --print-out-paths)/bin/hello
 ```
+
+> **Note**: Dynamic derivations don't create the traditional `./result` symlink.
+> Use `--print-out-paths` to get the store path, or `nix path-info .#target` after building.
 
 ## Features
 
@@ -121,8 +128,11 @@ See the `examples/` directory for working examples:
 Build and run an example:
 
 ```sh
-nix build .#executableExample
-./result/bin/executable-example
+nix build .#executableExample --print-out-paths
+# Output: /nix/store/xxx-executable-example
+
+# Or in one line:
+$(nix build .#executableExample --print-out-paths)/bin/executable-example
 ```
 
 Run all checks:

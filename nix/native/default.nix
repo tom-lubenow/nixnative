@@ -533,6 +533,53 @@ in
   inherit lsps;
 
   # ==========================================================================
+  # Flake Output Helpers
+  # ==========================================================================
+  #
+  # Due to Nix dynamic derivations, nixnative packages can't be exposed
+  # directly in `packages` (they contain strings from builtins.outputOf,
+  # not derivations). Use these helpers for cleaner flake definitions.
+  #
+
+  # Extract the actual target from a nixnative package
+  # Safe to call on both dynamic and regular derivations
+  realizeTarget = pkg:
+    if pkg ? passthru && pkg.passthru ? target
+    then pkg.passthru.target
+    else pkg;
+
+  # Convert a set of nixnative packages to legacyPackages format
+  # Usage in flake.nix:
+  #   legacyPackages.${system} = native.mkLegacyPackages project.packages;
+  mkLegacyPackages = packages:
+    lib.mapAttrs (_name: pkg:
+      if pkg ? passthru && pkg.passthru ? target
+      then pkg.passthru.target
+      else pkg
+    ) packages;
+
+  # Create a check derivation that builds multiple packages
+  # Useful for `nix build .` to build everything
+  # Usage:
+  #   packages.${system}.default = native.mkBuildAllCheck pkgs "myproject" [
+  #     project.packages.foo
+  #     project.packages.bar
+  #   ];
+  mkBuildAllCheck = pkgs': name: packages:
+    let
+      realizedPkgs = map (pkg:
+        if pkg ? passthru && pkg.passthru ? target
+        then pkg.passthru.target
+        else pkg
+      ) packages;
+    in pkgs'.runCommand "${name}-all-check" {
+      buildInputs = realizedPkgs;
+    } ''
+      mkdir -p $out
+      echo "All ${name} components built successfully" > $out/result
+    '';
+
+  # ==========================================================================
   # Version Info
   # ==========================================================================
 
