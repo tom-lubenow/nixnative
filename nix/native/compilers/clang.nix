@@ -7,7 +7,6 @@
 {
   pkgs,
   mkCompiler,
-  commonFlagTranslators,
   mkGccStyleScanner,
 }:
 
@@ -49,10 +48,6 @@ let
         colorDiagnostics = true;
       };
 
-      flagTranslators = commonFlagTranslators // {
-        colorDiagnostics =
-          flag: if flag.value then [ "-fcolor-diagnostics" ] else [ "-fno-color-diagnostics" ];
-      };
     in
     {
       inherit name;
@@ -67,7 +62,7 @@ let
         defaultFlags = [ ];
         runtimeInputs = sharedRuntimeInputs;
         environment = { };
-        inherit capabilities flagTranslators;
+        inherit capabilities;
 
         # Scanner configuration for C files
         scanner = mkGccStyleScanner {
@@ -89,7 +84,7 @@ let
         ];
         runtimeInputs = sharedRuntimeInputs;
         environment = { };
-        inherit capabilities flagTranslators;
+        inherit capabilities;
         cxxRuntimeLibPath = "${pkgs.stdenv.cc.cc.lib}/lib";
 
         # Scanner configuration for C++ files

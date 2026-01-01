@@ -50,22 +50,10 @@ let
     platform = platformUtils;
   };
 
-  toolCore = import ./core/tool.nix { inherit pkgs lib utils; };
+  toolCore = import ./core/tool.nix { inherit pkgs lib utils language; };
 
   testLibCore = import ./core/testlib.nix { inherit lib; };
 
-  # ==========================================================================
-  # Scanner Modules
-  # ==========================================================================
-
-  scanner = import ./scanner/scanner.nix {
-    inherit
-      pkgs
-      lib
-      utils
-      language
-      ;
-  };
 
   # ==========================================================================
   # Ninja Module (nix-ninja integration)
@@ -81,12 +69,12 @@ let
 
   clangCompilers = import ./compilers/clang.nix {
     inherit pkgs;
-    inherit (compilerCore) mkCompiler commonFlagTranslators mkGccStyleScanner;
+    inherit (compilerCore) mkCompiler mkGccStyleScanner;
   };
 
   gccCompilers = import ./compilers/gcc.nix {
     inherit pkgs;
-    inherit (compilerCore) mkCompiler gccFlagTranslators mkGccStyleScanner;
+    inherit (compilerCore) mkCompiler mkGccStyleScanner;
   };
 
 
@@ -344,9 +332,9 @@ let
       pkgs
       lib
       utils
-      scanner
       ninja
       ;
+    inherit (toolCore) processTools;
     platform = platformUtils;
   };
 
@@ -379,7 +367,7 @@ in
   # ==========================================================================
 
   # Core factories
-  inherit (compilerCore) mkCompiler commonFlagTranslators gccFlagTranslators mkGccStyleScanner validateScanner;
+  inherit (compilerCore) mkCompiler mkGccStyleScanner validateScanner;
   inherit (linkerCore) mkLinker;
   inherit (toolchainCore) validateToolchain getCapabilities toolchainSupports;
 
@@ -471,7 +459,7 @@ in
   inherit (helpers) mkDevShell mkTest;
 
   # Tool plugin processing
-  inherit (scanner) processTools;
+  inherit (toolCore) processTools;
 
   # Utilities (for advanced users)
   inherit utils;

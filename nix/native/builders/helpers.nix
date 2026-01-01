@@ -8,8 +8,8 @@
   lib,
   utils,
   platform,
-  scanner,  # Tool processing
-  ninja,    # nix-ninja integration
+  processTools, # Tool processing
+  ninja,        # nix-ninja integration
 }:
 
 let
@@ -27,7 +27,6 @@ let
     isGlob
     expandGlob
     ;
-  inherit (scanner) processTools;
 
   # Collect ninja-built library target outputs for dependency tracking
   # Returns list of builtins.outputOf references that ensure dynamic derivations are built
@@ -90,6 +89,8 @@ let
 
       # For tool-generated sources, extract the store base from the store path
       # by removing the relative path suffix
+      pathStr = builtins.toString srcInfo.path;
+      isStorePath = hasPrefix "/nix/store/" pathStr;
       storeBase =
         if srcInfo.store != null then
           let
@@ -99,6 +100,10 @@ let
             storeDir = lib.removeSuffix "/${relNorm}" storeStr;
           in
           storeDir
+        else if isStorePath then
+          # For tool-generated sources using path instead of store,
+          # extract the base from the path
+          lib.removeSuffix "/${relNorm}" pathStr
         else
           rootPath;
     in

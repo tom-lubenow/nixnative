@@ -25,16 +25,19 @@ rec {
   c = {
     name = "c";
     extensions = [ ".c" ];
+    headerExtensions = [ ".h" ];
   };
 
   cpp = {
     name = "cpp";
     extensions = [ ".cc" ".cpp" ".cxx" ".C" ];
+    headerExtensions = [ ".hpp" ".hxx" ".hh" ".H" ];
   };
 
   rust = {
     name = "rust";
     extensions = [ ".rs" ];
+    headerExtensions = [ ];
   };
 
   # Future languages can be added here:
@@ -98,10 +101,17 @@ rec {
   # Utilities
   # ==========================================================================
 
-  # Get all supported extensions
+  # Get all supported source extensions
   allExtensions = lib.concatMap (l: l.extensions) all;
 
-  # Check if a file is a supported source file
+  # Get all supported header extensions
+  allHeaderExtensions = lib.concatMap (l: l.headerExtensions or []) all;
+
+  # Check if a file is a supported source file (needs compilation)
   isSourceFile = filename:
     builtins.any (ext: hasExtension ext filename) allExtensions;
+
+  # Check if a file is a header file (included, not compiled)
+  isHeaderFile = filename:
+    builtins.any (ext: hasExtension ext filename) allHeaderExtensions;
 }

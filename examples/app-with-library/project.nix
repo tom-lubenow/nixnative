@@ -58,16 +58,10 @@ PY
     {
       name = "build-info-${mode}";
       inherit manifest;
-      headers = [{
-        rel = "generated/build_info.hpp";
-        path = "${renderDrv}/generated/build_info.hpp";
-        store = "${renderDrv}/generated/build_info.hpp";
-      }];
-      sources = [{
-        rel = "generated/build_info.cc";
-        path = "${renderDrv}/generated/build_info.cc";
-        store = "${renderDrv}/generated/build_info.cc";
-      }];
+      outputs = [
+        { rel = "generated/build_info.hpp"; path = "${renderDrv}/generated/build_info.hpp"; }
+        { rel = "generated/build_info.cc"; path = "${renderDrv}/generated/build_info.cc"; }
+      ];
       includeDirs = [ includeDir ];
       public = {
         includeDirs = [ includeDir ];

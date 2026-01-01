@@ -25,7 +25,7 @@ let
   versionTool = native.mkGeneratedSources {
     name = "version-header";
     drv = versionDrv;
-    headers = [ "version.h" ];
+    outputs = [ "version.h" ];
   };
 
   # App using the simplified tool API
@@ -43,8 +43,8 @@ let
   # Manual attrset approach (more verbose, but still supported)
   versionGeneratorManual = {
     name = "version-generator";
-    headers = [
-      { rel = "version.h"; store = "${versionDrv}/version.h"; }
+    outputs = [
+      { rel = "version.h"; path = "${versionDrv}/version.h"; }
     ];
     includeDirs = [ { path = versionDrv; } ];
   };

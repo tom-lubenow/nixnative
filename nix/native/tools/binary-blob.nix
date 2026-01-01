@@ -158,8 +158,8 @@ let
       config,
     }:
     let
-      # Generate source entries for each input file
-      mkOutputs =
+      # Generate output entries for each input file
+      mkOutput =
         file:
         let
           fileName =
@@ -170,32 +170,11 @@ let
           baseName = builtins.baseNameOf fileName;
           symbolName = replaceStrings [ "." "/" "-" " " ] [ "_" "_" "_" "_" ] baseName;
         in
-        {
-          source = {
-            rel = "${symbolName}.c";
-            store = "${drv}/${symbolName}.c";
-          };
-          # The .inc file is included by the .c file, not compiled separately
-        };
-
-      outputs = map mkOutputs inputFiles;
+        { rel = "${symbolName}.c"; path = "${drv}/${symbolName}.c"; };
     in
     {
-      headers = [ ]; # No headers generated
-      sources = map (o: o.source) outputs;
+      outputs = map mkOutput inputFiles;
       includeDirs = [ ]; # No include dirs needed - data is inlined
-      manifest = {
-        schema = 1;
-        units = builtins.listToAttrs (
-          map (o: {
-            name = o.source.rel;
-            value = {
-              # The .c file depends on the .inc file (included at compile time)
-              dependencies = [ ];
-            };
-          }) outputs
-        );
-      };
       defines = [ ];
       compileFlags = [ ];
       linkFlags = [ ];

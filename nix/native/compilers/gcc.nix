@@ -7,7 +7,6 @@
 {
   pkgs,
   mkCompiler,
-  gccFlagTranslators,
   mkGccStyleScanner,
 }:
 
@@ -62,7 +61,6 @@ let
         runtimeInputs = sharedRuntimeInputs;
         environment = { };
         inherit capabilities;
-        flagTranslators = gccFlagTranslators;
 
         # Scanner configuration for C files
         scanner = mkGccStyleScanner {
@@ -85,7 +83,6 @@ let
         runtimeInputs = sharedRuntimeInputs;
         environment = { };
         inherit capabilities;
-        flagTranslators = gccFlagTranslators;
         cxxRuntimeLibPath = "${gcc.cc.lib}/lib";
 
         # Scanner configuration for C++ files

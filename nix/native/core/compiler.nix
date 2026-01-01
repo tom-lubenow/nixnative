@@ -55,9 +55,6 @@ rec {
         colorDiagnostics = false;
       },
 
-      # Flag translators - convert abstract flags to concrete CLI args
-      flagTranslators ? { },
-
       # Default flags applied to all compilations
       defaultCFlags ? [ ],
       defaultCxxFlags ? [ ],
@@ -81,7 +78,6 @@ rec {
         cxx
         version
         capabilities
-        flagTranslators
         ;
       inherit
         defaultCFlags
@@ -95,25 +91,6 @@ rec {
       # =======================================================================
       # Methods
       # =======================================================================
-
-      # Translate a single abstract flag to concrete CLI args
-      translateFlag =
-        flag:
-        if flagTranslators ? ${flag.type} then
-          flagTranslators.${flag.type} flag
-        else
-          throw "nixnative: compiler '${name}' does not support flag type '${flag.type}'";
-
-      # Translate multiple flags
-      translateFlags =
-        flagList:
-        lib.concatMap (
-          f:
-          if flagTranslators ? ${f.type} then
-            flagTranslators.${f.type} f
-          else
-            throw "nixnative: compiler '${name}' does not support flag type '${f.type}'"
-        ) flagList;
 
       # Check if a capability is supported
       hasCapability =
@@ -131,94 +108,6 @@ rec {
       # Check if a specific sanitizer is supported
       supportsSanitizer = san: builtins.elem san (capabilities.sanitizers or [ ]);
     };
-
-  # ==========================================================================
-  # Common Flag Translators
-  # ==========================================================================
-
-  # Clang-style flag translators (also work for GCC in most cases)
-  commonFlagTranslators = {
-    lto =
-      flag:
-      if flag.value == "thin" then
-        [ "-flto=thin" ]
-      else if flag.value == "full" then
-        [ "-flto" ]
-      else
-        [ ];
-
-    sanitizer = flag: [ "-fsanitize=${flag.value}" ];
-
-    coverage = _: [
-      "--coverage"
-      "-fprofile-arcs"
-      "-ftest-coverage"
-    ];
-
-    optimize = flag: [ "-O${flag.value}" ];
-
-    debug =
-      flag:
-      if flag.value == "none" then
-        [ "-g0" ]
-      else if flag.value == "line-tables" then
-        [ "-gline-tables-only" ]
-      else
-        [ "-g" ];
-
-    standard = flag: [ "-std=${flag.value}" ];
-
-    warnings =
-      flag:
-      if flag.value == "none" then
-        [ "-w" ]
-      else if flag.value == "default" then
-        [ ]
-      else if flag.value == "all" then
-        [ "-Wall" ]
-      else if flag.value == "extra" then
-        [
-          "-Wall"
-          "-Wextra"
-        ]
-      else if flag.value == "pedantic" then
-        [
-          "-Wall"
-          "-Wextra"
-          "-Wpedantic"
-        ]
-      else
-        [ ];
-
-    colorDiagnostics =
-      flag: if flag.value then [ "-fdiagnostics-color=always" ] else [ "-fdiagnostics-color=never" ];
-
-    pic = _: [ "-fPIC" ];
-  };
-
-  # GCC-specific overrides
-  gccFlagTranslators = commonFlagTranslators // {
-    lto =
-      flag:
-      if flag.value == "thin" then
-        [
-          "-flto=auto"
-          "-fno-fat-lto-objects"
-        ]
-      else if flag.value == "full" then
-        [ "-flto" ]
-      else
-        [ ];
-
-    debug =
-      flag:
-      if flag.value == "none" then
-        [ "-g0" ]
-      else if flag.value == "line-tables" then
-        [ "-g1" ]
-      else
-        [ "-g" ];
-  };
 
   # ==========================================================================
   # Validation Helpers

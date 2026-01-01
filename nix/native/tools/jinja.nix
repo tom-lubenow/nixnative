@@ -158,48 +158,14 @@ let
           );
         }) inputFiles);
 
-      # Categorize outputs by extension
-      isHeader = path: hasSuffix ".h" path || hasSuffix ".hpp" path || hasSuffix ".hxx" path;
-      isSource =
-        path: hasSuffix ".c" path || hasSuffix ".cc" path || hasSuffix ".cpp" path || hasSuffix ".cxx" path;
-
-      mkOutput =
-        tmpl:
-        let
-          outPath = tmpl.output;
-        in
-        {
-          rel = outPath;
-          store = "${drv}/${outPath}";
-          isHeader = isHeader outPath;
-          isSource = isSource outPath;
-        };
-
-      outputs = map mkOutput templates;
-      headers = builtins.filter (o: o.isHeader) outputs;
-      sources = builtins.filter (o: o.isSource) outputs;
+      mkOutput = tmpl: {
+        rel = tmpl.output;
+        path = "${drv}/${tmpl.output}";
+      };
     in
     {
-      headers = map (o: {
-        rel = o.rel;
-        store = o.store;
-      }) headers;
-      sources = map (o: {
-        rel = o.rel;
-        store = o.store;
-      }) sources;
+      outputs = map mkOutput templates;
       includeDirs = [ { path = drv; } ];
-      manifest = {
-        schema = 1;
-        units = builtins.listToAttrs (
-          map (o: {
-            name = o.rel;
-            value = {
-              dependencies = [ ];
-            };
-          }) sources
-        );
-      };
       defines = [ ];
       compileFlags = [ ];
       linkFlags = [ ];
