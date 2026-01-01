@@ -59,7 +59,7 @@ Builds a static library with public interface.
 
 ```nix
 native.staticLib {
-  name = "my-lib";
+  name = "libmylib";                  # Output: libmylib.a
   root = ./.;
   sources = [ "src/lib.cc" ];
   publicIncludeDirs = [ "include" ];  # Headers exposed to consumers
@@ -68,13 +68,15 @@ native.staticLib {
 }
 ```
 
+**Note:** The `name` is used exactly as specified for the output filename. Include the `lib` prefix for standard libraries (e.g., `name = "libfoo"` → `libfoo.a`). For plugins loaded via `dlopen()`, omit the prefix (e.g., `name = "my-plugin"` → `my-plugin.so`).
+
 ### `sharedLib`
 
 Builds a shared library (`.so`/`.dylib`).
 
 ```nix
 native.sharedLib {
-  name = "my-lib";
+  name = "libmylib";                  # Output: libmylib.so
   root = ./.;
   sources = [ "src/lib.cc" ];
   publicIncludeDirs = [ "include" ];
@@ -190,7 +192,7 @@ Builds a static library (`.a`) with explicit toolchain.
 
 ```nix
 native.mkStaticLib {
-  name = "my-lib";
+  name = "libmylib";                  # Output: libmylib.a
   root = ./.;
   sources = [ "src/lib.cc" ];
   toolchain = myToolchain;
@@ -205,7 +207,7 @@ Builds a shared library (`.so`/`.dylib`) with explicit toolchain.
 
 ```nix
 native.mkSharedLib {
-  name = "my-lib";
+  name = "libmylib";                  # Output: libmylib.so
   root = ./.;
   sources = [ "src/lib.cc" ];
   toolchain = myToolchain;
