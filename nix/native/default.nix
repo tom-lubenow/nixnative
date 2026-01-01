@@ -454,7 +454,6 @@ in
     mkStaticLib
     mkSharedLib
     mkHeaderOnly
-    mkArchive
     ;
   inherit (helpers) mkDevShell mkTest;
 

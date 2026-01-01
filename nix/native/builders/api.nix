@@ -209,13 +209,6 @@ let
   # Create a test runner
   test = helpers.mkTest;
 
-  # Create a static archive (.a) from a static library
-  #
-  # Use when you need an actual archive file for external distribution
-  # or traditional archive link semantics.
-  #
-  archive = helpers.mkArchive;
-
   # Create a standalone development shell (without a target)
   #
   # This is useful when you want a development environment with a specific
@@ -277,7 +270,6 @@ in
     devShell
     shell
     test
-    archive
     ;
 
   # Also expose resolvers for advanced use

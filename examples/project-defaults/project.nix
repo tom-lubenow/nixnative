@@ -30,7 +30,7 @@ let
 
   # Shared library - inherits all defaults automatically
   libcommon = project.staticLib {
-    name = "common";
+    name = "libcommon";
     sources = [ "src/common/*.cc" ];
     publicIncludeDirs = [ "src/common" ];
   };

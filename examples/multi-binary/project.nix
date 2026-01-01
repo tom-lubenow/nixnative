@@ -3,7 +3,7 @@
 let
   # Shared static library
   commonLib = native.staticLib {
-    name = "myapp-common";
+    name = "libmyapp-common";
     root = ./.;
     sources = [ "common/*.cc" ];  # Glob pattern matches all .cc files
     includeDirs = [ "common/include" ];

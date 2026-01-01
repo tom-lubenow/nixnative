@@ -58,7 +58,7 @@ let
       mkdir -p $out/lib/python${python.pythonVersion}/site-packages
 
       # Copy and rename the shared library to the correct Python extension name
-      cp ${mathext.passthru.target}/libmathext.so \
+      cp ${mathext.passthru.target}/mathext.so \
          $out/lib/python${python.pythonVersion}/site-packages/mathext$ext_suffix
 
       runHook postBuild

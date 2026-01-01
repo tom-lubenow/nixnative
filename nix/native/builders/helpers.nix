@@ -288,7 +288,7 @@ rec {
         normalizeIncludeDir { inherit rootHost dir; }
       ) (ensureList resolvedPublicIncludeDirs);
 
-      archiveName = "lib${name}.a";
+      archiveName = "${name}.a";
 
       ninjaContent = ninja.generateStaticLib {
         inherit name toolchain languageFlags;
@@ -335,29 +335,6 @@ rec {
     };
 
   # ==========================================================================
-  # Static Archive Builder
-  # ==========================================================================
-
-  # Create a static archive (.a) from a static library
-  #
-  # With nix-ninja, mkStaticLib already produces an archive, so this is a pass-through.
-  #
-  mkArchive =
-    {
-      lib,
-      name ? lib.name,
-    }:
-    let
-      archiveName = "lib${sanitizeName name}.a";
-    in
-    # Library already has an archive, just return it with archive interface
-    lib // {
-      artifactType = "archive";
-      inherit name archiveName;
-      headers = lib;
-    };
-
-  # ==========================================================================
   # Shared Library Builder
   # ==========================================================================
 
@@ -395,7 +372,7 @@ rec {
         normalizeIncludeDir { inherit rootHost dir; }
       ) (ensureList resolvedPublicIncludeDirs);
 
-      sharedName = "lib${name}.so";
+      sharedName = "${name}.so";
 
       ninjaContent = ninja.generateSharedLib {
         inherit name toolchain languageFlags;

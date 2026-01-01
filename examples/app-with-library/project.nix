@@ -83,7 +83,7 @@ PY
 
   # Static library using high-level API
   mathLib = native.staticLib {
-    name = "math";
+    name = "libmath";
     inherit root includeDirs;
     sources = libSources;
     publicIncludeDirs = includeDirs;
