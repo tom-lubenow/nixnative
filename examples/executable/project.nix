@@ -30,7 +30,8 @@ let
 
     # Optional parameters (not used here, shown for reference):
     # defines = [ "DEBUG" ];              # Preprocessor definitions
-    # flags = [ { type = "optimize"; value = "2"; } ];  # Abstract flags
+    # compileFlags = [ "-O2" "-Wall" ];   # Compiler flags
+    # linkFlags = [ "-lm" ];              # Linker flags
     # libraries = [ someLib ];            # Library dependencies
     # compiler = "gcc";                   # Override compiler (default: clang)
     # linker = "mold";                    # Override linker (platform default)

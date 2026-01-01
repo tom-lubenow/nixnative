@@ -2,8 +2,9 @@
 
 {
   # Verify both plugin and host build successfully
-  # Note: With dynamic derivations, testing host+plugin together requires
-  # a custom wrapper that uses dynamicOutputs for both.
+  # The integration test (running host with plugin) would require
+  # a custom derivation that waits for both dynamic derivations.
+  # For now, we verify they compile correctly.
   pluginsHostBuilds = packages.hostApp;
   pluginsPluginBuilds = packages.myPlugin;
 }

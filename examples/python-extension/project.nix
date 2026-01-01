@@ -26,10 +26,14 @@ let
     ];
 
     # pybind11 compile flags
-    extraCxxFlags = [
+    compileFlags = [
       "-fvisibility=hidden"
-      "-std=c++17"
     ];
+
+    # C++17 is required for pybind11
+    languageFlags = {
+      cpp = [ "-std=c++17" ];
+    };
 
     # No need to link against Python on Linux with pybind11
     # (it uses the Python interpreter's symbols at runtime)
