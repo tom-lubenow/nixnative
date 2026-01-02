@@ -10,7 +10,7 @@
 
   # nix-ninja: Incremental builds with per-file derivations
   # Fork with patchelf fix for system libraries
-  inputs.nix-ninja.url = "git+ssh://git@github.com/tom-lubenow/nix-ninja";
+  inputs.nix-ninja.url = "github:tom-lubenow/nix-ninja";
   inputs.nix-ninja.inputs.nixpkgs.follows = "nixpkgs";
 
   outputs =
