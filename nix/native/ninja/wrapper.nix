@@ -51,9 +51,10 @@ in
           pkgs.patchelf  # Required by nix-ninja
         ] ++ toolInputs;
 
-        # Pass source inputs and library dependencies for nix-ninja to reference
-        # Library inputs ensure their dynamic outputs are available for linking
-        buildInputs = sourceInputs ++ libraryInputs;
+        # Library dependencies for linking (setup hooks, pkg-config, etc.)
+        # Source files are NOT included here - they're tracked via string context
+        # in ninjaContent, which flows through ninjaFile to this derivation.
+        buildInputs = libraryInputs;
 
         # stdenv adds a -rpath with a self reference but self references are not
         # allowed by text output mode (patched nix-ninja with bash fix)

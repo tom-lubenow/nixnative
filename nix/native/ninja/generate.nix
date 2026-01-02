@@ -43,8 +43,9 @@ let
   '';
 
   # Generate a build statement for a source file
+  # Uses storePath directly - each source file has its own store path for incrementality
   mkBuildStatement = { source, rule, objectName, flags }: ''
-    build ${objectName}: ${rule} ${escapeNinja (toString source.store)}/${escapeNinja source.relNorm}
+    build ${objectName}: ${rule} ${escapeNinja (toString source.storePath)}
       FLAGS = ${flags}
   '';
 
