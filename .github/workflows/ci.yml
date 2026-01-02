@@ -43,8 +43,11 @@ jobs:
         with:
           arguments: --accept-flake-config
 
-      - name: Run flake check
-        run: nix flake check
+      # Evaluation-only checks - full builds require recursive-nix daemon support
+      # which isn't reliably available in standard CI environments.
+      # Dynamic derivations (RFC 92) are still experimental.
+      - name: Run flake check (eval only)
+        run: nix flake check --no-build
 
-      - name: Test example flakes
-        run: nu check-examples.nu
+      - name: Test example flakes (eval only)
+        run: nu check-examples.nu --no-build
