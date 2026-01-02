@@ -47,4 +47,4 @@ jobs:
       # Full flake check requires dynamic derivations (RFC 92) support
       # which isn't available in standard CI environments.
       - name: Verify devShell evaluates
-        run: nix eval .#devShells.x86_64-linux.default --apply 'd: "ok"'
+        run: nix eval .#devShells.x86_64-linux.default.name
