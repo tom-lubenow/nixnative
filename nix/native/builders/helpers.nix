@@ -8,8 +8,8 @@
   lib,
   utils,
   platform,
-  scanner,  # Tool processing
-  ninja,    # nix-ninja integration
+  processTools, # Tool processing
+  ninja,        # nix-ninja integration
 }:
 
 let
@@ -27,7 +27,6 @@ let
     isGlob
     expandGlob
     ;
-  inherit (scanner) processTools;
 
   # Collect ninja-built library target outputs for dependency tracking
   # Returns list of builtins.outputOf references that ensure dynamic derivations are built
@@ -58,26 +57,37 @@ let
     else null;
 
   # Normalize a source file for ninja consumption
-  # Returns: { store, relNorm, objectName, lang }
+  # Returns: { storePath, relNorm, objectName, lang }
+  #
+  # For incremental builds, each source file gets its own store path via builtins.path.
+  # This ensures that changing one file only invalidates derivations that depend on it.
+  #
+  # IMPORTANT: We do NOT call sanitizePath on root here! sanitizePath would copy the
+  # entire directory to the store, defeating per-file incrementality. Instead, we
+  # keep root as a local path and use builtins.path on individual source files.
   normalizeSourceForNinja = { root, source }:
     let
-      rootPath = sanitizePath { path = root; };
-      rootStr = builtins.toString rootPath;
+      # Keep root as a local path - do NOT copy to store yet
+      # We need this for computing relative paths
+      rootStr = if builtins.isPath root then toString root
+                else if builtins.isString root then root
+                else if root ? path then toString root.path
+                else throw "Invalid root: ${builtins.toJSON root}";
 
       # Handle different source formats
       srcInfo =
         if builtins.isString source then
-          { rel = source; path = rootPath + "/${source}"; store = null; }
+          { rel = source; path = root + "/${source}"; store = null; }
         else if builtins.isPath source then
           let
-            pathStr = builtins.toString source;
+            pathStr = toString source;
             rel = if hasPrefix rootStr pathStr
               then removePrefix (rootStr + "/") pathStr
               else builtins.baseNameOf pathStr;
           in
           { inherit rel; path = source; store = null; }
         else if source ? rel then
-          { rel = source.rel; path = source.path or (rootPath + "/${source.rel}"); store = source.store or null; }
+          { rel = source.rel; path = source.path or (root + "/${source.rel}"); store = source.store or null; }
         else
           throw "Invalid source format: ${builtins.toJSON source}";
 
@@ -86,25 +96,31 @@ let
         else srcInfo.rel;
 
       lang = detectLanguage relNorm;
-      objectName = sanitizeName (lib.removeSuffix ".${lib.last (lib.splitString "." relNorm)}" relNorm) + ".o";
+      ext = lib.last (lib.splitString "." relNorm);
+      baseName = lib.removeSuffix ".${ext}" relNorm;
+      objectName = sanitizeName baseName + ".o";
 
-      # For tool-generated sources, extract the store base from the store path
-      # by removing the relative path suffix
-      storeBase =
+      # For incremental builds: create individual store paths for each source file
+      # This is the key to incrementality - each file is its own store path, so
+      # changing one file doesn't invalidate derivations that don't use it.
+      #
+      # IMPORTANT: We preserve the file extension in the store path name so the
+      # compiler can determine the source language.
+      storePath =
         if srcInfo.store != null then
-          let
-            storeStr = builtins.toString srcInfo.store;
-            # Remove the relative path suffix to get the store directory
-            # e.g., "/nix/store/xxx/generated/foo.cc" - "generated/foo.cc" = "/nix/store/xxx"
-            storeDir = lib.removeSuffix "/${relNorm}" storeStr;
-          in
-          storeDir
+          # Tool-generated sources already have a store path
+          "${srcInfo.store}"
         else
-          rootPath;
+          # Regular source file: create an individual store path
+          # builtins.path copies just this one file to the store
+          # Preserve the extension (e.g., .c, .cpp) so compilers recognize the file type
+          builtins.path {
+            path = srcInfo.path;
+            name = sanitizeName baseName + ".${ext}";
+          };
     in
     {
-      store = storeBase;
-      inherit relNorm objectName lang;
+      inherit storePath relNorm objectName lang;
     };
 
   # Normalize all sources for ninja (with glob expansion)
@@ -121,21 +137,43 @@ let
     map (source: normalizeSourceForNinja { inherit root source; }) expandedSources;
 
   # Common preparation for all target types
-  # Returns: { normalizedSources, resolvedIncludeDirs, combinedDefines, combinedCompileFlags, linkRequiredFlags, legacyLinkFlags, libraryInputs }
+  # Returns: { normalizedSources, resolvedIncludeDirs, combinedDefines, combinedCompileFlags, legacyLinkFlags, libraryInputs }
   prepareTarget = {
     toolchain,
     root,
     sources,
     includeDirs,
     defines,
-    flags,
     compileFlags,
     libraries,
     tools,
   }:
     let
       tc = toolchain;
-      rootPath = sanitizePath { path = root; };
+
+      # For incrementality: create a headers-only store path that excludes source files.
+      # This way, changing a .c file doesn't invalidate all include paths.
+      # Header extensions we care about:
+      headerExtensions = [ "h" "hpp" "hxx" "H" "hh" "h++" "tcc" "inc" "inl" ];
+      isHeaderFile = name: type:
+        type == "regular" &&
+        builtins.any (ext: lib.hasSuffix ".${ext}" name) headerExtensions;
+
+      # Filter to include directories AND header files only
+      # We need directories to preserve the tree structure
+      headersAndDirsFilter = name: type:
+        type == "directory" || isHeaderFile name type;
+
+      # Create a store path with only headers (and directory structure)
+      # This is stable as long as headers don't change
+      headersOnlyPath = builtins.path {
+        path = root;
+        name = "headers";
+        filter = headersAndDirsFilter;
+      };
+
+      # Keep rootPath for backwards compatibility, but prefer headersOnlyPath for includes
+      rootPath = headersOnlyPath;
 
       # Process tools for generated headers/sources
       toolInfo = processTools tools;
@@ -157,21 +195,8 @@ let
       # Combine defines
       combinedDefines = defines ++ publicAggregate.defines ++ toolInfo.defines;
 
-      # Translate abstract flags to concrete compiler flags
-      translatedFlags = if flags != [] then tc.translateFlags flags else [];
-
-      # Some flags (sanitizers, coverage, LTO) need to be passed to both compiler and linker
-      linkRequiredFlags = lib.concatMap (flag:
-        if flag.type == "sanitizer" then [ "-fsanitize=${flag.value}" ]
-        else if flag.type == "coverage" then [ "--coverage" ]
-        else if flag.type == "lto" then
-          if flag.value == "thin" then [ "-flto=thin" ]
-          else [ "-flto" ]
-        else []
-      ) flags;
-
       # Combine compile flags
-      combinedCompileFlags = translatedFlags ++ compileFlags ++ publicAggregate.cxxFlags ++ toolInfo.cxxFlags;
+      combinedCompileFlags = compileFlags ++ publicAggregate.compileFlags ++ toolInfo.compileFlags;
 
       # Collect legacy link flags (for external libs like pkg-config)
       legacyLinkFlags = collectLinkFlags libraries;
@@ -196,7 +221,7 @@ let
       libraryInputs = collectLibraryInputs libraries;
     in {
       inherit normalizedSources resolvedIncludeDirs combinedDefines combinedCompileFlags;
-      inherit linkRequiredFlags legacyLinkFlags libraryInputs;
+      inherit legacyLinkFlags libraryInputs;
       inherit rootPath publicAggregate;
       runtimeInputs = tc.runtimeInputs;
     };
@@ -215,33 +240,38 @@ rec {
       sources,
       includeDirs ? [],
       defines ? [],
-      flags ? [],
       compileFlags ? [],
-      langFlags ? {},
-      ldflags ? [],
+      languageFlags ? {},
+      linkFlags ? [],
       libraries ? [],
       tools ? [],
       ...
     }@args:
     let
       prep = prepareTarget {
-        inherit toolchain root sources includeDirs defines flags compileFlags libraries tools;
+        inherit toolchain root sources includeDirs defines compileFlags libraries tools;
       };
 
       ninjaContent = ninja.generateExecutable {
-        inherit name toolchain langFlags;
+        inherit name toolchain languageFlags;
         sources = prep.normalizedSources;
         includeDirs = prep.resolvedIncludeDirs;
         defines = prep.combinedDefines;
         compileFlags = prep.combinedCompileFlags;
-        ldflags = prep.linkRequiredFlags ++ ldflags ++ prep.legacyLinkFlags;
+        linkFlags = linkFlags ++ prep.legacyLinkFlags;
       };
+
+      # Extract individual source file store paths for incremental builds
+      # This ensures changing one source file only invalidates derivations that use it
+      sourceFilePaths = map (s: s.storePath) prep.normalizedSources;
 
       wrapper = ninja.mkNinjaDerivation {
         inherit name ninjaContent;
         libraryInputs = prep.libraryInputs;
         target = name;
-        sourceInputs = [ prep.rootPath ];
+        # Use individual source file paths for better incrementality
+        # Include directories are embedded in ninjaContent and tracked via the ninja file
+        sourceInputs = sourceFilePaths;
         toolInputs = prep.runtimeInputs;
         outputType = "executable";
       };
@@ -275,19 +305,18 @@ rec {
       sources,
       includeDirs ? [],
       defines ? [],
-      flags ? [],
       compileFlags ? [],
-      langFlags ? {},
+      languageFlags ? {},
       libraries ? [],
       tools ? [],
       publicIncludeDirs ? null,  # Defaults to includeDirs if not specified
       publicDefines ? [],
-      publicCxxFlags ? [],
+      publicCompileFlags ? [],
       ...
     }@args:
     let
       prep = prepareTarget {
-        inherit toolchain root sources includeDirs defines flags compileFlags libraries tools;
+        inherit toolchain root sources includeDirs defines compileFlags libraries tools;
       };
 
       rootHost = builtins.toString prep.rootPath;
@@ -299,20 +328,23 @@ rec {
         normalizeIncludeDir { inherit rootHost dir; }
       ) (ensureList resolvedPublicIncludeDirs);
 
-      archiveName = "lib${name}.a";
+      archiveName = "${name}.a";
 
       ninjaContent = ninja.generateStaticLib {
-        inherit name toolchain langFlags;
+        inherit name toolchain languageFlags;
         sources = prep.normalizedSources;
         includeDirs = prep.resolvedIncludeDirs;
         defines = prep.combinedDefines;
         compileFlags = prep.combinedCompileFlags;
       };
 
+      # Extract individual source file store paths for incremental builds
+      sourceFilePaths = map (s: s.storePath) prep.normalizedSources;
+
       wrapper = ninja.mkNinjaDerivation {
         inherit name ninjaContent;
         target = archiveName;
-        sourceInputs = [ prep.rootPath ];
+        sourceInputs = sourceFilePaths;
         toolInputs = prep.runtimeInputs;
         outputType = "staticLib";
       };
@@ -322,14 +354,14 @@ rec {
       basePublic = {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
-        cxxFlags = publicCxxFlags;
+        compileFlags = publicCompileFlags;
         linkFlags = [ "${archiveOut}/${archiveName}" ];
       };
 
       combinedPublic = {
         includeDirs = prep.publicAggregate.includeDirs ++ basePublic.includeDirs;
         defines = prep.publicAggregate.defines ++ basePublic.defines;
-        cxxFlags = prep.publicAggregate.cxxFlags ++ basePublic.cxxFlags;
+        compileFlags = prep.publicAggregate.compileFlags ++ basePublic.compileFlags;
         linkFlags = basePublic.linkFlags;
       };
     in
@@ -346,29 +378,6 @@ rec {
     };
 
   # ==========================================================================
-  # Static Archive Builder
-  # ==========================================================================
-
-  # Create a static archive (.a) from a static library
-  #
-  # With nix-ninja, mkStaticLib already produces an archive, so this is a pass-through.
-  #
-  mkArchive =
-    {
-      lib,
-      name ? lib.name,
-    }:
-    let
-      archiveName = "lib${sanitizeName name}.a";
-    in
-    # Library already has an archive, just return it with archive interface
-    lib // {
-      artifactType = "archive";
-      inherit name archiveName;
-      headers = lib;
-    };
-
-  # ==========================================================================
   # Shared Library Builder
   # ==========================================================================
 
@@ -382,20 +391,19 @@ rec {
       sources,
       includeDirs ? [],
       defines ? [],
-      flags ? [],
       compileFlags ? [],
-      langFlags ? {},
-      ldflags ? [],
+      languageFlags ? {},
+      linkFlags ? [],
       libraries ? [],
       tools ? [],
       publicIncludeDirs ? null,  # Defaults to includeDirs if not specified
       publicDefines ? [],
-      publicCxxFlags ? [],
+      publicCompileFlags ? [],
       ...
     }@args:
     let
       prep = prepareTarget {
-        inherit toolchain root sources includeDirs defines flags compileFlags libraries tools;
+        inherit toolchain root sources includeDirs defines compileFlags libraries tools;
       };
 
       rootHost = builtins.toString prep.rootPath;
@@ -407,22 +415,25 @@ rec {
         normalizeIncludeDir { inherit rootHost dir; }
       ) (ensureList resolvedPublicIncludeDirs);
 
-      sharedName = "lib${name}.so";
+      sharedName = "${name}.so";
 
       ninjaContent = ninja.generateSharedLib {
-        inherit name toolchain langFlags;
+        inherit name toolchain languageFlags;
         sources = prep.normalizedSources;
         includeDirs = prep.resolvedIncludeDirs;
         defines = prep.combinedDefines;
         compileFlags = prep.combinedCompileFlags;
-        ldflags = prep.linkRequiredFlags ++ ldflags ++ prep.legacyLinkFlags;
+        linkFlags = linkFlags ++ prep.legacyLinkFlags;
       };
+
+      # Extract individual source file store paths for incremental builds
+      sourceFilePaths = map (s: s.storePath) prep.normalizedSources;
 
       wrapper = ninja.mkNinjaDerivation {
         inherit name ninjaContent;
         libraryInputs = prep.libraryInputs;
         target = sharedName;
-        sourceInputs = [ prep.rootPath ];
+        sourceInputs = sourceFilePaths;
         toolInputs = prep.runtimeInputs;
         outputType = "sharedLib";
       };
@@ -433,14 +444,14 @@ rec {
       basePublic = {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
-        cxxFlags = publicCxxFlags;
+        compileFlags = publicCompileFlags;
         linkFlags = [ sharedLibPath ];
       };
 
       combinedPublic = {
         includeDirs = prep.publicAggregate.includeDirs ++ basePublic.includeDirs;
         defines = prep.publicAggregate.defines ++ basePublic.defines;
-        cxxFlags = prep.publicAggregate.cxxFlags ++ basePublic.cxxFlags;
+        compileFlags = prep.publicAggregate.compileFlags ++ basePublic.compileFlags;
         linkFlags = basePublic.linkFlags;
       };
     in
@@ -468,11 +479,11 @@ rec {
       root ? ./.,
       includeDirs ? [],
       defines ? [],
-      cxxFlags ? [],
+      compileFlags ? [],
       libraries ? [],
       publicIncludeDirs ? null,  # Defaults to includeDirs if not specified
       publicDefines ? [],
-      publicCxxFlags ? [],
+      publicCompileFlags ? [],
       tools ? [],
     }:
     let
@@ -498,7 +509,7 @@ rec {
       basePublic = {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
-        cxxFlags = publicCxxFlags;
+        compileFlags = publicCompileFlags;
         linkFlags = [];
       };
 

@@ -37,9 +37,7 @@ let
   # Core Modules
   # ==========================================================================
 
-  flags = import ./core/flags.nix { inherit lib; };
-
-  compilerCore = import ./core/compiler.nix { inherit lib flags; };
+  compilerCore = import ./core/compiler.nix { inherit lib; };
 
   linkerCore = import ./core/linker.nix { inherit lib; };
 
@@ -48,26 +46,14 @@ let
   language = import ./core/language.nix { inherit lib; };
 
   toolchainCore = import ./core/toolchain.nix {
-    inherit lib flags language;
+    inherit lib language;
     platform = platformUtils;
   };
 
-  toolCore = import ./core/tool.nix { inherit pkgs lib utils; };
+  toolCore = import ./core/tool.nix { inherit pkgs lib utils language; };
 
   testLibCore = import ./core/testlib.nix { inherit lib; };
 
-  # ==========================================================================
-  # Scanner Modules
-  # ==========================================================================
-
-  scanner = import ./scanner/scanner.nix {
-    inherit
-      pkgs
-      lib
-      utils
-      language
-      ;
-  };
 
   # ==========================================================================
   # Ninja Module (nix-ninja integration)
@@ -83,12 +69,12 @@ let
 
   clangCompilers = import ./compilers/clang.nix {
     inherit pkgs;
-    inherit (compilerCore) mkCompiler commonFlagTranslators mkGccStyleScanner;
+    inherit (compilerCore) mkCompiler mkGccStyleScanner;
   };
 
   gccCompilers = import ./compilers/gcc.nix {
     inherit pkgs;
-    inherit (compilerCore) mkCompiler gccFlagTranslators mkGccStyleScanner;
+    inherit (compilerCore) mkCompiler mkGccStyleScanner;
   };
 
 
@@ -346,9 +332,9 @@ let
       pkgs
       lib
       utils
-      scanner
       ninja
       ;
+    inherit (toolCore) processTools;
     platform = platformUtils;
   };
 
@@ -361,8 +347,17 @@ let
       linkers
       mkToolchain
       helpers
-      flags
       ;
+  };
+
+  # Project defaults
+  project = import ./builders/project.nix {
+    inherit lib api helpers;
+  };
+
+  # Installation packaging
+  installation = import ./builders/installation.nix {
+    inherit pkgs lib;
   };
 
 in
@@ -372,15 +367,12 @@ in
   # ==========================================================================
 
   # Core factories
-  inherit (compilerCore) mkCompiler commonFlagTranslators gccFlagTranslators mkGccStyleScanner validateScanner;
+  inherit (compilerCore) mkCompiler mkGccStyleScanner validateScanner;
   inherit (linkerCore) mkLinker;
   inherit (toolchainCore) validateToolchain getCapabilities toolchainSupports;
 
   # Local mkToolchain with defaults (see let block)
   inherit mkToolchain;
-
-  # Flag system
-  inherit flags;
 
   # Platform utilities
   platform = platformUtils;
@@ -397,8 +389,8 @@ in
     testLibs
     ;
 
-  # Tool factory (for custom tools)
-  inherit (toolCore) mkTool;
+  # Tool factories (for custom tools)
+  inherit (toolCore) mkTool mkGeneratedSources;
 
   # Test library factory (for custom test frameworks)
   inherit (testLibCore) mkTestLib;
@@ -434,6 +426,12 @@ in
     archive
     ;
 
+  # Project defaults - create scoped builders with shared settings
+  inherit (project) mkProject;
+
+  # Installation packaging - create installable packages
+  inherit (installation) mkInstallation;
+
   # Expose resolvers for advanced use
   inherit (api) resolveCompiler resolveLinker;
 
@@ -456,12 +454,11 @@ in
     mkStaticLib
     mkSharedLib
     mkHeaderOnly
-    mkArchive
     ;
   inherit (helpers) mkDevShell mkTest;
 
   # Tool plugin processing
-  inherit (scanner) processTools;
+  inherit (toolCore) processTools;
 
   # Utilities (for advanced users)
   inherit utils;

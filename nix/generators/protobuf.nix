@@ -90,7 +90,7 @@ in
   public = {
     includeDirs = [ ];
     defines = [ ];
-    cxxFlags = [ ];
+    compileFlags = [ ];
     linkFlags = [ ];
   };
 }

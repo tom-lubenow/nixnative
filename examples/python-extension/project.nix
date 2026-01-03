@@ -26,10 +26,14 @@ let
     ];
 
     # pybind11 compile flags
-    extraCxxFlags = [
+    compileFlags = [
       "-fvisibility=hidden"
-      "-std=c++17"
     ];
+
+    # C++17 is required for pybind11
+    languageFlags = {
+      cpp = [ "-std=c++17" ];
+    };
 
     # No need to link against Python on Linux with pybind11
     # (it uses the Python interpreter's symbols at runtime)
@@ -54,7 +58,7 @@ let
       mkdir -p $out/lib/python${python.pythonVersion}/site-packages
 
       # Copy and rename the shared library to the correct Python extension name
-      cp ${mathext.passthru.target}/libmathext.so \
+      cp ${mathext.passthru.target}/mathext.so \
          $out/lib/python${python.pythonVersion}/site-packages/mathext$ext_suffix
 
       runHook postBuild

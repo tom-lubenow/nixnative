@@ -3,7 +3,7 @@
 let
   # Layer 1: Utility library (no dependencies - base of the chain)
   libUtil = native.staticLib {
-    name = "util";
+    name = "libutil";
     root = ./.;
     sources = [ "libutil/util.cc" ];
     includeDirs = [ "libutil/include" ];
@@ -12,7 +12,7 @@ let
 
   # Layer 2: Core library (depends on util)
   libCore = native.staticLib {
-    name = "core";
+    name = "libcore";
     root = ./.;
     sources = [ "libcore/core.cc" ];
     includeDirs = [ "libcore/include" ];
@@ -22,7 +22,7 @@ let
 
   # Layer 3: Math extension library (depends on core, transitively on util)
   libMathExt = native.staticLib {
-    name = "math_ext";
+    name = "libmath_ext";
     root = ./.;
     sources = [ "libmath/math_ext.cc" ];
     includeDirs = [ "libmath/include" ];

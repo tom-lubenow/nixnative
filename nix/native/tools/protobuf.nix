@@ -77,7 +77,7 @@ let
       config,
     }:
     let
-      # Generate header and source entries for each proto file
+      # Generate output entries for each proto file
       mkOutputs =
         file:
         let
@@ -85,36 +85,16 @@ let
           # Remove directory components for the output names
           baseName = builtins.baseNameOf base;
         in
-        {
-          header = {
-            rel = "${baseName}.pb.h";
-            store = "${drv}/${baseName}.pb.h";
-          };
-          source = {
-            rel = "${baseName}.pb.cc";
-            store = "${drv}/${baseName}.pb.cc";
-          };
-        };
-
-      outputs = map mkOutputs inputFiles;
+        [
+          { rel = "${baseName}.pb.h"; path = "${drv}/${baseName}.pb.h"; }
+          { rel = "${baseName}.pb.cc"; path = "${drv}/${baseName}.pb.cc"; }
+        ];
     in
     {
-      headers = map (o: o.header) outputs;
-      sources = map (o: o.source) outputs;
+      outputs = lib.concatMap mkOutputs inputFiles;
       includeDirs = [ { path = drv; } ];
-      manifest = {
-        schema = 1;
-        units = builtins.listToAttrs (
-          map (o: {
-            name = o.source.rel;
-            value = {
-              dependencies = [ o.header.rel ];
-            };
-          }) outputs
-        );
-      };
       defines = [ ];
-      cxxFlags = [ ];
+      compileFlags = [ ];
       linkFlags = [ ];
     };
 
@@ -223,37 +203,18 @@ rec {
             base = protoBaseName file;
             baseName = builtins.baseNameOf base;
           in
-          {
-            pbHeader = {
-              rel = "${baseName}.pb.h";
-              store = "${drv}/${baseName}.pb.h";
-            };
-            pbSource = {
-              rel = "${baseName}.pb.cc";
-              store = "${drv}/${baseName}.pb.cc";
-            };
-            grpcHeader = {
-              rel = "${baseName}.grpc.pb.h";
-              store = "${drv}/${baseName}.grpc.pb.h";
-            };
-            grpcSource = {
-              rel = "${baseName}.grpc.pb.cc";
-              store = "${drv}/${baseName}.grpc.pb.cc";
-            };
-          };
-
-        outputs = map mkOutputs inputFiles;
+          [
+            { rel = "${baseName}.pb.h"; path = "${drv}/${baseName}.pb.h"; }
+            { rel = "${baseName}.pb.cc"; path = "${drv}/${baseName}.pb.cc"; }
+            { rel = "${baseName}.grpc.pb.h"; path = "${drv}/${baseName}.grpc.pb.h"; }
+            { rel = "${baseName}.grpc.pb.cc"; path = "${drv}/${baseName}.grpc.pb.cc"; }
+          ];
       in
       {
-        headers = (map (o: o.pbHeader) outputs) ++ (map (o: o.grpcHeader) outputs);
-        sources = (map (o: o.pbSource) outputs) ++ (map (o: o.grpcSource) outputs);
+        outputs = lib.concatMap mkOutputs inputFiles;
         includeDirs = [ { path = drv; } ];
-        manifest = {
-          schema = 1;
-          units = { };
-        };
         defines = [ ];
-        cxxFlags = [ ];
+        compileFlags = [ ];
         linkFlags = [ ];
       };
 

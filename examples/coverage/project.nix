@@ -9,11 +9,8 @@ let
     name = "coverage-example";
     root = ./.;
     inherit sources includeDirs;
-    flags = [
-      { type = "coverage"; }
-      { type = "debug"; value = "full"; }
-      { type = "optimize"; value = "0"; }
-    ];
+    compileFlags = [ "--coverage" "-g" "-O0" ];
+    linkFlags = [ "--coverage" ];
   };
 
   # Non-coverage build
@@ -21,9 +18,7 @@ let
     name = "coverage-example-no-cov";
     root = ./.;
     inherit sources includeDirs;
-    flags = [
-      { type = "optimize"; value = "2"; }
-    ];
+    compileFlags = [ "-O2" ];
   };
 
   # Coverage + ASan (Linux only)
@@ -31,13 +26,8 @@ let
     name = "coverage-example-asan";
     root = ./.;
     inherit sources includeDirs;
-    flags = [
-      { type = "coverage"; }
-      { type = "sanitizer"; value = "address"; }
-      { type = "sanitizer"; value = "undefined"; }
-      { type = "debug"; value = "full"; }
-      { type = "optimize"; value = "0"; }
-    ];
+    compileFlags = [ "--coverage" "-fsanitize=address,undefined" "-g" "-O0" ];
+    linkFlags = [ "--coverage" "-fsanitize=address,undefined" ];
   };
 
 in {

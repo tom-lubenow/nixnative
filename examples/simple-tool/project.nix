@@ -7,9 +7,12 @@ let
   versionParts = builtins.filter builtins.isString
     (builtins.split "\\." (pkgs.lib.removeSuffix "\n" versionStr));
 
-  # Generate version header
-  # Use writeTextDir to create a directory with the header, so include paths work
-  versionHeaderDir = pkgs.writeTextDir "version.h" ''
+  # ==========================================================================
+  # NEW WAY: Using mkGeneratedSources (recommended)
+  # ==========================================================================
+
+  # Generate version header using a simple derivation
+  versionDrv = pkgs.writeTextDir "version.h" ''
     #pragma once
 
     #define VERSION_MAJOR ${builtins.elemAt versionParts 0}
@@ -18,24 +21,42 @@ let
     #define VERSION_STRING "${pkgs.lib.removeSuffix "\n" versionStr}"
   '';
 
-  # Generator attrset - creates include directories for the generated header
-  versionGenerator = {
-    name = "version-generator";
-    headers = [
-      { rel = "version.h"; store = "${versionHeaderDir}/version.h"; }
-    ];
-    includeDirs = [ { path = versionHeaderDir; } ];
+  # Wrap it with mkGeneratedSources - much simpler!
+  versionTool = native.mkGeneratedSources {
+    name = "version-header";
+    drv = versionDrv;
+    outputs = [ "version.h" ];
   };
 
-  # App using the generator
+  # App using the simplified tool API
   appInline = native.executable {
     name = "simple-tool-inline";
     root = ./.;
     sources = [ "main.cc" ];
-    tools = [ versionGenerator ];
+    tools = [ versionTool ];
+  };
+
+  # ==========================================================================
+  # OLD WAY: Manual attrset (still works, for reference)
+  # ==========================================================================
+
+  # Manual attrset approach (more verbose, but still supported)
+  versionGeneratorManual = {
+    name = "version-generator";
+    outputs = [
+      { rel = "version.h"; path = "${versionDrv}/version.h"; }
+    ];
+    includeDirs = [ { path = versionDrv; } ];
+  };
+
+  appManual = native.executable {
+    name = "simple-tool-manual";
+    root = ./.;
+    sources = [ "main.cc" ];
+    tools = [ versionGeneratorManual ];
   };
 
 in {
-  inherit appInline;
+  inherit appInline appManual;
   simpleToolExample = appInline;
 }

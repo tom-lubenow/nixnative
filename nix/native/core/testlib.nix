@@ -28,7 +28,7 @@ rec {
   #   libraries    - Libraries to link (without main)
   #   mainLibrary  - Library providing main() (optional)
   #   defines      - Preprocessor defines
-  #   cxxFlags     - Additional C++ flags
+  #   compileFlags     - Additional C++ flags
   #
   mkTestLib =
     {
@@ -38,14 +38,14 @@ rec {
       libraries ? [ ],
       mainLibrary ? null,
       defines ? [ ],
-      cxxFlags ? [ ],
+      compileFlags ? [ ],
       # Additional packages needed in sandbox (e.g., dev outputs for headers)
       extraEvalInputs ? [ ],
     }:
     let
       basePublic = {
         includeDirs = map (d: { path = d; }) includeDirs;
-        inherit defines cxxFlags;
+        inherit defines compileFlags;
         linkFlags = libraries;
       };
 

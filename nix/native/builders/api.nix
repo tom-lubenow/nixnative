@@ -28,7 +28,6 @@
   linkers,
   mkToolchain,
   helpers,
-  flags,
 }:
 
 let
@@ -101,18 +100,6 @@ let
         bintools = compilerFamily.bintools;
       };
 
-  # Extract abstract flags from ergonomic parameters
-  # Converts: { lto = "thin"; sanitizers = ["address"]; } -> [ flags.lto "thin", flags.sanitizer "address" ]
-  extractFlags =
-    args:
-    let
-      # Get explicit flags list if provided
-      explicitFlags = args.flags or [];
-      # Convert ergonomic params to abstract flags
-      ergonomicFlags = flags.fromArgs args;
-    in
-    explicitFlags ++ ergonomicFlags;
-
   # Remove our special params from args before passing to mk* functions
   cleanArgs =
     args:
@@ -123,15 +110,6 @@ let
       "contentAddressed"  # Handled by extractToolchain, stored in toolchain
       "scanMode"          # Deprecated, all builds use dynamic mode now
       "dynamic"           # Deprecated alias
-      # Ergonomic flag params (converted to flags list)
-      "lto"
-      "sanitizers"
-      "coverage"
-      "optimize"
-      "debug"
-      "standard"
-      "warnings"
-      "pic"
     ];
 
   # ==========================================================================
@@ -142,42 +120,30 @@ let
   #
   # Arguments:
   #   compiler     - (optional) "clang", "gcc", or compiler family object
-  #   linker       - (optional) "lld", "mold", "gold", "ld", or linker object
+  #   linker       - (optional) "lld", "mold", "ld", or linker object
   #   toolchain    - (optional) Pre-built toolchain (overrides compiler/linker)
   #   name         - Target name
   #   root         - Source root directory
   #   sources      - List of source files
   #   includeDirs  - Include directories
   #   defines      - Preprocessor defines
-  #   flags        - Abstract flags (lto, sanitizers, etc.)
   #   compileFlags - Raw compile flags (all languages)
-  #   langFlags    - Per-language raw flags { c = [...]; cpp = [...]; }
-  #   ldflags      - Additional linker flags
+  #   languageFlags - Per-language raw flags { c = [...]; cpp = [...]; }
+  #   linkFlags    - Additional linker flags
   #   libraries    - Library dependencies
   #   tools        - Tool plugins (code generators, etc.)
-  #
-  # Ergonomic flag parameters (alternative to flags list):
-  #   lto          - LTO mode: "thin", "full", or true (defaults to thin)
-  #   sanitizers   - List of sanitizers: ["address", "undefined", ...]
-  #   coverage     - Enable coverage instrumentation: true/false
-  #   optimize     - Optimization level: "0", "1", "2", "3", "s", "z", "fast"
-  #   debug        - Debug info: "none", "line-tables", "full"
-  #   standard     - Language standard: "c++17", "c++20", "c11", etc.
-  #   warnings     - Warning level: "none", "default", "all", "extra", "pedantic"
-  #   pic          - Position independent code: true/false
   #
   executable =
     args:
     let
       toolchain = extractToolchain args;
-      abstractFlags = extractFlags args;
       cleanedArgs = cleanArgs args;
       # Validate root is provided with helpful error
       _ = if !(args ? root) then
         throw "nixnative.executable: 'root' is required. Add 'root = ./.;' to specify your project directory."
       else null;
     in
-    helpers.mkExecutable (cleanedArgs // { inherit toolchain; flags = abstractFlags; });
+    helpers.mkExecutable (cleanedArgs // { inherit toolchain; });
 
   # Build a static library (.a)
   #
@@ -190,32 +156,30 @@ let
     args:
     let
       toolchain = extractToolchain args;
-      abstractFlags = extractFlags args;
       cleanedArgs = cleanArgs args;
       # Validate root is provided with helpful error
       _ = if !(args ? root) then
         throw "nixnative.staticLib: 'root' is required. Add 'root = ./.;' to specify your project directory."
       else null;
     in
-    helpers.mkStaticLib (cleanedArgs // { inherit toolchain; flags = abstractFlags; });
+    helpers.mkStaticLib (cleanedArgs // { inherit toolchain; });
 
   # Build a shared library (.so/.dylib)
   #
   # Arguments same as staticLib, plus:
-  #   ldflags - Additional linker flags
+  #   linkFlags - Additional linker flags
   #
   sharedLib =
     args:
     let
       toolchain = extractToolchain args;
-      abstractFlags = extractFlags args;
       cleanedArgs = cleanArgs args;
       # Validate root is provided with helpful error
       _ = if !(args ? root) then
         throw "nixnative.sharedLib: 'root' is required. Add 'root = ./.;' to specify your project directory."
       else null;
     in
-    helpers.mkSharedLib (cleanedArgs // { inherit toolchain; flags = abstractFlags; });
+    helpers.mkSharedLib (cleanedArgs // { inherit toolchain; });
 
   # Create a header-only library (no compilation)
   #
@@ -244,13 +208,6 @@ let
 
   # Create a test runner
   test = helpers.mkTest;
-
-  # Create a static archive (.a) from a static library
-  #
-  # Use when you need an actual archive file for external distribution
-  # or traditional archive link semantics.
-  #
-  archive = helpers.mkArchive;
 
   # Create a standalone development shell (without a target)
   #
@@ -313,7 +270,6 @@ in
     devShell
     shell
     test
-    archive
     ;
 
   # Also expose resolvers for advanced use

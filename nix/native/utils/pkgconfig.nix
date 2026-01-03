@@ -63,14 +63,14 @@ let
 
             include_dirs = []
             defines = []
-            cxx_flags = []
+            compile_flags = []
             for token in cflags:
                 if token.startswith('-I'):
                     include_dirs.append(token[2:])
                 elif token.startswith('-D'):
                     defines.append(token[2:])
                 else:
-                    cxx_flags.append(token)
+                    compile_flags.append(token)
 
             link_flags = []
             rpath_dirs = []
@@ -99,7 +99,7 @@ let
 
             include_dirs = dedup(include_dirs)
             defines = dedup(defines)
-            cxx_flags = dedup(cxx_flags)
+            compile_flags = dedup(compile_flags)
             link_flags = dedup(link_flags)
 
             def quote(s):
@@ -115,8 +115,8 @@ let
                 for define in defines:
                     fh.write(f'    "{quote(define)}"\n')
                 fh.write("  ];\n")
-                fh.write("  cxxFlags = [\n")
-                for flag in cxx_flags:
+                fh.write("  compileFlags = [\n")
+                for flag in compile_flags:
                     fh.write(f'    "{quote(flag)}"\n')
                 fh.write("  ];\n")
                 fh.write("  linkFlags = [\n")
@@ -137,7 +137,7 @@ let
       public = {
         includeDirs = includeDirAttrs;
         defines = definesList;
-        cxxFlags = info.cxxFlags;
+        compileFlags = info.compileFlags;
         linkFlags = info.linkFlags;
       };
       # Expose all package outputs as evalInputs so scanner can add them to buildInputs

@@ -138,7 +138,7 @@ capturedRoot = utils.captureFiles {
 Libraries expose a `public` attribute with:
 - `includeDirs` - Header paths for consumers
 - `defines` - Preprocessor definitions to propagate
-- `cxxFlags` - Compiler flags to propagate
+- `compileFlags` - Compiler flags to propagate
 - `linkFlags` - Linker flags (e.g., `-lmylib`)
 
 When a target depends on a library, these are automatically merged into the build.

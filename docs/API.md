@@ -39,8 +39,8 @@ native.executable {
   includeDirs = [ "include" ];  # Include directories
   defines = [ "DEBUG" ];        # Preprocessor definitions
   compileFlags = [ "-O2" ];     # Additional compiler flags
-  langFlags = { cpp = [ "-std=c++20" ]; };  # Per-language flags
-  ldflags = [ "-lm" ];          # Additional linker flags
+  languageFlags = { cpp = [ "-std=c++20" ]; };  # Per-language flags
+  linkFlags = [ "-lm" ];          # Additional linker flags
   libraries = [ myLib ];        # Library dependencies
   tools = [ myTool ];           # Tool plugins (protobuf, jinja, etc.)
 
@@ -59,7 +59,7 @@ Builds a static library with public interface.
 
 ```nix
 native.staticLib {
-  name = "my-lib";
+  name = "libmylib";                  # Output: libmylib.a
   root = ./.;
   sources = [ "src/lib.cc" ];
   publicIncludeDirs = [ "include" ];  # Headers exposed to consumers
@@ -68,13 +68,15 @@ native.staticLib {
 }
 ```
 
+**Note:** The `name` is used exactly as specified for the output filename. Include the `lib` prefix for standard libraries (e.g., `name = "libfoo"` → `libfoo.a`). For plugins loaded via `dlopen()`, omit the prefix (e.g., `name = "my-plugin"` → `my-plugin.so`).
+
 ### `sharedLib`
 
 Builds a shared library (`.so`/`.dylib`).
 
 ```nix
 native.sharedLib {
-  name = "my-lib";
+  name = "libmylib";                  # Output: libmylib.so
   root = ./.;
   sources = [ "src/lib.cc" ];
   publicIncludeDirs = [ "include" ];
@@ -161,16 +163,10 @@ native.mkExecutable {
   includeDirs = [ "include" ];
   defines = [ "DEBUG" ];
   compileFlags = [ "-O2" ];
-  langFlags = { cpp = [ "-std=c++20" ]; };
-  ldflags = [ "-lm" ];
+  languageFlags = { cpp = [ "-std=c++20" ]; };
+  linkFlags = [ "-lm" ];
   libraries = [ myLib ];
   tools = [ myTool ];
-
-  # Abstract flags (alternative to ergonomic params)
-  flags = [
-    (native.flags.lto "thin")
-    (native.flags.sanitizer "address")
-  ];
 }
 ```
 
@@ -185,11 +181,10 @@ native.mkExecutable {
 | `includeDirs` | No | `[]` | Include directories |
 | `defines` | No | `[]` | Preprocessor definitions (strings or `{ name, value }` attrsets) |
 | `compileFlags` | No | `[]` | Additional compiler flags (all languages) |
-| `langFlags` | No | `{}` | Per-language compiler flags (`{ c = [...]; cpp = [...]; }`) |
-| `ldflags` | No | `[]` | Additional linker flags |
+| `languageFlags` | No | `{}` | Per-language compiler flags (`{ c = [...]; cpp = [...]; }`) |
+| `linkFlags` | No | `[]` | Additional linker flags |
 | `libraries` | No | `[]` | Library dependencies |
 | `tools` | No | `[]` | Code generators (see Tool Schema) |
-| `flags` | No | `[]` | Abstract flags (lto, sanitizers, etc.) |
 
 ### `mkStaticLib`
 
@@ -197,7 +192,7 @@ Builds a static library (`.a`) with explicit toolchain.
 
 ```nix
 native.mkStaticLib {
-  name = "my-lib";
+  name = "libmylib";                  # Output: libmylib.a
   root = ./.;
   sources = [ "src/lib.cc" ];
   toolchain = myToolchain;
@@ -212,7 +207,7 @@ Builds a shared library (`.so`/`.dylib`) with explicit toolchain.
 
 ```nix
 native.mkSharedLib {
-  name = "my-lib";
+  name = "libmylib";                  # Output: libmylib.so
   root = ./.;
   sources = [ "src/lib.cc" ];
   toolchain = myToolchain;
@@ -261,59 +256,6 @@ native.mkTest {
 
 ---
 
-## Abstract Flags
-
-nixnative provides an abstract flag system for compiler-agnostic optimization settings. These flags are translated to the correct CLI arguments for each compiler.
-
-### Ergonomic Syntax (Recommended)
-
-Use these parameters directly on builders:
-
-```nix
-native.executable {
-  name = "app";
-  sources = [ "main.cc" ];
-  lto = "thin";               # Link-time optimization
-  sanitizers = [ "address" ]; # Runtime sanitizers
-  coverage = true;            # Code coverage
-}
-```
-
-### Abstract Flag Objects
-
-For advanced use, pass the `flags` parameter with abstract flag objects:
-
-```nix
-native.executable {
-  name = "app";
-  sources = [ "main.cc" ];
-  flags = [
-    (native.flags.lto "thin")
-    (native.flags.sanitizer "address")
-    native.flags.coverage
-    (native.flags.optimize "2")
-    (native.flags.debug "full")
-    (native.flags.standard "c++20")
-    (native.flags.warnings "extra")
-  ];
-}
-```
-
-### Available Flag Constructors
-
-| Constructor | Arguments | Description |
-|-------------|-----------|-------------|
-| `flags.lto` | `"thin"`, `"full"`, or `true` | Link-time optimization |
-| `flags.sanitizer` | `"address"`, `"thread"`, `"undefined"`, `"memory"`, `"leak"` | Runtime sanitizer |
-| `flags.coverage` | (none) | Code coverage instrumentation |
-| `flags.optimize` | `"0"`, `"1"`, `"2"`, `"3"`, `"s"`, `"z"`, `"fast"` | Optimization level |
-| `flags.debug` | `"none"`, `"line-tables"`, `"full"` | Debug info level |
-| `flags.standard` | `"c++17"`, `"c++20"`, `"c++23"`, `"c11"`, `"c17"` | Language standard |
-| `flags.warnings` | `"none"`, `"default"`, `"all"`, `"extra"`, `"pedantic"` | Warning level |
-| `flags.pic` | (none) | Position-independent code |
-
----
-
 ## Tool Schema
 
 Tools allow you to integrate code generation (e.g., Jinja templates, protobuf, FlatBuffers) into the build pipeline. Use the `tools` parameter with any builder.
@@ -325,21 +267,12 @@ A tool is an attrset with the following shape:
   # Optional: name for error messages
   name = "my-generator";
 
-  # Optional: generated headers
-  headers = [
-    {
-      rel = "gen/config.h";        # Relative path in the build tree
-      path = generatorDrv + "/include/config.h";  # Actual file location
-      # Or use 'store' instead of 'path'
-    }
-  ];
-
-  # Optional: generated source files
-  sources = [
-    {
-      rel = "gen/generated.cc";    # Relative path (will be compiled)
-      path = generatorDrv + "/src/generated.cc";
-    }
+  # Generated files - categorized automatically by file extension
+  # Headers (.h, .hpp) are included but not compiled
+  # Sources (.c, .cc, .cpp) are compiled
+  outputs = [
+    { rel = "gen/config.h"; path = generatorDrv + "/config.h"; }
+    { rel = "gen/impl.cc"; path = generatorDrv + "/impl.cc"; }
   ];
 
   # Optional: additional include directories
@@ -349,26 +282,31 @@ A tool is an attrset with the following shape:
   defines = [ "GENERATED_CODE=1" ];
 
   # Optional: additional compiler flags
-  cxxFlags = [ ];
+  compileFlags = [ ];
 
   # Optional: public flags propagated to dependents
   public = {
     includeDirs = [ ];   # Must be a list
     defines = [ ];       # Must be a list
-    cxxFlags = [ ];      # Must be a list
+    compileFlags = [ ];  # Must be a list
     linkFlags = [ ];     # Must be a list
   };
 }
 ```
 
-### Tool Header/Source Entry Schema
+### Tool Output Entry Schema
 
-Each entry in `headers` or `sources` must have:
+Each entry in `outputs` must have:
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | `rel` (or `relative`) | Yes | Relative path in the build tree |
 | `path` or `store` | Yes | Actual file location (path or store path) |
+
+Files are automatically categorized by extension:
+- **Headers** (`.h`, `.hpp`, `.hxx`, `.hh`) - included but not compiled
+- **Sources** (`.c`, `.cc`, `.cpp`, `.cxx`) - compiled into objects
+- **Other** - treated as headers (included, not compiled)
 
 ### Minimal Tool Example
 
@@ -380,7 +318,7 @@ let
   '';
 in {
   name = "config-generator";
-  headers = [
+  outputs = [
     { rel = "include/config.h"; path = configHeader; }
   ];
   includeDirs = [ "include" ];
@@ -397,7 +335,7 @@ Libraries expose a `public` attribute that propagates flags to dependents:
 {
   includeDirs = [ ];   # List of include directories (paths or { path = ...; } attrsets)
   defines = [ ];       # List of preprocessor definitions
-  cxxFlags = [ ];      # List of compiler flags
+  compileFlags = [ ];  # List of compiler flags
   linkFlags = [ ];     # List of linker flags (e.g., library paths, -l flags)
 }
 ```
@@ -471,8 +409,10 @@ myTool = native.mkTool {
 
   # Output schema: describes what the tool produces
   outputs = { drv, inputFiles, config }: {
-    headers = [ { rel = "gen/output.h"; store = "${drv}/output.h"; } ];
-    sources = [ { rel = "gen/output.cc"; store = "${drv}/output.cc"; } ];
+    outputs = [
+      { rel = "gen/output.h"; path = "${drv}/output.h"; }
+      { rel = "gen/output.cc"; path = "${drv}/output.cc"; }
+    ];
     includeDirs = [ { path = drv; } ];
   };
 

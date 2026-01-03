@@ -16,7 +16,7 @@ let
   #   - Output is a .a archive, not an executable
   #   - The `public` attribute propagates interface to dependents
   mathLibrary = native.staticLib {
-    name = "math-example";
+    name = "libmath-example";
     inherit root includeDirs sources;
 
     # Headers to install and expose to consumers

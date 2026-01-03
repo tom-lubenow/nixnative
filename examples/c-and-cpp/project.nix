@@ -14,7 +14,7 @@ let
 
   # C library as separate target
   cLib = native.staticLib {
-    name = "clib";
+    name = "libclib";
     root = ./.;
     sources = [ "clib.c" ];
     includeDirs = [ "include" ];
