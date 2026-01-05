@@ -55,12 +55,17 @@ let
       cCompiler = toolchain.getCompilerForLanguage "c";
       cxxCompiler = toolchain.getCompilerForLanguage "cpp";
 
+      # Get default flags from toolchain (e.g., -std=c++20, -Wall, -Wextra)
+      cDefaultFlags = toolchain.getDefaultFlagsForLanguage "c";
+      cppDefaultFlags = toolchain.getDefaultFlagsForLanguage "cpp";
+
       cSources = builtins.filter (s: s.lang == "c") sources;
       cppSources = builtins.filter (s: s.lang == "cpp") sources;
 
       baseIncludeDefines = formatIncludes includeDirs + " " + formatDefines defines;
-      cFlags = formatFlags (extraCFlags ++ compileFlags ++ (languageFlags.c or [])) + " " + baseIncludeDefines;
-      cppFlags = formatFlags (extraCFlags ++ compileFlags ++ (languageFlags.cpp or [])) + " " + baseIncludeDefines;
+      # Include toolchain defaults first, then user overrides
+      cFlags = formatFlags (cDefaultFlags ++ extraCFlags ++ compileFlags ++ (languageFlags.c or [])) + " " + baseIncludeDefines;
+      cppFlags = formatFlags (cppDefaultFlags ++ extraCFlags ++ compileFlags ++ (languageFlags.cpp or [])) + " " + baseIncludeDefines;
 
       allObjects = map (s: s.objectName) sources;
 
