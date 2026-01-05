@@ -263,7 +263,7 @@ let
   # Pre-Built Toolchains
   # ==========================================================================
 
-  toolchains = {
+  toolchains = rec {
     # ========================================================================
     # Clang Toolchains
     # ========================================================================
@@ -423,7 +423,6 @@ in
     devShell
     shell
     test
-    archive
     ;
 
   # Project defaults - create scoped builders with shared settings

@@ -108,8 +108,13 @@ let
       # compiler can determine the source language.
       storePath =
         if srcInfo.store != null then
-          # Tool-generated sources already have a store path
+          # Tool-generated sources already have a store path (explicit)
           "${srcInfo.store}"
+        else if builtins.isString srcInfo.path && builtins.hasContext srcInfo.path then
+          # Tool-generated sources with derivation context in path string
+          # (e.g., "${drv}/foo.pb.cc"). Don't call builtins.path - that would
+          # try to read the file at eval time before the derivation is built.
+          srcInfo.path
         else
           # Regular source file: create an individual store path
           # builtins.path copies just this one file to the store
