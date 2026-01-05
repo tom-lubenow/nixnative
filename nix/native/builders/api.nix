@@ -43,7 +43,13 @@ let
     if spec == null then
       compilers.clang
     else if builtins.isString spec then
-      compilers.${spec} or (throw "Unknown compiler: '${spec}'. Available: clang, gcc")
+      let
+        resolved = compilers.${spec} or null;
+      in
+      if resolved == null then
+        throw "Unknown or unavailable compiler: '${spec}'. Available: clang, gcc"
+      else
+        resolved
     else if builtins.isAttrs spec && spec ? c && spec ? cpp then
       spec # Already a compiler family object
     else
@@ -57,7 +63,13 @@ let
     if spec == null then
       null  # Return null to let extractToolchain pick based on compiler
     else if builtins.isString spec then
-      linkers.${spec} or (throw "Unknown linker: '${spec}'. Available: lld, mold, ld")
+      let
+        resolved = linkers.${spec} or null;
+      in
+      if resolved == null then
+        throw "Unknown or unavailable linker: '${spec}'. Available: lld, mold, ld"
+      else
+        resolved
     else if builtins.isAttrs spec && spec ? driverFlag then
       spec # Already a linker object
     else
@@ -85,7 +97,9 @@ let
         explicitLinker = resolveLinker (args.linker or null);
         # GCC doesn't support -fuse-ld=/full/path, so default to GNU ld for GCC
         # Clang defaults to LLD
-        isGcc = args.compiler or null == "gcc";
+        isGcc =
+          (args.compiler or null == "gcc")
+          || (compilerFamily ? name && lib.hasPrefix "gcc" compilerFamily.name);
         linker = if explicitLinker != null then explicitLinker
                  else if isGcc then linkers.ld
                  else linkers.default;
@@ -108,9 +122,183 @@ let
       "linker"
       "toolchain"
       "contentAddressed"  # Handled by extractToolchain, stored in toolchain
+      "lto"
+      "sanitizers"
+      "coverage"
+      "optimize"
+      "warnings"
       "scanMode"          # Deprecated, all builds use dynamic mode now
       "dynamic"           # Deprecated alias
     ];
+
+  # Expand ergonomic flags (lto, sanitizers, coverage, optimize, warnings)
+  # into concrete compiler/linker flags for the detected toolchain.
+  applyErgonomicFlags =
+    {
+      toolchain,
+      args,
+    }:
+    let
+      lang =
+        if toolchain.languages ? cpp then toolchain.languages.cpp
+        else if toolchain.languages ? c then toolchain.languages.c
+        else
+          throw "nixnative: toolchain has no C/C++ language for ergonomic flags";
+
+      langName = lang.name or "";
+      compilerPath = lang.compiler or "";
+
+      isClang =
+        lib.hasPrefix "clang" langName
+        || lib.hasInfix "/clang" compilerPath;
+      isGcc =
+        lib.hasPrefix "gcc" langName
+        || lib.hasInfix "/gcc" compilerPath
+        || lib.hasInfix "/g++" compilerPath;
+
+      compilerFlavor =
+        if isClang then "clang"
+        else if isGcc then "gcc"
+        else "unknown";
+
+      caps = lang.capabilities or { };
+
+      # Optimization flags
+      optimizeValue =
+        if !(args ? optimize) || args.optimize == null then
+          null
+        else if builtins.isInt args.optimize then
+          toString args.optimize
+        else if builtins.isString args.optimize then
+          args.optimize
+        else
+          throw "optimize must be a string or int (e.g., \"2\" or 2)";
+
+      optimizeFlags =
+        if optimizeValue == null then
+          [ ]
+        else if builtins.elem optimizeValue [ "0" "1" "2" "3" ] then
+          [ "-O${optimizeValue}" ]
+        else if optimizeValue == "s" then
+          [ "-Os" ]
+        else if optimizeValue == "z" then
+          if compilerFlavor == "clang" then [ "-Oz" ] else [ "-Os" ]
+        else if optimizeValue == "fast" then
+          [ "-Ofast" ]
+        else
+          throw "Invalid optimize setting: '${optimizeValue}'";
+
+      # Warning level flags
+      warningsValue = args.warnings or null;
+      warningFlags =
+        if warningsValue == null || warningsValue == "default" then
+          [ ]
+        else if warningsValue == "none" then
+          [ "-w" ]
+        else if warningsValue == "all" then
+          [ "-Wall" ]
+        else if warningsValue == "extra" then
+          [ "-Wall" "-Wextra" ]
+        else if warningsValue == "pedantic" then
+          [ "-Wall" "-Wextra" "-pedantic" ]
+        else
+          throw "Invalid warnings setting: '${warningsValue}'";
+
+      # Sanitizers
+      requestedSanitizers =
+        if !(args ? sanitizers) || args.sanitizers == null then [ ] else args.sanitizers;
+      _ = if !(builtins.isList requestedSanitizers) then
+        throw "sanitizers must be a list (e.g., [ \"address\" \"undefined\" ])"
+      else null;
+      supportedSanitizers = caps.sanitizers or [ ];
+      unsupportedSanitizers =
+        builtins.filter (s: !(builtins.elem s supportedSanitizers)) requestedSanitizers;
+
+      sanitizerFlags =
+        if requestedSanitizers == [ ] then
+          { compile = [ ]; link = [ ]; }
+        else if unsupportedSanitizers != [ ] then
+          throw "Unsupported sanitizers for ${langName}: ${lib.concatStringsSep ", " unsupportedSanitizers}"
+        else
+          let
+            sanFlag = "-fsanitize=${lib.concatStringsSep "," requestedSanitizers}";
+          in
+          {
+            compile = [ sanFlag "-fno-omit-frame-pointer" ];
+            link = [ sanFlag ];
+          };
+
+      # Coverage
+      coverageEnabled =
+        if !(args ? coverage) || args.coverage == null then false else args.coverage;
+      coverageFlags =
+        if !coverageEnabled then
+          { compile = [ ]; link = [ ]; }
+        else if !(caps.coverage or false) then
+          throw "coverage not supported by compiler '${langName}'"
+        else if compilerFlavor == "clang" then
+          {
+            compile = [ "-fprofile-instr-generate" "-fcoverage-mapping" ];
+            link = [ "-fprofile-instr-generate" ];
+          }
+        else if compilerFlavor == "gcc" then
+          {
+            compile = [ "--coverage" ];
+            link = [ "--coverage" ];
+          }
+        else
+          throw "coverage flag mapping not implemented for compiler '${langName}'";
+
+      # LTO
+      ltoValue =
+        if !(args ? lto) || args.lto == null || args.lto == false then
+          null
+        else if args.lto == true then
+          "full"
+        else if builtins.isString args.lto then
+          args.lto
+        else
+          throw "lto must be false, true, \"thin\", or \"full\"";
+
+      ltoCaps = caps.lto or null;
+      ltoFlags =
+        if ltoValue == null then
+          { compile = [ ]; link = [ ]; }
+        else if ltoValue == "thin" then
+          if ltoCaps == null || !(ltoCaps.thin or false) then
+            throw "thin LTO not supported by compiler '${langName}'"
+          else if compilerFlavor != "clang" then
+            throw "thin LTO flag mapping not implemented for compiler '${langName}'"
+          else
+            { compile = [ "-flto=thin" ]; link = [ "-flto=thin" ]; }
+        else if ltoValue == "full" then
+          if ltoCaps == null || !(ltoCaps.full or false) then
+            throw "full LTO not supported by compiler '${langName}'"
+          else
+            { compile = [ "-flto" ]; link = [ "-flto" ]; }
+        else
+          throw "Invalid lto setting: '${ltoValue}'";
+
+      extraCompileFlags =
+        optimizeFlags
+        ++ warningFlags
+        ++ sanitizerFlags.compile
+        ++ coverageFlags.compile
+        ++ ltoFlags.compile;
+
+      extraLinkFlags =
+        sanitizerFlags.link
+        ++ coverageFlags.link
+        ++ ltoFlags.link;
+
+      baseCompileFlags = args.compileFlags or [ ];
+      baseLinkFlags = args.linkFlags or [ ];
+    in
+    args
+    // {
+      compileFlags = extraCompileFlags ++ baseCompileFlags;
+      linkFlags = extraLinkFlags ++ baseLinkFlags;
+    };
 
   # ==========================================================================
   # High-Level Builders
@@ -137,7 +325,8 @@ let
     args:
     let
       toolchain = extractToolchain args;
-      cleanedArgs = cleanArgs args;
+      adjustedArgs = applyErgonomicFlags { inherit toolchain args; };
+      cleanedArgs = cleanArgs adjustedArgs;
       # Validate root is provided with helpful error
       _ = if !(args ? root) then
         throw "nixnative.executable: 'root' is required. Add 'root = ./.;' to specify your project directory."
@@ -156,7 +345,8 @@ let
     args:
     let
       toolchain = extractToolchain args;
-      cleanedArgs = cleanArgs args;
+      adjustedArgs = applyErgonomicFlags { inherit toolchain args; };
+      cleanedArgs = cleanArgs adjustedArgs;
       # Validate root is provided with helpful error
       _ = if !(args ? root) then
         throw "nixnative.staticLib: 'root' is required. Add 'root = ./.;' to specify your project directory."
@@ -173,7 +363,8 @@ let
     args:
     let
       toolchain = extractToolchain args;
-      cleanedArgs = cleanArgs args;
+      adjustedArgs = applyErgonomicFlags { inherit toolchain args; };
+      cleanedArgs = cleanArgs adjustedArgs;
       # Validate root is provided with helpful error
       _ = if !(args ? root) then
         throw "nixnative.sharedLib: 'root' is required. Add 'root = ./.;' to specify your project directory."

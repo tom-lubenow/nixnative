@@ -320,7 +320,7 @@ let
     # ========================================================================
 
     # Default toolchain for current platform
-    default = toolchains.clang-lld;
+    default = clang-lld;
   };
 
   # ==========================================================================

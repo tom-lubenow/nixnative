@@ -58,14 +58,15 @@ let
       # Get default flags from toolchain (e.g., -std=c++20, -Wall, -Wextra)
       cDefaultFlags = toolchain.getDefaultFlagsForLanguage "c";
       cppDefaultFlags = toolchain.getDefaultFlagsForLanguage "cpp";
+      platformCompileFlags = toolchain.getPlatformCompileFlags or [ ];
 
       cSources = builtins.filter (s: s.lang == "c") sources;
       cppSources = builtins.filter (s: s.lang == "cpp") sources;
 
       baseIncludeDefines = formatIncludes includeDirs + " " + formatDefines defines;
       # Include toolchain defaults first, then user overrides
-      cFlags = formatFlags (cDefaultFlags ++ extraCFlags ++ compileFlags ++ (languageFlags.c or [])) + " " + baseIncludeDefines;
-      cppFlags = formatFlags (cppDefaultFlags ++ extraCFlags ++ compileFlags ++ (languageFlags.cpp or [])) + " " + baseIncludeDefines;
+      cFlags = formatFlags (cDefaultFlags ++ platformCompileFlags ++ extraCFlags ++ compileFlags ++ (languageFlags.c or [])) + " " + baseIncludeDefines;
+      cppFlags = formatFlags (cppDefaultFlags ++ platformCompileFlags ++ extraCFlags ++ compileFlags ++ (languageFlags.cpp or [])) + " " + baseIncludeDefines;
 
       allObjects = map (s: s.objectName) sources;
 
@@ -90,6 +91,7 @@ let
       inherit cxxCompiler allObjects compileRules buildStatements;
       linkerFlag = toolchain.linker.driverFlag or "";
       cxxRuntimeLibPath = toolchain.cxxRuntimeLibPath or null;
+      platformLinkFlags = toolchain.getPlatformLinkerFlags or [ ];
     };
 
 in
@@ -127,7 +129,7 @@ in
 
       # Link executable
       build ${name}: link_exe ${concatStringsSep " " prep.allObjects}
-        LDFLAGS = ${formatFlags (rpathFlags ++ linkFlags)}
+        LDFLAGS = ${formatFlags (rpathFlags ++ prep.platformLinkFlags ++ linkFlags)}
 
       default ${name}
     '';
@@ -178,10 +180,13 @@ in
     linkFlags,
   }:
     let
-      # Pass -fPIC as extra compile flag for shared libraries
+      # Pass -fPIC as extra compile flag for shared libraries (avoid duplicates)
       prep = prepareCompilation {
         inherit name sources toolchain includeDirs defines compileFlags languageFlags;
-        extraCFlags = [ "-fPIC" ];
+        extraCFlags =
+          if builtins.elem "-fPIC" (toolchain.getPlatformCompileFlags or [ ])
+          then [ ]
+          else [ "-fPIC" ];
       };
       rpathFlags = if prep.cxxRuntimeLibPath != null
         then [ "-Wl,-rpath,${prep.cxxRuntimeLibPath}" ]
@@ -202,7 +207,7 @@ in
 
       # Link shared library
       build ${sharedLibName}: link_shared ${concatStringsSep " " prep.allObjects}
-        LDFLAGS = ${formatFlags (rpathFlags ++ linkFlags)}
+        LDFLAGS = ${formatFlags (rpathFlags ++ prep.platformLinkFlags ++ linkFlags)}
 
       default ${sharedLibName}
     '';

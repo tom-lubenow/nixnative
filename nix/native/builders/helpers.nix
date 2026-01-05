@@ -57,7 +57,7 @@ let
     else null;
 
   # Normalize a source file for ninja consumption
-  # Returns: { storePath, relNorm, objectName, lang }
+  # Returns: { storePath, relNorm, objectName, lang, path }
   #
   # For incremental builds, each source file gets its own store path via builtins.path.
   # This ensures that changing one file only invalidates derivations that depend on it.
@@ -96,6 +96,11 @@ let
         else srcInfo.rel;
 
       lang = detectLanguage relNorm;
+      _ =
+        if lang == null then
+          throw "nixnative: unsupported source extension for '${relNorm}'"
+        else
+          null;
       ext = lib.last (lib.splitString "." relNorm);
       baseName = lib.removeSuffix ".${ext}" relNorm;
       # Include extension in object name to avoid collisions (foo.c → foo-c.o, foo.cc → foo-cc.o)
@@ -129,6 +134,7 @@ let
     in
     {
       inherit storePath relNorm objectName lang;
+      path = srcInfo.path;
     };
 
   # Normalize all sources for ninja (with glob expansion)
@@ -145,7 +151,7 @@ let
     map (source: normalizeSourceForNinja { inherit root source; }) expandedSources;
 
   # Common preparation for all target types
-  # Returns: { normalizedSources, resolvedIncludeDirs, combinedDefines, combinedCompileFlags, legacyLinkFlags, libraryInputs }
+  # Returns: { normalizedSources, resolvedIncludeDirs, combinedDefines, combinedCompileFlags, legacyLinkFlags, wrappedLinkFlags, libraryInputs }
   prepareTarget = {
     toolchain,
     root,
@@ -208,6 +214,11 @@ let
 
       # Collect legacy link flags (for external libs like pkg-config)
       legacyLinkFlags = collectLinkFlags libraries;
+      wrappedLinkFlags =
+        if legacyLinkFlags == [ ] then
+          [ ]
+        else
+          tc.wrapLibraryFlags legacyLinkFlags;
 
       # Normalize sources for ninja
       normalizedSources = normalizeSourcesForNinja {
@@ -228,11 +239,95 @@ let
       # Collect library wrapper derivations for dependency tracking
       libraryInputs = collectLibraryInputs libraries;
     in {
-      inherit normalizedSources resolvedIncludeDirs combinedDefines combinedCompileFlags;
-      inherit legacyLinkFlags libraryInputs;
+      inherit normalizedSources resolvedIncludeDirs combinedIncludeDirs combinedDefines combinedCompileFlags;
+      inherit legacyLinkFlags wrappedLinkFlags libraryInputs;
       inherit rootPath publicAggregate;
       runtimeInputs = tc.runtimeInputs;
     };
+
+  # Create compile_commands.json for a target
+  mkCompileCommands =
+    {
+      name,
+      root,
+      toolchain,
+      sources,
+      includeDirs,
+      defines,
+      compileFlags,
+      languageFlags,
+      extraCFlags ? [],
+    }:
+    let
+      rootStr =
+        if builtins.isPath root then toString root
+        else if builtins.isString root then root
+        else if root ? path then toString root.path
+        else throw "Invalid root: ${builtins.toJSON root}";
+
+      mkIncludeDir = dir:
+        if builtins.isString dir then
+          if hasPrefix "/" dir then dir else "${rootStr}/${dir}"
+        else if builtins.isPath dir then
+          toString dir
+        else if builtins.isAttrs dir && dir ? path then
+          toString dir.path
+        else
+          throw "Invalid include dir: ${builtins.toJSON dir}";
+
+      mkIncludeFlag = dir: "-I${mkIncludeDir dir}";
+      mkDefineFlag = d:
+        if builtins.isString d then "-D${d}"
+        else if d ? name && d ? value then "-D${d.name}=${toString d.value}"
+        else if d ? name then "-D${d.name}"
+        else throw "Invalid define: ${builtins.toJSON d}";
+
+      commonIncludes = map mkIncludeFlag includeDirs;
+      commonDefines = map mkDefineFlag defines;
+
+      baseCompileFlags =
+        (toolchain.getPlatformCompileFlags or [ ])
+        ++ extraCFlags
+        ++ compileFlags;
+
+      mkLangFlags = langKey:
+        (toolchain.getDefaultFlagsForLanguage langKey)
+        ++ baseCompileFlags
+        ++ (languageFlags.${langKey} or [ ])
+        ++ commonIncludes
+        ++ commonDefines;
+
+      mkCommand = source:
+        let
+          srcPath = toString source.path;
+          objectName = source.objectName;
+          depFile = "${objectName}.d";
+          compiler =
+            if source.lang == "c" then toolchain.getCompilerForLanguage "c"
+            else toolchain.getCompilerForLanguage "cpp";
+          flags =
+            if source.lang == "c" then mkLangFlags "c" else mkLangFlags "cpp";
+        in
+        {
+          directory = rootStr;
+          file = srcPath;
+          arguments =
+            [ compiler ]
+            ++ flags
+            ++ [
+              "-MD"
+              "-MF"
+              depFile
+              "-c"
+              srcPath
+              "-o"
+              objectName
+            ];
+        };
+
+      commands = map mkCommand sources;
+    in
+    pkgs.writeText "${name}-compile_commands.json" (builtins.toJSON commands);
 
 in
 rec {
@@ -266,7 +361,15 @@ rec {
         includeDirs = prep.resolvedIncludeDirs;
         defines = prep.combinedDefines;
         compileFlags = prep.combinedCompileFlags;
-        linkFlags = linkFlags ++ prep.legacyLinkFlags;
+        linkFlags = linkFlags ++ prep.wrappedLinkFlags;
+      };
+
+      compileCommands = mkCompileCommands {
+        inherit name root toolchain languageFlags;
+        sources = prep.normalizedSources;
+        includeDirs = prep.combinedIncludeDirs;
+        defines = prep.combinedDefines;
+        compileFlags = prep.combinedCompileFlags;
       };
 
       # Extract individual source file store paths for incremental builds
@@ -290,10 +393,12 @@ rec {
       artifactType = "executable";
       inherit name libraries tools;
       executablePath = "${targetOut}/bin/${name}";
+      inherit compileCommands;
       passthru = wrapper.passthru // {
         inherit toolchain;
         tus = prep.normalizedSources;
         inherit ninjaContent;
+        inherit compileCommands;
       };
     };
 
@@ -346,6 +451,14 @@ rec {
         compileFlags = prep.combinedCompileFlags;
       };
 
+      compileCommands = mkCompileCommands {
+        inherit name root toolchain languageFlags;
+        sources = prep.normalizedSources;
+        includeDirs = prep.combinedIncludeDirs;
+        defines = prep.combinedDefines;
+        compileFlags = prep.combinedCompileFlags;
+      };
+
       # Extract individual source file store paths for incremental builds
       sourceFilePaths = map (s: s.storePath) prep.normalizedSources;
 
@@ -378,10 +491,12 @@ rec {
       inherit name libraries tools;
       archivePath = "${archiveOut}/${archiveName}";
       public = combinedPublic;
+      inherit compileCommands;
       passthru = wrapper.passthru // {
         inherit toolchain;
         tus = prep.normalizedSources;
         inherit ninjaContent;
+        inherit compileCommands;
       };
     };
 
@@ -425,13 +540,27 @@ rec {
 
       sharedName = "${name}.so";
 
+      sharedExtraCFlags =
+        if builtins.elem "-fPIC" (toolchain.getPlatformCompileFlags or [ ])
+        then [ ]
+        else [ "-fPIC" ];
+
       ninjaContent = ninja.generateSharedLib {
         inherit name toolchain languageFlags;
         sources = prep.normalizedSources;
         includeDirs = prep.resolvedIncludeDirs;
         defines = prep.combinedDefines;
         compileFlags = prep.combinedCompileFlags;
-        linkFlags = linkFlags ++ prep.legacyLinkFlags;
+        linkFlags = linkFlags ++ prep.wrappedLinkFlags;
+      };
+
+      compileCommands = mkCompileCommands {
+        inherit name root toolchain languageFlags;
+        sources = prep.normalizedSources;
+        includeDirs = prep.combinedIncludeDirs;
+        defines = prep.combinedDefines;
+        compileFlags = prep.combinedCompileFlags;
+        extraCFlags = sharedExtraCFlags;
       };
 
       # Extract individual source file store paths for incremental builds
@@ -468,10 +597,12 @@ rec {
       inherit name libraries tools;
       sharedLibrary = sharedLibPath;
       public = combinedPublic;
+      inherit compileCommands;
       passthru = wrapper.passthru // {
         inherit toolchain;
         tus = prep.normalizedSources;
         inherit ninjaContent;
+        inherit compileCommands;
       };
     };
 
