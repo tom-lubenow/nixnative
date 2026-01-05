@@ -98,7 +98,10 @@ let
       lang = detectLanguage relNorm;
       ext = lib.last (lib.splitString "." relNorm);
       baseName = lib.removeSuffix ".${ext}" relNorm;
-      objectName = sanitizeName baseName + ".o";
+      # Include extension in object name to avoid collisions (foo.c → foo-c.o, foo.cc → foo-cc.o)
+      # Don't use sanitizeName since it strips extensions - just replace special chars
+      sanitizedPath = lib.replaceStrings [ "/" ":" " " "." ] [ "-" "-" "-" "-" ] relNorm;
+      objectName = sanitizedPath + ".o";
 
       # For incremental builds: create individual store paths for each source file
       # This is the key to incrementality - each file is its own store path, so
