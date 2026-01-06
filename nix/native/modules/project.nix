@@ -13,10 +13,163 @@ let
   types = lib.types;
 
   listOfStrings = types.listOf types.str;
+  listOfLinkFlags = types.listOf (types.oneOf [ types.str types.path ]);
   pathLike = types.oneOf [ types.path types.str types.attrs ];
   listOfPathLike = types.listOf pathLike;
   defineType = types.oneOf [ types.str types.attrs ];
   listOfDefines = types.listOf defineType;
+
+  emptyPublic = {
+    includeDirs = [ ];
+    defines = [ ];
+    compileFlags = [ ];
+    linkFlags = [ ];
+  };
+
+  publicType = types.submodule ({ lib, ... }: {
+    options = {
+      includeDirs = lib.mkOption {
+        type = listOfPathLike;
+        default = [ ];
+        description = "Public include dirs.";
+      };
+
+      defines = lib.mkOption {
+        type = listOfDefines;
+        default = [ ];
+        description = "Public defines.";
+      };
+
+      compileFlags = lib.mkOption {
+        type = listOfStrings;
+        default = [ ];
+        description = "Public compile flags.";
+      };
+
+      linkFlags = lib.mkOption {
+        type = listOfLinkFlags;
+        default = [ ];
+        description = "Public link flags.";
+      };
+    };
+  });
+
+  libraryTargetRefType =
+    types.addCheck (types.submodule ({ lib, ... }: {
+      options = {
+        target = lib.mkOption {
+          type = types.str;
+          description = "Target reference name.";
+        };
+      };
+    })) (value: builtins.isAttrs value && value ? target);
+
+  libraryPublicType =
+    types.addCheck (types.submodule ({ lib, ... }: {
+      options = {
+        public = lib.mkOption {
+          type = publicType;
+          description = "Public interface for a library dependency.";
+        };
+      };
+      freeformType = types.attrs;
+    })) (value: builtins.isAttrs value && value ? public);
+
+  libraryLinkFlagsType =
+    types.addCheck (types.submodule ({ lib, ... }: {
+      options = {
+        linkFlags = lib.mkOption {
+          type = listOfLinkFlags;
+          description = "Raw link flags for a library dependency.";
+        };
+      };
+      freeformType = types.attrs;
+    })) (value: builtins.isAttrs value && value ? linkFlags);
+
+  libraryType = types.oneOf [
+    types.str
+    types.path
+    libraryTargetRefType
+    libraryPublicType
+    libraryLinkFlagsType
+  ];
+
+  isPathLikeValue = value:
+    builtins.isPath value
+    || builtins.isString value
+    || (builtins.isAttrs value && (value ? path || value ? outPath));
+
+  toolOutputType =
+    types.addCheck types.attrs (
+      value:
+      let
+        relValue =
+          if value ? rel then
+            value.rel
+          else if value ? relative then
+            value.relative
+          else
+            null;
+        pathValue =
+          if value ? path then
+            value.path
+          else if value ? store then
+            value.store
+          else
+            null;
+      in
+      builtins.isAttrs value
+      && relValue != null
+      && builtins.isString relValue
+      && pathValue != null
+      && isPathLikeValue pathValue
+    );
+
+  toolType = types.submodule ({ lib, ... }: {
+    options = {
+      name = lib.mkOption {
+        type = types.str;
+        description = "Tool identifier.";
+      };
+
+      outputs = lib.mkOption {
+        type = types.listOf toolOutputType;
+        default = [ ];
+        description = "Generated outputs from the tool.";
+      };
+
+      includeDirs = lib.mkOption {
+        type = listOfPathLike;
+        default = [ ];
+        description = "Include dirs provided by the tool.";
+      };
+
+      defines = lib.mkOption {
+        type = listOfDefines;
+        default = [ ];
+        description = "Additional preprocessor defines from the tool.";
+      };
+
+      compileFlags = lib.mkOption {
+        type = listOfStrings;
+        default = [ ];
+        description = "Additional compile flags from the tool.";
+      };
+
+      evalInputs = lib.mkOption {
+        type = types.listOf types.package;
+        default = [ ];
+        description = "Evaluation inputs for the tool.";
+      };
+
+      public = lib.mkOption {
+        type = publicType;
+        default = emptyPublic;
+        description = "Public interface exposed by the tool.";
+      };
+    };
+    freeformType = types.attrs;
+  });
 
   mergeDefaults = defaults: target:
     let
@@ -150,13 +303,13 @@ let
         };
 
         libraries = lib.mkOption {
-          type = types.listOf types.anything;
+          type = types.listOf libraryType;
           default = [ ];
           description = "Library dependencies.";
         };
 
         tools = lib.mkOption {
-          type = types.listOf types.anything;
+          type = types.listOf toolType;
           default = [ ];
           description = "Tool plugins (code generators, etc.).";
         };
@@ -241,13 +394,13 @@ let
         };
 
         libraries = lib.mkOption {
-          type = types.listOf types.anything;
+          type = types.listOf libraryType;
           default = [ ];
           description = "Default libraries.";
         };
 
         tools = lib.mkOption {
-          type = types.listOf types.anything;
+          type = types.listOf toolType;
           default = [ ];
           description = "Default tools.";
         };
@@ -402,22 +555,14 @@ let
 
       resolvedTargets = lib.mapAttrs resolveTarget cfg.targets;
 
+      resolveTargetAttrRef = value:
+        if builtins.isAttrs value && value ? target then
+          packages.${value.target} or (throw "nixnative.project: unknown target '${value.target}'")
+        else
+          value;
+
       resolveLibraryRefs = libs:
-        let
-          isLikelyTargetRef = value:
-            builtins.isString value
-            && !(lib.hasPrefix "-" value)
-            && !(lib.hasInfix "/" value)
-            && packages ? ${value};
-          resolveOne = libRef:
-            if builtins.isAttrs libRef && libRef ? target then
-              packages.${libRef.target} or (throw "nixnative.project: unknown target '${libRef.target}'")
-            else if isLikelyTargetRef libRef then
-              packages.${libRef}
-            else
-              libRef;
-        in
-        map resolveOne libs;
+        map resolveTargetAttrRef libs;
 
       buildTarget = target:
         let
@@ -502,21 +647,7 @@ let
       devShells = lib.mapAttrs buildShell cfg.shells;
 
       resolveExtraOutputs = extras:
-        let
-          isLikelyTargetRef = value:
-            builtins.isString value
-            && !(lib.hasPrefix "-" value)
-            && !(lib.hasInfix "/" value)
-            && packages ? ${value};
-          resolveOne = value:
-            if builtins.isAttrs value && value ? target then
-              packages.${value.target} or (throw "nixnative.project: unknown target '${value.target}'")
-            else if isLikelyTargetRef value then
-              packages.${value}
-            else
-              value;
-        in
-        lib.mapAttrs (_: resolveOne) extras;
+        lib.mapAttrs (_: resolveTargetAttrRef) extras;
 
       packages = builtPackages // resolveExtraOutputs cfg.extraPackages;
       checks = builtChecks // resolveExtraOutputs cfg.extraChecks;
