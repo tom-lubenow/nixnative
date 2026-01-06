@@ -58,6 +58,9 @@
         { pkgs, native, examples, ... }:
         {
           default = native.mkBuildAllCheck pkgs "nixnative-examples" (builtins.attrValues examples.packages);
+
+          # Generated API documentation from module system
+          docs-generated = import ./nix/docs { inherit pkgs; };
         }
       );
 

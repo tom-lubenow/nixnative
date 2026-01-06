@@ -1,0 +1,16 @@
+[book]
+title = "nixnative Documentation"
+authors = ["nixnative contributors"]
+language = "en"
+multilingual = false
+src = "src"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+default-theme = "rust"
+preferred-dark-theme = "coal"
+git-repository-url = "https://github.com/tom-lubenow/nixnative"
+edit-url-template = "https://github.com/tom-lubenow/nixnative/edit/main/docs/{path}"
