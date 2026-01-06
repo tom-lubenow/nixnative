@@ -350,9 +350,14 @@ let
       ;
   };
 
-  # Project defaults
-  project = import ./builders/project.nix {
+  # Project defaults (legacy mkProject)
+  projectBuilders = import ./builders/project.nix {
     inherit lib api helpers;
+  };
+
+  # Module-first project interface
+  projectModules = import ./modules/project.nix {
+    inherit lib pkgs api helpers;
   };
 
   # Installation packaging
@@ -425,8 +430,12 @@ in
     test
     ;
 
-  # Project defaults - create scoped builders with shared settings
-  inherit (project) mkProject;
+  # Module-first project evaluation
+  project = projectModules.evalProject;
+  projectModule = projectModules.projectModule;
+
+  # Project defaults - create scoped builders with shared settings (legacy)
+  inherit (projectBuilders) mkProject;
 
   # Installation packaging - create installable packages
   inherit (installation) mkInstallation;
@@ -508,8 +517,14 @@ in
         then pkg.passthru.target
         else pkg
       ) packages;
+      validInputs = pkg:
+        pkg == null
+        || lib.isDerivation pkg
+        || builtins.isString pkg
+        || builtins.isPath pkg;
+      filteredPkgs = builtins.filter validInputs realizedPkgs;
     in pkgs'.runCommand "${name}-all-check" {
-      buildInputs = realizedPkgs;
+      buildInputs = filteredPkgs;
     } ''
       mkdir -p $out
       echo "All ${name} components built successfully" > $out/result

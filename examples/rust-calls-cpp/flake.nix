@@ -28,21 +28,28 @@
               inherit (ninjaPackages) nix-ninja nix-ninja-task;
             };
 
-            # Build the C++ static library with nixnative (incremental!)
-            cppLib = native.staticLib {
-              name = "mathlib";
-              root = ./cpp-lib;
-              sources = [ "src/mathlib.cpp" ];
-              includeDirs = [ "include" ];
-              publicIncludeDirs = [ "include" ];
+            cppProject = native.project {
+              modules = [
+                {
+                  native = {
+                    root = ./cpp-lib;
+
+                    targets.cppLib = {
+                      type = "staticLib";
+                      name = "mathlib";
+                      sources = [ "src/mathlib.cpp" ];
+                      includeDirs = [ "include" ];
+                      publicIncludeDirs = [ "include" ];
+                    };
+                  };
+                }
+              ];
             };
 
-            # The archive path from the dynamic derivation
+            cppLib = cppProject.packages.cppLib;
             cppLibPath = cppLib.archivePath;
-            # Directory containing the archive
             cppLibDir = builtins.dirOf cppLibPath;
 
-            # Build the Rust binary that links against the C++ library
             rustApp = pkgs.rustPlatform.buildRustPackage {
               pname = "rust-calls-cpp";
               version = "0.1.0";
@@ -52,7 +59,6 @@
                   let
                     baseName = builtins.baseNameOf path;
                   in
-                  # Include Rust source files and Cargo files
                   (pkgs.lib.hasSuffix ".rs" baseName) ||
                   (pkgs.lib.hasSuffix ".toml" baseName) ||
                   (baseName == "Cargo.lock") ||
@@ -67,13 +73,10 @@
                 pkgs.rustPlatform.bindgenHook
               ];
 
-              # Pass the C++ library paths to build.rs
               CPP_LIB_PATH = cppLibDir;
               CPP_INCLUDE_PATH = ./cpp-lib/include;
 
-              # Ensure the library is built before Rust compilation
               preBuild = ''
-                # The CPP_LIB_PATH contains the nixnative-built library
                 echo "C++ library path: $CPP_LIB_PATH"
                 ls -la "$CPP_LIB_PATH" || true
               '';

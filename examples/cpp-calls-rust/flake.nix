@@ -28,17 +28,14 @@
               inherit (ninjaPackages) nix-ninja nix-ninja-task;
             };
 
-            # Build the Rust static library
             rustLib = pkgs.rustPlatform.buildRustPackage {
               pname = "rust_math";
               version = "0.1.0";
               src = ./rust-lib;
               cargoLock.lockFile = ./rust-lib/Cargo.lock;
-              # We want the static library, not an executable
               buildType = "release";
             };
 
-            # Wrap the Rust library for nixnative consumption
             rustMathLib = {
               public = {
                 includeDirs = [ { path = ./include; } ];
@@ -46,7 +43,6 @@
                 compileFlags = [ ];
                 linkFlags = [
                   "${rustLib}/lib/librust_math.a"
-                  # Rust static libs need these system libraries
                   "-lpthread"
                   "-ldl"
                   "-lm"
@@ -54,38 +50,46 @@
               };
             };
 
-            # C++ executable that calls Rust
-            app = native.executable {
-              name = "cpp-calls-rust";
-              root = ./.;
-              sources = [ "src/main.cpp" ];
-              libraries = [ rustMathLib ];
+            project = native.project {
+              modules = [
+                {
+                  native = {
+                    root = ./.;
+
+                    targets.app = {
+                      type = "executable";
+                      name = "cpp-calls-rust";
+                      sources = [ "src/main.cpp" ];
+                      libraries = [ rustMathLib ];
+                    };
+
+                    tests.run = {
+                      executable = "app";
+                      expectedOutput = "rust_add(3, 4) = 7";
+                    };
+                  };
+                }
+              ];
             };
 
           in
           f {
-            inherit pkgs native app;
+            inherit pkgs native project;
           }
         );
     in
     {
       packages = forAllSystems (
-        { app, ... }:
+        { project, ... }:
         {
-          default = app;
-          cppCallsRust = app;
+          default = project.packages.app;
+          cppCallsRust = project.packages.app;
         }
       );
 
       checks = forAllSystems (
-        { native, app, ... }:
-        {
-          run = native.test {
-            name = "cpp-calls-rust";
-            executable = app;
-            expectedOutput = "rust_add(3, 4) = 7";
-          };
-        }
+        { project, ... }:
+        project.checks
       );
     };
 }

@@ -8,7 +8,7 @@ nixnative uses [nix-ninja](https://github.com/aspect-build/nix-ninja) as its bui
 
 ```
 EVALUATION TIME (nixnative):
-  native.executable { name, sources, ... }
+  native.project { modules = [ ... ] }
     │
     ├── Resolve toolchain (compiler, linker, flags)
     ├── Process tool plugins (code generators)
@@ -33,14 +33,21 @@ BUILD TIME (nix-ninja):
 
 ## Key Components
 
-### 1. High-Level API (`builders/api.nix`)
+### 1. Module-First Project Interface (`modules/project.nix`)
+
+The primary entrypoint for new code:
+- Typed module options for targets, tests, and dev shells
+- Applies defaults and resolves target references
+- Emits `packages`, `checks`, and `devShells`
+
+### 2. High-Level API (`builders/api.nix`)
 
 The user-facing API that handles:
 - Compiler/linker resolution from string names to objects
 - Abstract flag translation (e.g., `lto = "thin"` → `-flto=thin`)
 - Parameter validation and helpful error messages
 
-### 2. Helpers (`builders/helpers.nix`)
+### 3. Helpers (`builders/helpers.nix`)
 
 Low-level builder functions that:
 - Normalize source paths and globs
@@ -49,7 +56,7 @@ Low-level builder functions that:
 - Generate ninja file content
 - Create wrapper derivations
 
-### 3. Ninja Generation (`ninja/generate.nix`)
+### 4. Ninja Generation (`ninja/generate.nix`)
 
 Pure functions that generate ninja build file content:
 
@@ -71,7 +78,7 @@ Key features:
 - `deps = gcc` enables nix-ninja's header scanning
 - Per-language compile rules for C vs C++
 
-### 4. Ninja Wrapper (`ninja/wrapper.nix`)
+### 5. Ninja Wrapper (`ninja/wrapper.nix`)
 
 Creates the wrapper derivation that invokes nix-ninja:
 
@@ -89,14 +96,14 @@ mkNinjaDerivation = { name, ninjaContent, ... }:
   };
 ```
 
-### 5. Toolchain Abstraction (`core/toolchain.nix`)
+### 6. Toolchain Abstraction (`core/toolchain.nix`)
 
 Composes compilers, linkers, and binutils:
 - Language-aware (C, C++, potentially Rust)
 - Flag translation for abstract flags
 - Platform-specific defaults
 
-### 6. Tool Plugins (`scanner/scanner.nix`, `tools/`)
+### 7. Tool Plugins (`scanner/scanner.nix`, `tools/`)
 
 Code generators that produce headers and sources at eval time:
 - Built-in: Jinja2, protobuf, gRPC

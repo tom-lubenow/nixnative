@@ -1,38 +1,61 @@
 { pkgs, native }:
 
 let
-  sources = [ "src/*.cc" ];  # Glob pattern matches all .cc files in src/
+  sources = [ "src/*.cc" ];
   includeDirs = [ "src" ];
+  isLinux = pkgs.stdenv.hostPlatform.isLinux;
 
-  # Coverage build
-  appWithCoverage = native.executable {
-    name = "coverage-example";
-    root = ./.;
-    inherit sources includeDirs;
-    compileFlags = [ "--coverage" "-g" "-O0" ];
-    linkFlags = [ "--coverage" ];
-  };
+in
+native.project {
+  modules = [
+    {
+      native = {
+        root = ./.;
 
-  # Non-coverage build
-  appNoCoverage = native.executable {
-    name = "coverage-example-no-cov";
-    root = ./.;
-    inherit sources includeDirs;
-    compileFlags = [ "-O2" ];
-  };
+        targets = {
+          appWithCoverage = {
+            type = "executable";
+            name = "coverage-example";
+            inherit sources includeDirs;
+            compileFlags = [ "--coverage" "-g" "-O0" ];
+            linkFlags = [ "--coverage" ];
+          };
 
-  # Coverage + ASan (Linux only)
-  appCoverageAsan = native.executable {
-    name = "coverage-example-asan";
-    root = ./.;
-    inherit sources includeDirs;
-    compileFlags = [ "--coverage" "-fsanitize=address,undefined" "-g" "-O0" ];
-    linkFlags = [ "--coverage" "-fsanitize=address,undefined" ];
-  };
+          appNoCoverage = {
+            type = "executable";
+            name = "coverage-example-no-cov";
+            inherit sources includeDirs;
+            compileFlags = [ "-O2" ];
+          };
+        }
+        // (if isLinux then {
+          appCoverageAsan = {
+            type = "executable";
+            name = "coverage-example-asan";
+            inherit sources includeDirs;
+            compileFlags = [ "--coverage" "-fsanitize=address,undefined" "-g" "-O0" ];
+            linkFlags = [ "--coverage" "-fsanitize=address,undefined" ];
+          };
+        } else { });
 
-in {
-  inherit appWithCoverage appNoCoverage;
-  coverageExample = appWithCoverage;
-} // (if pkgs.stdenv.hostPlatform.isLinux then {
-  inherit appCoverageAsan;
-} else {})
+        tests = {
+          coverage = {
+            executable = "appWithCoverage";
+            expectedOutput = "All tests passed";
+          };
+
+          noCoverage = {
+            executable = "appNoCoverage";
+            expectedOutput = "All tests passed";
+          };
+        }
+        // (if isLinux then {
+          coverageAsan = {
+            executable = "appCoverageAsan";
+            expectedOutput = "All tests passed";
+          };
+        } else { });
+      };
+    }
+  ];
+}

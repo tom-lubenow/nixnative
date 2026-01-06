@@ -74,9 +74,9 @@ CLI ready!
 
 ```nix
 # Build common code as a static library
-commonLib = native.staticLib {
+targets.commonLib = {
+  type = "staticLib";
   name = "myapp-common";
-  root = ./.;
   sources = [
     "common/config.cc"
     "common/logger.cc"
@@ -91,25 +91,28 @@ commonLib = native.staticLib {
 
 ```nix
 # CLI tool
-cli = native.executable {
+targets.cli = {
+  type = "executable";
   name = "myapp-cli";
   sources = [ "cli/main.cc" ];
-  libraries = [ commonLib ];
+  libraries = [ { target = "commonLib"; } ];
 };
 
 # Daemon
-daemon = native.executable {
+targets.daemon = {
+  type = "executable";
   name = "myapp-daemon";
   sources = [ "daemon/main.cc" ];
-  libraries = [ commonLib ];
+  libraries = [ { target = "commonLib"; } ];
   defines = [ "DAEMON_MODE" ];
 };
 
 # Test binary
-tests = native.executable {
+targets.tests = {
+  type = "executable";
   name = "myapp-tests";
   sources = [ "tests/main.cc" ];
-  libraries = [ commonLib ];
+  libraries = [ { target = "commonLib"; } ];
   defines = [ "TEST_MODE" ];
 };
 ```
@@ -120,7 +123,11 @@ tests = native.executable {
 # Combine all binaries into one package
 combined = pkgs.symlinkJoin {
   name = "myapp";
-  paths = [ cli daemon tests ];
+  paths = [
+    config.native.packages.cli.passthru.target
+    config.native.packages.daemon.passthru.target
+    config.native.packages.tests.passthru.target
+  ];
 };
 ```
 
@@ -139,7 +146,8 @@ But changes to `cli/main.cc` only rebuild the CLI binary.
 Use `defines` to enable binary-specific behavior:
 
 ```nix
-daemon = native.executable {
+targets.daemon = {
+  type = "executable";
   defines = [ "DAEMON_MODE" "NO_INTERACTIVE" ];
   ...
 };
@@ -161,7 +169,8 @@ daemon = native.executable {
 **Separate builds** (alternative):
 ```nix
 # Each binary compiles common code independently
-cli = native.executable {
+targets.cli = {
+  type = "executable";
   sources = [ "cli/main.cc" ] ++ commonSources;
   ...
 };
@@ -172,13 +181,12 @@ cli = native.executable {
 The test binary includes the same common code but with test-specific configuration:
 
 ```nix
-tests = native.executable {
+targets.tests = {
+  type = "executable";
   name = "myapp-tests";
-  libraries = [ commonLib ];
+  libraries = [ { target = "commonLib"; } ];
   defines = [ "TEST_MODE" "ENABLE_MOCKS" ];
-  flags = [
-    { type = "sanitizer"; value = "address"; }  # For testing
-  ];
+  sanitizers = [ "address" ];
 };
 ```
 

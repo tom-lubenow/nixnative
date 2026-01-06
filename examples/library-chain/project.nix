@@ -1,44 +1,51 @@
 { pkgs, native }:
 
-let
-  # Layer 1: Utility library (no dependencies - base of the chain)
-  libUtil = native.staticLib {
-    name = "libutil";
-    root = ./.;
-    sources = [ "libutil/util.cc" ];
-    includeDirs = [ "libutil/include" ];
-    publicIncludeDirs = [ "libutil/include" ];
-  };
+native.project {
+  modules = [
+    {
+      native = {
+        root = ./.;
 
-  # Layer 2: Core library (depends on util)
-  libCore = native.staticLib {
-    name = "libcore";
-    root = ./.;
-    sources = [ "libcore/core.cc" ];
-    includeDirs = [ "libcore/include" ];
-    publicIncludeDirs = [ "libcore/include" ];
-    libraries = [ libUtil ];
-  };
+        targets = {
+          libUtil = {
+            type = "staticLib";
+            name = "libutil";
+            sources = [ "libutil/util.cc" ];
+            includeDirs = [ "libutil/include" ];
+            publicIncludeDirs = [ "libutil/include" ];
+          };
 
-  # Layer 3: Math extension library (depends on core, transitively on util)
-  libMathExt = native.staticLib {
-    name = "libmath_ext";
-    root = ./.;
-    sources = [ "libmath/math_ext.cc" ];
-    includeDirs = [ "libmath/include" ];
-    publicIncludeDirs = [ "libmath/include" ];
-    libraries = [ libCore ];
-  };
+          libCore = {
+            type = "staticLib";
+            name = "libcore";
+            sources = [ "libcore/core.cc" ];
+            includeDirs = [ "libcore/include" ];
+            publicIncludeDirs = [ "libcore/include" ];
+            libraries = [ { target = "libUtil"; } ];
+          };
 
-  # Application using the full chain
-  app = native.executable {
-    name = "library-chain-app";
-    root = ./.;
-    sources = [ "main.cc" ];
-    libraries = [ libMathExt ];
-  };
+          libMathExt = {
+            type = "staticLib";
+            name = "libmath_ext";
+            sources = [ "libmath/math_ext.cc" ];
+            includeDirs = [ "libmath/include" ];
+            publicIncludeDirs = [ "libmath/include" ];
+            libraries = [ { target = "libCore"; } ];
+          };
 
-in {
-  inherit libCore libUtil libMathExt app;
-  libraryChainExample = app;
+          app = {
+            type = "executable";
+            name = "library-chain-app";
+            sources = [ "main.cc" ];
+            libraries = [ { target = "libMathExt"; } ];
+          };
+        };
+
+        tests.libraryChain = {
+          executable = "app";
+          expectedOutput = "Library chain working";
+        };
+      };
+    }
+  ];
 }

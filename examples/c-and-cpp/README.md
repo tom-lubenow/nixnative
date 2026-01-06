@@ -91,7 +91,8 @@ The `extern "C"` block:
 ### Mixed Sources in One Target
 
 ```nix
-native.executable {
+targets.mixedApp = {
+  type = "executable";
   name = "mixed-app";
   sources = [
     "clib.c"    # Compiled with CC (C compiler)
@@ -107,18 +108,18 @@ nixnative automatically selects the compiler based on file extension:
 ### C Library as Dependency
 
 ```nix
-# Build C code as a library
-cLib = native.staticLib {
+targets.cLib = {
+  type = "staticLib";
   name = "clib";
   sources = [ "clib.c" ];
   publicIncludeDirs = [ "include" ];
 };
 
-# C++ app consumes the C library
-cppApp = native.executable {
+targets.cppApp = {
+  type = "executable";
   name = "cpp-app";
   sources = [ "main.cc" ];
-  libraries = [ cLib ];
+  libraries = [ { target = "cLib"; } ];
 };
 ```
 
@@ -155,12 +156,13 @@ C++ compilers "mangle" function names to encode type information:
 You can specify different standards for C and C++:
 
 ```nix
-native.executable {
+targets.mixedApp = {
+  type = "executable";
   sources = [ "legacy.c" "modern.cc" ];
-  flags = [
-    { type = "standard"; value = "c++20"; }  # For .cc files
-  ];
-  extraCFlags = [ "-std=c11" ];  # For .c files (if supported)
+  languageFlags = {
+    c = [ "-std=c11" ];
+    cpp = [ "-std=c++20" ];
+  };
 };
 ```
 

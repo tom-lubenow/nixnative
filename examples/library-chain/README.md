@@ -79,33 +79,33 @@ Library chain working correctly!
 ### Building Each Layer
 
 ```nix
-# Layer 1: No dependencies
-libutil = native.staticLib {
-  name = "util";
+targets.libUtil = {
+  type = "staticLib";
+  name = "libutil";
   sources = [ "libutil/util.cc" ];
   publicIncludeDirs = [ "libutil/include" ];
 };
 
-# Layer 2: Depends on libutil
-libcore = native.staticLib {
-  name = "core";
+targets.libCore = {
+  type = "staticLib";
+  name = "libcore";
   sources = [ "libcore/core.cc" ];
   publicIncludeDirs = [ "libcore/include" ];
-  libraries = [ libutil ];  # Direct dependency
+  libraries = [ { target = "libUtil"; } ];
 };
 
-# Layer 3: Depends on libcore (libutil is transitive)
-libmath = native.staticLib {
-  name = "math_ext";
+targets.libMath = {
+  type = "staticLib";
+  name = "libmath_ext";
   sources = [ "libmath/math_ext.cc" ];
   publicIncludeDirs = [ "libmath/include" ];
-  libraries = [ libcore ];  # Only direct dependency listed
+  libraries = [ { target = "libCore"; } ];
 };
 ```
 
 ### Transitive Dependencies
 
-When you declare `libraries = [ libcore ]`:
+When you declare `libraries = [ { target = "libCore"; } ]`:
 - libcore's `publicIncludeDirs` are added to your include paths
 - libcore's `publicDefines` are added to your defines
 - libcore's link flags (including transitive ones) are collected

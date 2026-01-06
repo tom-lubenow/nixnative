@@ -1,9 +1,6 @@
-{ pkgs, native, packages }:
+{ pkgs, native }:
 
-{
-  simpleTool = native.test {
-    name = "simple-tool-test";
-    executable = packages.appInline;
-    expectedOutput = "Code generation working";
-  };
-}
+let
+  project = import ./project.nix { inherit pkgs native; };
+in
+project.checks

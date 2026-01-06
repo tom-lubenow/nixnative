@@ -1,33 +1,43 @@
 { pkgs, native }:
 
 let
-  # Header-only library for plugin interface
-  commonLib = native.headerOnly {
-    name = "plugin-interface";
-    publicIncludeDirs = [ ./common ];
-  };
+  linkFlags = if pkgs.stdenv.isLinux then [ "-ldl" ] else [ ];
 
-  # Plugin shared library
-  myPlugin = native.sharedLib {
-    name = "my-plugin";
-    root = ./.;
-    sources = [ "plugin/plugin.cc" ];
-    libraries = [ commonLib ];
-  };
+in
+native.project {
+  modules = [
+    {
+      native = {
+        root = ./.;
 
-  # Host application
-  hostApp = native.executable {
-    name = "host-app";
-    root = ./.;
-    sources = [ "host/main.cc" ];
-    libraries = [ commonLib ];
-    linkFlags = if pkgs.stdenv.isLinux then [ "-ldl" ] else [ ];
-  };
+        targets = {
+          commonLib = {
+            type = "headerOnly";
+            name = "plugin-interface";
+            publicIncludeDirs = [ ./common ];
+          };
 
-in {
-  inherit myPlugin hostApp commonLib;
-  # With dynamic derivations, we can't create a runScript that references
-  # placeholder paths at evaluation time. The hostApp and myPlugin are
-  # available as separate packages that can be built and tested.
-  pluginsExample = hostApp;
+          myPlugin = {
+            type = "sharedLib";
+            name = "my-plugin";
+            sources = [ "plugin/plugin.cc" ];
+            libraries = [ { target = "commonLib"; } ];
+          };
+
+          hostApp = {
+            type = "executable";
+            name = "host-app";
+            sources = [ "host/main.cc" ];
+            libraries = [ { target = "commonLib"; } ];
+            inherit linkFlags;
+          };
+        };
+
+        extraChecks = {
+          pluginsHostBuilds = { target = "hostApp"; };
+          pluginsPluginBuilds = { target = "myPlugin"; };
+        };
+      };
+    }
+  ];
 }

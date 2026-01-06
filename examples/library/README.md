@@ -4,7 +4,7 @@ This example demonstrates building a reusable static library with nixnative.
 
 ## What This Demonstrates
 
-- Building static libraries with `native.staticLib`
+- Building static libraries with module targets
 - Exposing public headers via `publicIncludeDirs`
 - Consuming the library from another build (in `checks.nix`)
 
@@ -36,26 +36,31 @@ The output contains:
 ### Building the Library
 
 ```nix
-mathLibrary = native.staticLib {
-  name = "math-example";
-  root = ./.;
-  sources = [ "src/math.cc" ];
-  includeDirs = [ "include" ];        # For compiling the library itself
-  publicIncludeDirs = includeDirs;    # Exposed to consumers
-};
-```
+native.project {
+  modules = [
+    {
+      native = {
+        root = ./.;
 
-### Consuming the Library
+        targets.mathLibrary = {
+          type = "staticLib";
+          name = "libmath-example";
+          sources = [ "src/math.cc" ];
+          includeDirs = [ "include" ];
+          publicIncludeDirs = [ "include" ];
+        };
 
-The `checks.nix` file demonstrates consuming the library:
-
-```nix
-# Access the library's public interface
-includeFlags = lib.concatMapStringsSep " " (dir: "-I${dir.path}") mathLibrary.public.includeDirs;
-linkFlags = lib.concatStringsSep " " mathLibrary.public.linkFlags;
-
-# Compile and link
-${toolchain.getCXX} ${includeFlags} main.cc ${linkFlags} -o test
+        targets.mathLibraryTest = {
+          type = "executable";
+          name = "math-library-test";
+          root = ./test;
+          sources = [ "main.cc" ];
+          libraries = [ { target = "mathLibrary"; } ];
+        };
+      };
+    }
+  ];
+}
 ```
 
 ## Key Concepts
@@ -75,10 +80,11 @@ Libraries expose a `public` attribute containing:
 
 ## Shared Library Variant
 
-To build a shared library instead, use `native.sharedLib`:
+To build a shared library instead, use `type = "sharedLib"`:
 
 ```nix
-mySharedLib = native.sharedLib {
+targets.mySharedLib = {
+  type = "sharedLib";
   name = "math-example";
   root = ./.;
   sources = [ "src/math.cc" ];

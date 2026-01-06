@@ -1,6 +1,6 @@
 # Header-Only Library Example
 
-This example demonstrates creating and consuming header-only libraries using `native.headerOnly`.
+This example demonstrates creating and consuming header-only libraries using module targets.
 
 ## What This Demonstrates
 
@@ -41,9 +41,9 @@ a x b = (-3, 6, -3)
 ### Creating a Header-Only Library
 
 ```nix
-vec3Lib = native.headerOnly {
+targets.vec3Lib = {
+  type = "headerOnly";
   name = "vec3";
-  root = ./.;
   publicIncludeDirs = [ "include" ];
 };
 ```
@@ -56,10 +56,11 @@ This creates a library with:
 ### Consuming the Library
 
 ```nix
-demo = native.executable {
+targets.demo = {
+  type = "executable";
   name = "demo";
   sources = [ "main.cc" ];
-  libraries = [ vec3Lib ];  # Just like any other library
+  libraries = [ { target = "vec3Lib"; } ];
 };
 ```
 
@@ -86,11 +87,12 @@ For header-only libraries:
 ### Propagating Configuration
 
 ```nix
-native.headerOnly {
+targets.myLib = {
+  type = "headerOnly";
   name = "my-lib";
   publicIncludeDirs = [ "include" ];
-  publicDefines = [ "MY_LIB_ENABLED" ];  # Propagated to consumers
-  publicCxxFlags = [ "-ffast-math" ];    # Propagated to consumers
+  publicDefines = [ "MY_LIB_ENABLED" ];
+  publicCompileFlags = [ "-ffast-math" ];
 };
 ```
 

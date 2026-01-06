@@ -1,17 +1,10 @@
 { pkgs, native }:
 
 let
-  # Read version from file
   versionStr = builtins.readFile ./version.txt;
-  # builtins.split returns alternating strings and match groups (lists), so filter to strings only
   versionParts = builtins.filter builtins.isString
     (builtins.split "\\." (pkgs.lib.removeSuffix "\n" versionStr));
 
-  # ==========================================================================
-  # NEW WAY: Using mkGeneratedSources (recommended)
-  # ==========================================================================
-
-  # Generate version header using a simple derivation
   versionDrv = pkgs.writeTextDir "version.h" ''
     #pragma once
 
@@ -21,26 +14,12 @@ let
     #define VERSION_STRING "${pkgs.lib.removeSuffix "\n" versionStr}"
   '';
 
-  # Wrap it with mkGeneratedSources - much simpler!
   versionTool = native.mkGeneratedSources {
     name = "version-header";
     drv = versionDrv;
     outputs = [ "version.h" ];
   };
 
-  # App using the simplified tool API
-  appInline = native.executable {
-    name = "simple-tool-inline";
-    root = ./.;
-    sources = [ "main.cc" ];
-    tools = [ versionTool ];
-  };
-
-  # ==========================================================================
-  # OLD WAY: Manual attrset (still works, for reference)
-  # ==========================================================================
-
-  # Manual attrset approach (more verbose, but still supported)
   versionGeneratorManual = {
     name = "version-generator";
     outputs = [
@@ -49,14 +28,38 @@ let
     includeDirs = [ { path = versionDrv; } ];
   };
 
-  appManual = native.executable {
-    name = "simple-tool-manual";
-    root = ./.;
-    sources = [ "main.cc" ];
-    tools = [ versionGeneratorManual ];
-  };
+in
+native.project {
+  modules = [
+    {
+      native = {
+        root = ./.;
 
-in {
-  inherit appInline appManual;
-  simpleToolExample = appInline;
+        targets = {
+          appInline = {
+            type = "executable";
+            name = "simple-tool-inline";
+            sources = [ "main.cc" ];
+            tools = [ versionTool ];
+          };
+
+          appManual = {
+            type = "executable";
+            name = "simple-tool-manual";
+            sources = [ "main.cc" ];
+            tools = [ versionGeneratorManual ];
+          };
+        };
+
+        tests.simpleTool = {
+          executable = "appInline";
+          expectedOutput = "Code generation working";
+        };
+
+        extraPackages = {
+          simpleToolExample = { target = "appInline"; };
+        };
+      };
+    }
+  ];
 }

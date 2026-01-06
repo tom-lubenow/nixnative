@@ -58,18 +58,13 @@ xdg-open coverage-report/index.html
 ### Enabling Coverage
 
 ```nix
-appWithCoverage = native.executable {
+targets.appWithCoverage = {
+  type = "executable";
   name = "coverage-example";
-  root = ./.;
   sources = [ "src/main.cc" "src/calculator.cc" ];
   includeDirs = [ "src" ];
-
-  # Enable coverage instrumentation
-  flags = [
-    { type = "coverage"; }
-    { type = "debug"; value = "full"; }  # Recommended for coverage
-    { type = "optimize"; value = "0"; }   # Disable optimization for accurate coverage
-  ];
+  compileFlags = [ "--coverage" "-g" "-O0" ];
+  linkFlags = [ "--coverage" ];
 };
 ```
 
@@ -99,20 +94,14 @@ The generated report shows:
 ### Coverage Build (Recommended Settings)
 
 ```nix
-flags = [
-  { type = "coverage"; }
-  { type = "debug"; value = "full"; }   # Full debug info
-  { type = "optimize"; value = "0"; }   # No optimization
-];
+compileFlags = [ "--coverage" "-g" "-O0" ];
+linkFlags = [ "--coverage" ];
 ```
 
 ### Production Build (No Coverage)
 
 ```nix
-flags = [
-  { type = "optimize"; value = "2"; }
-  { type = "lto"; value = "thin"; }
-];
+compileFlags = [ "-O2" ];
 ```
 
 ## Platform Notes

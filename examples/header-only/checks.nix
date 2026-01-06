@@ -1,9 +1,6 @@
-{ pkgs, native, packages }:
+{ pkgs, native }:
 
-{
-  headerOnly = native.test {
-    name = "header-only-test";
-    executable = packages.testApp;
-    expectedOutput = "a + b = (5, 7, 9)";  # Vec3 addition test
-  };
-}
+let
+  project = import ./project.nix { inherit pkgs native; };
+in
+project.checks

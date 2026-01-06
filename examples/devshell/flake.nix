@@ -29,7 +29,8 @@
             inherit pkgs nixPackage;
             inherit (ninjaPackages) nix-ninja nix-ninja-task;
           };
-          packages = import ./project.nix { inherit pkgs native; };
+          project = import ./project.nix { inherit pkgs native; };
+          packages = project.packages;
         in
         { default = packages.app; inherit (packages) app; }
       );
@@ -43,9 +44,9 @@
             inherit pkgs nixPackage;
             inherit (ninjaPackages) nix-ninja nix-ninja-task;
           };
-          packages = import ./project.nix { inherit pkgs native; };
+          project = import ./project.nix { inherit pkgs native; };
         in
-        import ./checks.nix { inherit pkgs native packages; }
+        project.checks
       );
 
       devShells = forAllSystems (system:
@@ -57,7 +58,8 @@
             inherit pkgs nixPackage;
             inherit (ninjaPackages) nix-ninja nix-ninja-task;
           };
-          packages = import ./project.nix { inherit pkgs native; };
+          project = import ./project.nix { inherit pkgs native; };
+          packages = project.packages;
           clangd = native.lsps.clangd { targets = [ packages.app ]; };
         in
         {

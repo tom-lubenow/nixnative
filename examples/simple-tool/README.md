@@ -88,7 +88,9 @@ generator = {
   includeDirs = [ { path = builtins.dirOf myHeader; } ];
 };
 
-app = native.executable {
+targets.app = {
+  type = "executable";
+  name = "simple-tool";
   sources = [ "main.cc" ];
   tools = [ generator ];
 };

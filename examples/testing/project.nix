@@ -1,46 +1,86 @@
 { pkgs, native }:
 
 let
-  # Basic app for testing
-  app = native.executable {
-    name = "test-app";
-    root = ./.;
-    sources = [ "main.cc" ];
-  };
+  isLinux = pkgs.stdenv.hostPlatform.isLinux;
 
-  # LTO build
-  appLto = native.executable {
-    name = "test-app-lto";
-    root = ./.;
-    sources = [ "main.cc" ];
-    compileFlags = [ "-flto=thin" ];
-    linkFlags = [ "-flto=thin" ];
-  };
+in
+native.project {
+  modules = [
+    {
+      native = {
+        root = ./.;
 
-  # Minimal config build
-  appMinimal = native.executable {
-    name = "test-app-minimal";
-    root = ./.;
-    sources = [ "main.cc" ];
-    includeDirs = [ ];
-    defines = [ ];
-    compileFlags = [ ];
-    libraries = [ ];
-    tools = [ ];
-  };
+        targets = {
+          app = {
+            type = "executable";
+            name = "test-app";
+            sources = [ "main.cc" ];
+          };
 
-  # ASan build (Linux only)
-  appAsan = native.executable {
-    name = "test-app-asan";
-    root = ./.;
-    sources = [ "main.cc" ];
-    compileFlags = [ "-fsanitize=address,undefined" ];
-    linkFlags = [ "-fsanitize=address,undefined" ];
-  };
+          appLto = {
+            type = "executable";
+            name = "test-app-lto";
+            sources = [ "main.cc" ];
+            compileFlags = [ "-flto=thin" ];
+            linkFlags = [ "-flto=thin" ];
+          };
 
-in {
-  inherit app appLto appMinimal;
-  testingExample = app;
-} // (if pkgs.stdenv.hostPlatform.isLinux then {
-  inherit appAsan;
-} else {})
+          appMinimal = {
+            type = "executable";
+            name = "test-app-minimal";
+            sources = [ "main.cc" ];
+            includeDirs = [ ];
+            defines = [ ];
+            compileFlags = [ ];
+            libraries = [ ];
+            tools = [ ];
+          };
+        }
+        // (if isLinux then {
+          appAsan = {
+            type = "executable";
+            name = "test-app-asan";
+            sources = [ "main.cc" ];
+            compileFlags = [ "-fsanitize=address,undefined" ];
+            linkFlags = [ "-fsanitize=address,undefined" ];
+          };
+        } else { });
+
+        tests = {
+          test1 = {
+            executable = "app";
+            expectedOutput = "Hello Test";
+          };
+
+          test2 = {
+            executable = "app";
+            args = [ "World" ];
+            expectedOutput = "Hello World";
+          };
+
+          test3 = {
+            executable = "app";
+            args = [ "it's \"quoted\" & $special" ];
+            expectedOutput = "Hello it's \"quoted\" & $special";
+          };
+
+          testLto = {
+            executable = "appLto";
+            expectedOutput = "Hello Test";
+          };
+
+          testMinimal = {
+            executable = "appMinimal";
+            expectedOutput = "Hello Test";
+          };
+        }
+        // (if isLinux then {
+          testAsan = {
+            executable = "appAsan";
+            expectedOutput = "Hello Test";
+          };
+        } else { });
+      };
+    }
+  ];
+}

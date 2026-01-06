@@ -74,7 +74,11 @@ rec {
               evalInputs = baseEvalInputs;
             }
           else
-            throw "nixnative: test library '${name}' does not provide a main()";
+            self
+            // {
+              public = throw "nixnative: test library '${name}' does not provide a main()";
+              evalInputs = baseEvalInputs;
+            };
       };
     in
     self;

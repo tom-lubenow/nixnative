@@ -5,70 +5,49 @@
 
 { pkgs, native }:
 
-let
-  root = ./.;
+native.project {
+  modules = [
+    {
+      native = {
+        root = ./.;
 
-  # ==========================================================================
-  # GoogleTest Example
-  # ==========================================================================
-  #
-  # Uses native.testLibs.gtest.withMain to get gtest with the default main()
-  # provided by gtest_main. This is the most common usage pattern.
-  #
-  gtestExample = native.executable {
-    name = "gtest-example";
-    inherit root;
-    sources = [ "src/gtest_tests.cc" ];
-    libraries = [ native.testLibs.gtest.withMain ];
-  };
+        targets = {
+          gtestExample = {
+            type = "executable";
+            name = "gtest-example";
+            sources = [ "src/gtest_tests.cc" ];
+            libraries = [ native.testLibs.gtest.withMain ];
+          };
 
-  # ==========================================================================
-  # GoogleMock Example
-  # ==========================================================================
-  #
-  # Uses native.testLibs.gmock.withMain for mocking support.
-  # GMock includes GTest, so you get both.
-  #
-  gmockExample = native.executable {
-    name = "gmock-example";
-    inherit root;
-    sources = [ "src/gmock_tests.cc" ];
-    libraries = [ native.testLibs.gmock.withMain ];
-  };
+          gmockExample = {
+            type = "executable";
+            name = "gmock-example";
+            sources = [ "src/gmock_tests.cc" ];
+            libraries = [ native.testLibs.gmock.withMain ];
+          };
 
-  # ==========================================================================
-  # Catch2 Example
-  # ==========================================================================
-  #
-  # Uses native.testLibs.catch2.withMain for Catch2 with default main().
-  #
-  catch2Example = native.executable {
-    name = "catch2-example";
-    inherit root;
-    sources = [ "src/catch2_tests.cc" ];
-    libraries = [ native.testLibs.catch2.withMain ];
-  };
+          catch2Example = {
+            type = "executable";
+            name = "catch2-example";
+            sources = [ "src/catch2_tests.cc" ];
+            libraries = [ native.testLibs.catch2.withMain ];
+          };
 
-  # ==========================================================================
-  # doctest Example
-  # ==========================================================================
-  #
-  # doctest is header-only. The main() is provided by defining
-  # DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN before including doctest.h.
-  #
-  doctestExample = native.executable {
-    name = "doctest-example";
-    inherit root;
-    sources = [ "src/doctest_tests.cc" ];
-    libraries = [ native.testLibs.doctest ];
-  };
+          doctestExample = {
+            type = "executable";
+            name = "doctest-example";
+            sources = [ "src/doctest_tests.cc" ];
+            libraries = [ native.testLibs.doctest ];
+          };
+        };
 
-in
-{
-  inherit
-    gtestExample
-    gmockExample
-    catch2Example
-    doctestExample
-    ;
+        tests = {
+          gtestExample = { executable = "gtestExample"; };
+          gmockExample = { executable = "gmockExample"; };
+          catch2Example = { executable = "catch2Example"; };
+          doctestExample = { executable = "doctestExample"; };
+        };
+      };
+    }
+  ];
 }

@@ -4,29 +4,35 @@
 
 { pkgs, native }:
 
-let
-  root = ./.;
-  includeDirs = [ "include" ];
-  sources = [ "src/math.cc" ];
+native.project {
+  modules = [
+    {
+      native = {
+        root = ./.;
 
-  # Build a static library using the high-level API
-  #
-  # Key difference from executable:
-  #   - `publicIncludeDirs` exposes headers to consumers
-  #   - Output is a .a archive, not an executable
-  #   - The `public` attribute propagates interface to dependents
-  mathLibrary = native.staticLib {
-    name = "libmath-example";
-    inherit root includeDirs sources;
+        targets = {
+          mathLibrary = {
+            type = "staticLib";
+            name = "libmath-example";
+            sources = [ "src/math.cc" ];
+            includeDirs = [ "include" ];
+            publicIncludeDirs = [ "include" ];
+          };
 
-    # Headers to install and expose to consumers
-    # These end up in $out/include/ and are added to dependent builds
-    publicIncludeDirs = includeDirs;
+          mathLibraryTest = {
+            type = "executable";
+            name = "math-library-test";
+            root = ./test;
+            sources = [ "main.cc" ];
+            libraries = [ { target = "mathLibrary"; } ];
+          };
+        };
 
-    # Optional: propagate defines to consumers
-    # publicDefines = [ "MATH_LIB_ENABLED" ];
-  };
-
-in {
-  mathLibrary = mathLibrary;
+        tests.mathLibrary = {
+          executable = "mathLibraryTest";
+          expectedOutput = "5 12";
+        };
+      };
+    }
+  ];
 }

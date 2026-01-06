@@ -1,19 +1,25 @@
 { pkgs, native }:
 
-let
-  # Build target for clangd
-  app = native.executable {
-    name = "devshell-app";
-    root = ./.;
-    sources = [ "main.cc" ];
-  };
+native.project {
+  modules = [
+    {
+      native = {
+        root = ./.;
 
-  # clangd configuration
-  clangd = native.lsps.clangd {
-    targets = [ app ];
-  };
+        targets.app = {
+          type = "executable";
+          name = "devshell-app";
+          sources = [ "main.cc" ];
+        };
 
-in {
-  inherit app;
-  devshellExample = app;
+        tests.devshell = {
+          executable = "app";
+        };
+
+        extraPackages = {
+          devshellExample = { target = "app"; };
+        };
+      };
+    }
+  ];
 }

@@ -26,7 +26,8 @@
             inherit pkgs nixPackage;
             inherit (ninjaPackages) nix-ninja nix-ninja-task;
           };
-          packages = import ./project.nix { inherit pkgs native; };
+          project = import ./project.nix { inherit pkgs native; };
+          packages = project.packages;
         in
         packages // { default = packages.mixedApp; }
       );
@@ -40,9 +41,9 @@
             inherit pkgs nixPackage;
             inherit (ninjaPackages) nix-ninja nix-ninja-task;
           };
-          packages = import ./project.nix { inherit pkgs native; };
+          project = import ./project.nix { inherit pkgs native; };
         in
-        import ./checks.nix { inherit pkgs native packages; }
+        project.checks
       );
     };
 }

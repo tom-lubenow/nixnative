@@ -36,9 +36,9 @@ clangd --version
 ### 1. Build the Target
 
 ```nix
-app = native.executable {
+targets.app = {
+  type = "executable";
   name = "app";
-  root = ./.;
   sources = [ "main.cc" ];
 };
 ```
@@ -115,7 +115,7 @@ nix develop .#multi
 
 ```nix
 devShells.multi = let
-  lib1 = native.staticLib { ... };
+  lib1 = targets.lib1; # defined in project targets
   multiClangd = native.lsps.clangd {
     targets = [ app lib1 ];
   };

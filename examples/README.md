@@ -54,29 +54,29 @@ Then explore specific features as needed:
 
 | Example | Description | Key Features |
 |---------|-------------|--------------|
-| [executable](./executable/) | Minimal executable | `native.executable` |
-| [library](./library/) | Static library | `native.staticLib`, `publicIncludeDirs` |
-| [header-only](./header-only/) | Header-only library | `native.headerOnly` |
+| [executable](./executable/) | Minimal executable | `native.project` + `targets` |
+| [library](./library/) | Static library | `type = "staticLib"`, `publicIncludeDirs` |
+| [header-only](./header-only/) | Header-only library | `type = "headerOnly"` |
 | [library-chain](./library-chain/) | Multi-library deps | Transitive dependencies |
 | [app-with-library](./app-with-library/) | Complete application | Libraries, tool plugins, pkg-config |
-| [multi-toolchain](./multi-toolchain/) | Compiler/linker variations | Abstract flags, build matrices |
-| [testing](./testing/) | Test infrastructure | `native.test`, edge cases |
+| [multi-toolchain](./multi-toolchain/) | Compiler/linker variations | Ergonomic flags, build matrices |
+| [testing](./testing/) | Test infrastructure | Module `tests`, edge cases |
 | [test-libraries](./test-libraries/) | Test frameworks | GTest, Catch2, doctest |
 | [devshell](./devshell/) | Development environment | `native.lsps.clangd`, IDE integration |
-| [plugins](./plugins/) | Dynamic plugin system | `native.sharedLib`, dlopen |
+| [plugins](./plugins/) | Dynamic plugin system | `type = "sharedLib"`, dlopen |
 | [install](./install/) | Library installation | Static vs shared comparison |
 | [simple-tool](./simple-tool/) | Custom code generator | Tool plugin interface |
 | [pkg-config](./pkg-config/) | System libraries | `makeLibrary` |
 | [c-and-cpp](./c-and-cpp/) | Mixed C/C++ | `.c` + `.cc` sources, `extern "C"` |
 | [multi-binary](./multi-binary/) | Multiple executables | Shared libraries, CLI + daemon |
-| [coverage](./coverage/) | Code coverage | `{ type = "coverage"; }`, lcov |
+| [coverage](./coverage/) | Code coverage | `coverage = true`, lcov |
 | [dynamic-derivations](./dynamic-derivations/) | Dynamic mode | Explicit dynamic derivations example |
 
 ## Feature Matrix
 
 | Feature | Example(s) |
 |---------|-----------|
-| High-level API (`native.executable`, etc.) | All examples |
+| Module-first API (`native.project`) | All examples |
 | Static libraries | `library/`, `library-chain/`, `app-with-library/`, `install/`, `multi-binary/` |
 | Shared libraries | `plugins/`, `install/` |
 | Header-only libraries | `header-only/`, `plugins/` |
@@ -117,8 +117,8 @@ Each example follows a consistent structure:
 ```
 example/
 ├── flake.nix       # Flake with inputs and outputs
-├── project.nix     # Build definitions (optional, can be inline)
-├── checks.nix      # Tests (optional)
+├── project.nix     # Module-first build definitions (optional, can be inline)
+├── checks.nix      # Tests (optional shim)
 ├── README.md       # Documentation
 └── src/            # Source files
 ```
@@ -144,11 +144,20 @@ Example `flake.nix` for a new project:
       pkgs = import nixpkgs { system = "x86_64-linux"; };
       native = nixnative.lib.native { inherit pkgs; };
     in {
-      default = native.executable {
-        name = "my-app";
-        root = ./.;
-        sources = [ "src/main.cc" ];
-      };
+      default = (native.project {
+        modules = [
+          {
+            native = {
+              root = ./.;
+              targets.myApp = {
+                type = "executable";
+                name = "my-app";
+                sources = [ "src/main.cc" ];
+              };
+            };
+          }
+        ];
+      }).packages.myApp;
     };
   };
 }

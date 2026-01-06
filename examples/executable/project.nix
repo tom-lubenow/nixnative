@@ -5,39 +5,24 @@
 
 { pkgs, native }:
 
-let
-  # Project root directory - all paths are relative to this
-  root = ./.;
+native.project {
+  modules = [
+    {
+      native = {
+        root = ./.;
 
-  # Directories to search for headers (relative to root)
-  includeDirs = [ "include" ];
+        targets.executableExample = {
+          type = "executable";
+          name = "executable-example";
+          sources = [ "src/*.cc" ];
+          includeDirs = [ "include" ];
+        };
 
-  # Source files to compile (relative to root)
-  # Supports glob patterns:
-  #   - "src/*.cc"    - all .cc files in src/
-  #   - "**/*.cc"     - all .cc files recursively
-  #   - "src/**/*.cc" - all .cc files under src/ recursively
-  sources = [ "src/*.cc" ];
-
-  # Build the executable using the high-level API
-  # This automatically:
-  #   - Selects a default toolchain (clang + platform linker)
-  #   - Scans for header dependencies
-  #   - Generates compile_commands.json for IDE support
-  executable = native.executable {
-    name = "executable-example";
-    inherit root includeDirs sources;
-
-    # Optional parameters (not used here, shown for reference):
-    # defines = [ "DEBUG" ];              # Preprocessor definitions
-    # compileFlags = [ "-O2" "-Wall" ];   # Compiler flags
-    # linkFlags = [ "-lm" ];              # Linker flags
-    # libraries = [ someLib ];            # Library dependencies
-    # compiler = "gcc";                   # Override compiler (default: clang)
-    # linker = "mold";                    # Override linker (platform default)
-  };
-
-in
-{
-  executableExample = executable;
+        tests.executableExample = {
+          executable = "executableExample";
+          expectedOutput = "Hello from nixnative executable example";
+        };
+      };
+    }
+  ];
 }

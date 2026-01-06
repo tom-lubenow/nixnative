@@ -1,53 +1,80 @@
 { pkgs, native }:
 
-let
-  # Shared static library
-  commonLib = native.staticLib {
-    name = "libmyapp-common";
-    root = ./.;
-    sources = [ "common/*.cc" ];  # Glob pattern matches all .cc files
-    includeDirs = [ "common/include" ];
-    publicIncludeDirs = [ "common/include" ];
-  };
+native.project {
+  modules = [
+    ({ config, ... }:
+      let
+        combined = pkgs.symlinkJoin {
+          name = "myapp";
+          paths = [
+            config.native.packages.cli.passthru.target
+            config.native.packages.daemon.passthru.target
+            config.native.packages.tests.passthru.target
+          ];
+        };
+      in
+      {
+        native = {
+          root = ./.;
 
-  # CLI tool
-  cli = native.executable {
-    name = "myapp-cli";
-    root = ./.;
-    sources = [ "cli/main.cc" ];
-    libraries = [ commonLib ];
-  };
+          targets = {
+            commonLib = {
+              type = "staticLib";
+              name = "libmyapp-common";
+              sources = [ "common/*.cc" ];
+              includeDirs = [ "common/include" ];
+              publicIncludeDirs = [ "common/include" ];
+            };
 
-  # Daemon
-  daemon = native.executable {
-    name = "myapp-daemon";
-    root = ./.;
-    sources = [ "daemon/main.cc" ];
-    libraries = [ commonLib ];
-    defines = [ "DAEMON_MODE" ];
-  };
+            cli = {
+              type = "executable";
+              name = "myapp-cli";
+              sources = [ "cli/main.cc" ];
+              libraries = [ { target = "commonLib"; } ];
+            };
 
-  # Test binary
-  tests = native.executable {
-    name = "myapp-tests";
-    root = ./.;
-    sources = [ "tests/main.cc" ];
-    libraries = [ commonLib ];
-    defines = [ "TEST_MODE" ];
-    compileFlags = [ "-g" "-O0" ];  # Full debug info, no optimization
-  };
+            daemon = {
+              type = "executable";
+              name = "myapp-daemon";
+              sources = [ "daemon/main.cc" ];
+              libraries = [ { target = "commonLib"; } ];
+              defines = [ "DAEMON_MODE" ];
+            };
 
-  # Combined package - need to use .passthru.target for dynamic derivation outputs
-  combined = pkgs.symlinkJoin {
-    name = "myapp";
-    paths = [
-      cli.passthru.target
-      daemon.passthru.target
-      tests.passthru.target
-    ];
-  };
+            tests = {
+              type = "executable";
+              name = "myapp-tests";
+              sources = [ "tests/main.cc" ];
+              libraries = [ { target = "commonLib"; } ];
+              defines = [ "TEST_MODE" ];
+              compileFlags = [ "-g" "-O0" ];
+            };
+          };
 
-in {
-  inherit commonLib cli daemon tests combined;
-  multiBinaryExample = combined;
+          tests = {
+            multiBinaryTests = {
+              executable = "tests";
+              expectedOutput = "All tests passed";
+            };
+
+            multiBinaryCli = {
+              executable = "cli";
+              args = [ "--version" ];
+              expectedOutput = "myapp version";
+            };
+
+            multiBinaryDaemon = {
+              executable = "daemon";
+              args = [ "--check" ];
+              expectedOutput = "Configuration OK";
+            };
+          };
+
+          extraPackages = {
+            inherit combined;
+            multiBinaryExample = combined;
+          };
+        };
+      })
+  ];
 }

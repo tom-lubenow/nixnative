@@ -81,23 +81,40 @@ PY
     modules = [ "zlib" ];
   };
 
-  # Static library using high-level API
-  mathLib = native.staticLib {
-    name = "libmath";
-    inherit root includeDirs;
-    sources = libSources;
-    publicIncludeDirs = includeDirs;
-  };
+in
+native.project {
+  modules = [
+    {
+      native = {
+        root = root;
 
-  # Main executable with tool plugin
-  app = native.executable {
-    name = "simple-app";
-    inherit root includeDirs;
-    sources = appSources;
-    libraries = [ mathLib zlibLib ];
-    tools = [ buildInfoTool ];
-  };
+        targets = {
+          mathLib = {
+            type = "staticLib";
+            name = "libmath";
+            inherit includeDirs;
+            sources = libSources;
+            publicIncludeDirs = includeDirs;
+          };
 
-in {
-  inherit mathLib app;
+          app = {
+            type = "executable";
+            name = "simple-app";
+            inherit includeDirs;
+            sources = appSources;
+            libraries = [
+              { target = "mathLib"; }
+              zlibLib
+            ];
+            tools = [ buildInfoTool ];
+          };
+        };
+
+        tests.simpleApp = {
+          executable = "app";
+          expectedOutput = "2 + 3 = 5";
+        };
+      };
+    }
+  ];
 }

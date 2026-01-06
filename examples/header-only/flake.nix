@@ -1,6 +1,6 @@
 # Header-only library example for nixnative
 #
-# Demonstrates creating and consuming header-only libraries using native.headerOnly.
+# Demonstrates creating and consuming header-only libraries with module targets.
 # Header-only libraries have no compiled sources - just headers that consumers include.
 
 {
@@ -26,7 +26,8 @@
             inherit pkgs nixPackage;
             inherit (ninjaPackages) nix-ninja nix-ninja-task;
           };
-          packages = import ./project.nix { inherit pkgs native; };
+          project = import ./project.nix { inherit pkgs native; };
+          packages = project.packages;
         in
         packages // { default = packages.testApp; }
       );
@@ -40,9 +41,9 @@
             inherit pkgs nixPackage;
             inherit (ninjaPackages) nix-ninja nix-ninja-task;
           };
-          packages = import ./project.nix { inherit pkgs native; };
+          project = import ./project.nix { inherit pkgs native; };
         in
-        import ./checks.nix { inherit pkgs native packages; }
+        project.checks
       );
     };
 }

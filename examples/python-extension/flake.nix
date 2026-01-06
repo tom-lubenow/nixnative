@@ -26,7 +26,8 @@
             inherit pkgs nixPackage;
             inherit (ninjaPackages) nix-ninja nix-ninja-task;
           };
-          packages = import ./project.nix { inherit pkgs native; };
+          project = import ./project.nix { inherit pkgs native; };
+          packages = project.packages;
         in
         packages // {
           default = packages.pythonPackage;
@@ -42,9 +43,9 @@
             inherit pkgs nixPackage;
             inherit (ninjaPackages) nix-ninja nix-ninja-task;
           };
-          packages = import ./project.nix { inherit pkgs native; };
+          project = import ./project.nix { inherit pkgs native; };
         in
-        import ./checks.nix { inherit pkgs native packages; }
+        project.checks
       );
 
       devShells = forAllSystems (system:
@@ -56,7 +57,8 @@
             inherit pkgs nixPackage;
             inherit (ninjaPackages) nix-ninja nix-ninja-task;
           };
-          packages = import ./project.nix { inherit pkgs native; };
+          project = import ./project.nix { inherit pkgs native; };
+          packages = project.packages;
           python = pkgs.python312;
         in
         {

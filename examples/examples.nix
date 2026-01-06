@@ -14,91 +14,85 @@ let
   # Core Examples - Basic C/C++ building blocks
   # ===========================================================================
 
-  execPackagesRaw = import ./executable/project.nix { inherit pkgs native; };
-  execChecks = import ./executable/checks.nix { inherit pkgs native; packages = execPackagesRaw; };
-  execPackages = materializeSet execPackagesRaw;
+  execProject = import ./executable/project.nix { inherit pkgs native; };
+  execPackages = materializeSet execProject.packages;
+  execChecks = execProject.checks;
 
-  libraryPackagesRaw = import ./library/project.nix { inherit pkgs native; };
-  libraryChecks = import ./library/checks.nix { inherit pkgs native; packages = libraryPackagesRaw; };
-  libraryPackages = materializeSet libraryPackagesRaw;
+  libraryProject = import ./library/project.nix { inherit pkgs native; };
+  libraryPackages = materializeSet libraryProject.packages;
+  libraryChecks = libraryProject.checks;
 
-  headerOnlyPackagesRaw = import ./header-only/project.nix { inherit pkgs native; };
-  headerOnlyChecks = import ./header-only/checks.nix { inherit pkgs native; packages = headerOnlyPackagesRaw; };
-  headerOnlyPackages = {
-    headerOnlyExample = materialize headerOnlyPackagesRaw.headerOnlyExample;
-  };
+  headerOnlyProject = import ./header-only/project.nix { inherit pkgs native; };
+  headerOnlyPackages = materializeSet headerOnlyProject.packages;
+  headerOnlyChecks = headerOnlyProject.checks;
 
-  libraryChainPackagesRaw = import ./library-chain/project.nix { inherit pkgs native; };
-  libraryChainChecks = import ./library-chain/checks.nix { inherit pkgs native; packages = libraryChainPackagesRaw; };
-  libraryChainPackages = materializeSet libraryChainPackagesRaw;
+  libraryChainProject = import ./library-chain/project.nix { inherit pkgs native; };
+  libraryChainPackages = materializeSet libraryChainProject.packages;
+  libraryChainChecks = libraryChainProject.checks;
 
-  appPackagesRaw = import ./app-with-library/project.nix { inherit pkgs native; };
-  appChecks = import ./app-with-library/checks.nix { inherit pkgs native; packages = appPackagesRaw; };
-  appPackages = materializeSet appPackagesRaw;
+  appProject = import ./app-with-library/project.nix { inherit pkgs native; };
+  appPackages = materializeSet appProject.packages;
+  appChecks = appProject.checks;
 
-  multiToolchainPackagesRaw = import ./multi-toolchain/project.nix { inherit pkgs native; };
-  multiToolchainChecks = import ./multi-toolchain/checks.nix { inherit pkgs native; packages = multiToolchainPackagesRaw; };
-  multiToolchainPackages = materializeSet multiToolchainPackagesRaw;
+  multiToolchainProject = import ./multi-toolchain/project.nix { inherit pkgs native; };
+  multiToolchainPackages = materializeSet multiToolchainProject.packages;
+  multiToolchainChecks = multiToolchainProject.checks;
 
   # ===========================================================================
   # Testing & Development
   # ===========================================================================
 
-  testingPackagesRaw = import ./testing/project.nix { inherit pkgs native; };
-  testingChecks = import ./testing/checks.nix { inherit pkgs native; packages = testingPackagesRaw; };
-  testingPackages = materializeSet testingPackagesRaw;
+  testingProject = import ./testing/project.nix { inherit pkgs native; };
+  testingPackages = materializeSet testingProject.packages;
+  testingChecks = testingProject.checks;
 
-  testLibrariesPackagesRaw = import ./test-libraries/project.nix { inherit pkgs native; };
-  testLibrariesChecks = import ./test-libraries/checks.nix { inherit pkgs native; packages = testLibrariesPackagesRaw; };
-  testLibrariesPackages = materializeSet testLibrariesPackagesRaw;
+  testLibrariesProject = import ./test-libraries/project.nix { inherit pkgs native; };
+  testLibrariesPackages = materializeSet testLibrariesProject.packages;
+  testLibrariesChecks = testLibrariesProject.checks;
 
-  devshellPackagesRaw = import ./devshell/project.nix { inherit pkgs native; };
-  devshellChecks = import ./devshell/checks.nix { inherit pkgs native; packages = devshellPackagesRaw; };
-  devshellPackages = {
-    devshellExample = materialize devshellPackagesRaw.devshellExample;
-  };
+  devshellProject = import ./devshell/project.nix { inherit pkgs native; };
+  devshellPackages = materializeSet devshellProject.packages;
+  devshellChecks = devshellProject.checks;
 
-  coveragePackagesRaw = import ./coverage/project.nix { inherit pkgs native; };
-  coverageChecks = import ./coverage/checks.nix { inherit pkgs native; packages = coveragePackagesRaw; };
-  coveragePackages = materializeSet coveragePackagesRaw;
+  coverageProject = import ./coverage/project.nix { inherit pkgs native; };
+  coveragePackages = materializeSet coverageProject.packages;
+  coverageChecks = coverageProject.checks;
 
   # ===========================================================================
   # Libraries & Installation
   # ===========================================================================
 
-  pluginsPackagesRaw = import ./plugins/project.nix { inherit pkgs native; };
-  pluginsChecks = import ./plugins/checks.nix { inherit pkgs native; packages = pluginsPackagesRaw; };
-  pluginsPackages = materializeSet pluginsPackagesRaw;
+  pluginsProject = import ./plugins/project.nix { inherit pkgs native; };
+  pluginsPackages = materializeSet pluginsProject.packages;
+  pluginsChecks = pluginsProject.checks;
 
-  multiBinaryPackagesRaw = import ./multi-binary/project.nix { inherit pkgs native; };
-  multiBinaryChecks = import ./multi-binary/checks.nix { inherit pkgs native; packages = multiBinaryPackagesRaw; };
-  multiBinaryPackages = materializeSet multiBinaryPackagesRaw;
+  multiBinaryProject = import ./multi-binary/project.nix { inherit pkgs native; };
+  multiBinaryPackages = materializeSet multiBinaryProject.packages;
+  multiBinaryChecks = multiBinaryProject.checks;
 
   # ===========================================================================
   # System Integration
   # ===========================================================================
 
-  pkgConfigPackagesRaw = import ./pkg-config/project.nix { inherit pkgs native; };
-  pkgConfigChecks = import ./pkg-config/checks.nix { inherit pkgs native; packages = pkgConfigPackagesRaw; };
-  pkgConfigPackages = materializeSet pkgConfigPackagesRaw;
+  pkgConfigProject = import ./pkg-config/project.nix { inherit pkgs native; };
+  pkgConfigPackages = materializeSet pkgConfigProject.packages;
+  pkgConfigChecks = pkgConfigProject.checks;
 
-  cAndCppPackagesRaw = import ./c-and-cpp/project.nix { inherit pkgs native; };
-  cAndCppChecks = import ./c-and-cpp/checks.nix { inherit pkgs native; packages = cAndCppPackagesRaw; };
-  cAndCppPackages = materializeSet cAndCppPackagesRaw;
+  cAndCppProject = import ./c-and-cpp/project.nix { inherit pkgs native; };
+  cAndCppPackages = materializeSet cAndCppProject.packages;
+  cAndCppChecks = cAndCppProject.checks;
 
-  simpleToolPackagesRaw = import ./simple-tool/project.nix { inherit pkgs native; };
-  simpleToolChecks = import ./simple-tool/checks.nix { inherit pkgs native; packages = simpleToolPackagesRaw; };
-  simpleToolPackages = {
-    simpleToolExample = materialize simpleToolPackagesRaw.simpleToolExample;
-  };
+  simpleToolProject = import ./simple-tool/project.nix { inherit pkgs native; };
+  simpleToolPackages = materializeSet simpleToolProject.packages;
+  simpleToolChecks = simpleToolProject.checks;
 
   # ===========================================================================
-  # Project Defaults (mkProject example)
+  # Project Defaults (module defaults example)
   # ===========================================================================
 
-  projectDefaultsPackagesRaw = import ./project-defaults/project.nix { inherit pkgs native; };
-  projectDefaultsChecks = import ./project-defaults/checks.nix { inherit pkgs native; packages = projectDefaultsPackagesRaw; };
-  projectDefaultsPackages = materializeSet projectDefaultsPackagesRaw;
+  projectDefaultsProject = import ./project-defaults/project.nix { inherit pkgs native; };
+  projectDefaultsPackages = materializeSet projectDefaultsProject.packages;
+  projectDefaultsChecks = projectDefaultsProject.checks;
 
 in {
   packages = mergeAttrs [
@@ -150,8 +144,8 @@ in {
   ];
 
   defaults = {
-    executable = materialize execPackagesRaw.executableExample;
-    library = materialize libraryPackagesRaw.mathLibrary;
-    app = appPackagesRaw.app;
+    executable = materialize execProject.packages.executableExample;
+    library = materialize libraryProject.packages.mathLibrary;
+    app = appProject.packages.app;
   };
 }

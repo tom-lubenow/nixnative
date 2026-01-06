@@ -1,21 +1,35 @@
 { pkgs, native }:
 
-let
-  # Header-only library
-  vec3Lib = native.headerOnly {
-    name = "vec3";
-    publicIncludeDirs = [ ./include ];
-  };
+native.project {
+  modules = [
+    {
+      native = {
+        root = ./.;
 
-  # Test executable that uses the header-only library
-  testApp = native.executable {
-    name = "header-only-test";
-    root = ./.;
-    sources = [ "main.cc" ];
-    libraries = [ vec3Lib ];
-  };
+        targets = {
+          vec3Lib = {
+            type = "headerOnly";
+            name = "vec3";
+            publicIncludeDirs = [ ./include ];
+          };
 
-in {
-  inherit testApp;
-  headerOnlyExample = testApp;
+          testApp = {
+            type = "executable";
+            name = "header-only-test";
+            sources = [ "main.cc" ];
+            libraries = [ { target = "vec3Lib"; } ];
+          };
+        };
+
+        tests.headerOnly = {
+          executable = "testApp";
+          expectedOutput = "a + b = (5, 7, 9)";
+        };
+
+        extraPackages = {
+          headerOnlyExample = { target = "testApp"; };
+        };
+      };
+    }
+  ];
 }

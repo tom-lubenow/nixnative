@@ -4,7 +4,7 @@ Incremental C/C++ builds using Nix dynamic derivations and nix-ninja.
 
 ## Overview
 
-nixnative provides a high-level API for building C/C++ projects with true per-file incrementality. It uses [nix-ninja](https://github.com/aspect-build/nix-ninja) as the build driver, which generates one derivation per source file at build time using [RFC 92 dynamic derivations](https://github.com/NixOS/rfcs/blob/master/rfcs/0092-plan-dynamism.md).
+nixnative provides a module-first API for building C/C++ projects with true per-file incrementality. It uses [nix-ninja](https://github.com/aspect-build/nix-ninja) as the build driver, which generates one derivation per source file at build time using [RFC 92 dynamic derivations](https://github.com/NixOS/rfcs/blob/master/rfcs/0092-plan-dynamism.md).
 
 **This project requires Nix with dynamic derivations support.** All builds use nix-ninja for incremental compilation—there is no fallback to traditional builds.
 
@@ -38,7 +38,7 @@ nixnative generates a ninja build file at Nix evaluation time, then uses nix-nin
 
 ```
 EVALUATION TIME (instant):
-  native.executable { sources = [...]; }
+  native.project { modules = [ ... ]; }
     → Generate build.ninja content (pure Nix)
     → Create wrapper derivation that invokes nix-ninja
     → builtins.outputOf → placeholder for final output
@@ -73,11 +73,20 @@ This architecture gives you:
     packages.x86_64-linux.default = let
       pkgs = import nixpkgs { system = "x86_64-linux"; };
       native = nixnative.lib.native { inherit pkgs; };
-    in native.executable {
-      name = "hello";
-      root = ./.;
-      sources = [ "src/main.cc" ];
-    };
+    in (native.project {
+      modules = [
+        {
+          native = {
+            root = ./.;
+            targets.hello = {
+              type = "executable";
+              name = "hello";
+              sources = [ "src/main.cc" ];
+            };
+          };
+        }
+      ];
+    }).packages.hello;
   };
 }
 ```
@@ -114,7 +123,7 @@ See the `examples/` directory for working examples:
 - `examples/library-chain` – Transitive library dependencies
 - `examples/app-with-library` – Executable depending on a static library
 - `examples/multi-toolchain` – Different compiler/linker combinations (clang/gcc + lld/mold)
-- `examples/testing` – Unit tests with `native.test`
+- `examples/testing` – Unit tests with module-defined tests
 - `examples/test-libraries` – GoogleTest, Catch2, and doctest integration
 - `examples/coverage` – Code coverage with gcov/llvm-cov
 - `examples/plugins` – Shared library plugins with dlopen
@@ -156,6 +165,7 @@ nix flake check
 │   ├── compilers/      # Compiler implementations (clang, gcc)
 │   ├── linkers/        # Linker implementations (lld, mold, ld)
 │   ├── ninja/          # nix-ninja integration (build file generation)
+│   ├── modules/        # Module-first project interface
 │   ├── builders/       # High-level API (executable, staticLib, etc.)
 │   ├── scanner/        # Tool plugin processing
 │   ├── tools/          # Built-in tool plugins (protobuf, jinja, binary-blob)

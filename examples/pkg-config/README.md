@@ -68,10 +68,11 @@ This runs `pkg-config --cflags` and `pkg-config --libs` to extract:
 ### Using in Executables
 
 ```nix
-native.executable {
+targets.myApp = {
+  type = "executable";
   name = "my-app";
   sources = [ "main.cc" ];
-  libraries = [ zlibLib curlLib ];  # Just like any other library
+  libraries = [ zlibLib curlLib ];
 };
 ```
 

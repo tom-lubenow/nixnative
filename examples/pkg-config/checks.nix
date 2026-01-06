@@ -1,13 +1,6 @@
-{
-  pkgs,
-  native,
-  packages,
-}:
+{ pkgs, native }:
 
-{
-  pkgConfig = native.test {
-    name = "pkgconfig-test";
-    executable = packages.demo;
-    expectedOutput = "All libraries working correctly!";
-  };
-}
+let
+  project = import ./project.nix { inherit pkgs native; };
+in
+project.checks

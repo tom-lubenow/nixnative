@@ -1,36 +1,51 @@
 { pkgs, native }:
 
-let
-  # Mixed sources in one target
-  mixedApp = native.executable {
-    name = "mixed-app";
-    root = ./.;
-    sources = [
-      "clib.c"
-      "main.cc"
-    ];
-    includeDirs = [ "include" ];
-  };
+native.project {
+  modules = [
+    {
+      native = {
+        root = ./.;
 
-  # C library as separate target
-  cLib = native.staticLib {
-    name = "libclib";
-    root = ./.;
-    sources = [ "clib.c" ];
-    includeDirs = [ "include" ];
-    publicIncludeDirs = [ "include" ];
-  };
+        targets = {
+          mixedApp = {
+            type = "executable";
+            name = "mixed-app";
+            sources = [
+              "clib.c"
+              "main.cc"
+            ];
+            includeDirs = [ "include" ];
+          };
 
-  # C++ app using C library
-  cppApp = native.executable {
-    name = "cpp-app";
-    root = ./.;
-    sources = [ "main.cc" ];
-    includeDirs = [ "include" ];
-    libraries = [ cLib ];
-  };
+          cLib = {
+            type = "staticLib";
+            name = "libclib";
+            sources = [ "clib.c" ];
+            includeDirs = [ "include" ];
+            publicIncludeDirs = [ "include" ];
+          };
 
-in {
-  inherit mixedApp cLib cppApp;
-  cAndCppExample = mixedApp;
+          cppApp = {
+            type = "executable";
+            name = "cpp-app";
+            sources = [ "main.cc" ];
+            includeDirs = [ "include" ];
+            libraries = [ { target = "cLib"; } ];
+          };
+        };
+
+        tests = {
+          mixedApp = {
+            executable = "mixedApp";
+            expectedOutput = "Mixed C/C++ working correctly!";
+          };
+
+          cppApp = {
+            executable = "cppApp";
+            expectedOutput = "Mixed C/C++ working correctly!";
+          };
+        };
+      };
+    }
+  ];
 }

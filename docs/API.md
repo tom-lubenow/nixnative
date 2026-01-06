@@ -4,22 +4,83 @@ This document describes the public API exposed by `nixnative.lib.native`.
 
 ## API Overview
 
-nixnative provides two API levels:
+nixnative provides multiple API layers:
 
 | API Level | Functions | When to Use |
 |-----------|-----------|-------------|
-| **High-level** | `executable`, `staticLib`, `sharedLib`, `headerOnly`, `devShell`, `shell`, `test` | Most users - automatic toolchain selection |
+| **Module-first** | `project` | Recommended - typed options, composable configuration |
+| **High-level** | `executable`, `staticLib`, `sharedLib`, `headerOnly`, `devShell`, `shell`, `test` | Compatibility - direct builders |
 | **Low-level** | `mkExecutable`, `mkStaticLib`, `mkSharedLib`, `mkHeaderOnly`, `mkDevShell`, `mkTest` | Advanced users - explicit toolchain control |
 
 **Key differences:**
 
+- Module-first API returns `packages`, `checks`, and `devShells` from module config
 - High-level API accepts `compiler`/`linker` as strings (e.g., `"gcc"`, `"mold"`)
 - Low-level API requires explicit `toolchain` object
-- Both use `tools` parameter for code generation
+- All APIs use `tools` parameters for code generation
 
 ---
 
-## High-Level API (Recommended)
+## Module-First Project API (Recommended)
+
+### `project`
+
+Evaluates a module configuration and returns:
+
+- `packages` - built targets
+- `checks` - test derivations
+- `devShells` - development shells
+- `config` - evaluated module config (for introspection)
+
+```nix
+native.project {
+  modules = [
+    {
+      native = {
+        root = ./.;
+        defaults = {
+          includeDirs = [ "include" ];
+          warnings = "all";
+        };
+
+        targets.myApp = {
+          type = "executable";
+          name = "my-app";
+          sources = [ "src/main.cc" ];
+        };
+
+        targets.myLib = {
+          type = "staticLib";
+          name = "libmylib";
+          sources = [ "src/lib.cc" ];
+          publicIncludeDirs = [ "include" ];
+        };
+
+        tests.myApp = {
+          executable = "myApp";
+          expectedOutput = "Hello";
+        };
+
+        shells.default = {
+          target = "myApp";
+        };
+      };
+    }
+  ];
+}
+```
+
+**Target types:** `executable`, `staticLib`, `sharedLib`, `headerOnly`
+
+**Target references:** use `{ target = "name"; }` in `libraries`, `tests`, or `extra*` fields.
+
+**Extra outputs:** `extraPackages` and `extraChecks` allow custom derivations alongside targets/tests.
+
+---
+
+## High-Level API (Compatibility)
+
+These functions remain available for direct use, but new projects should prefer the module-first `native.project` interface.
 
 ### `executable`
 
@@ -139,7 +200,7 @@ native.test {
 
 ---
 
-## Low-Level API
+## Low-Level API (Compatibility)
 
 For advanced use cases requiring explicit toolchain control.
 

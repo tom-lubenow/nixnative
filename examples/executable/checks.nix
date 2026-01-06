@@ -1,10 +1,6 @@
-{ pkgs, native, packages }:
+{ pkgs, native }:
 
-{
-  # Use native.test which handles dynamic derivations properly
-  executableExample = native.test {
-    name = "executable-example";
-    executable = packages.executableExample;
-    expectedOutput = "Hello from nixnative executable example";
-  };
-}
+let
+  project = import ./project.nix { inherit pkgs native; };
+in
+project.checks

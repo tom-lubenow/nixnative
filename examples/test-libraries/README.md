@@ -17,21 +17,24 @@ nixnative provides pre-configured test libraries through `native.testLibs`:
 
 ```nix
 # With framework-provided main()
-native.executable {
+targets.myTests = {
+  type = "executable";
   name = "my-tests";
   sources = [ "tests.cc" ];
   libraries = [ native.testLibs.gtest.withMain ];
 };
 
 # With your own main()
-native.executable {
+targets.myTests = {
+  type = "executable";
   name = "my-tests";
   sources = [ "tests.cc" "main.cc" ];
   libraries = [ native.testLibs.gtest ];
 };
 
 # With mocking support
-native.executable {
+targets.myTests = {
+  type = "executable";
   name = "my-tests";
   sources = [ "tests.cc" ];
   libraries = [ native.testLibs.gmock.withMain ];
@@ -41,8 +44,8 @@ native.executable {
 ### Catch2
 
 ```nix
-# With framework-provided main()
-native.executable {
+targets.myTests = {
+  type = "executable";
   name = "my-tests";
   sources = [ "tests.cc" ];
   libraries = [ native.testLibs.catch2.withMain ];
@@ -54,7 +57,8 @@ native.executable {
 doctest is header-only. Define `DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN` in one source file:
 
 ```nix
-native.executable {
+targets.myTests = {
+  type = "executable";
   name = "my-tests";
   sources = [ "tests.cc" ];
   libraries = [ native.testLibs.doctest ];

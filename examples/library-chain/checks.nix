@@ -1,9 +1,6 @@
-{ pkgs, native, packages }:
+{ pkgs, native }:
 
-{
-  libraryChain = native.test {
-    name = "library-chain-test";
-    executable = packages.app;
-    expectedOutput = "Library chain working";
-  };
-}
+let
+  project = import ./project.nix { inherit pkgs native; };
+in
+project.checks

@@ -4,8 +4,8 @@ This example demonstrates building a plugin system with shared libraries and run
 
 ## What This Demonstrates
 
-- Building shared libraries with `native.sharedLib`
-- Building header-only libraries with `native.headerOnly`
+- Building shared libraries with `type = "sharedLib"`
+- Building header-only libraries with `type = "headerOnly"`
 - Runtime plugin loading with `dlopen`/`dlsym`
 
 ## Project Structure
@@ -62,7 +62,8 @@ using CreatePluginFunc = Plugin* (*)();
 ### 2. Build the Interface as Header-Only Library
 
 ```nix
-commonLib = native.headerOnly {
+targets.commonLib = {
+  type = "headerOnly";
   name = "plugin-interface";
   includeDirs = [ ./common ];
 };
@@ -71,11 +72,11 @@ commonLib = native.headerOnly {
 ### 3. Build the Plugin as a Shared Library
 
 ```nix
-myPlugin = native.sharedLib {
+targets.myPlugin = {
+  type = "sharedLib";
   name = "my-plugin";
-  root = ./.;
   sources = [ "plugin/plugin.cc" ];
-  libraries = [ commonLib ];
+  libraries = [ { target = "commonLib"; } ];
 };
 ```
 
@@ -90,11 +91,11 @@ extern "C" {
 ### 4. Build the Host Application
 
 ```nix
-hostApp = native.executable {
+targets.hostApp = {
+  type = "executable";
   name = "host-app";
-  root = ./.;
   sources = [ "host/main.cc" ];
-  libraries = [ commonLib ];
+  libraries = [ { target = "commonLib"; } ];
   linkFlags = if pkgs.stdenv.isLinux then [ "-ldl" ] else [ ];
 };
 ```
@@ -112,10 +113,11 @@ plugin->doSomething();
 
 ### Shared Libraries
 
-Use `native.sharedLib` to build `.so` files:
+Use `type = "sharedLib"` to build `.so` files:
 
 ```nix
-native.sharedLib {
+targets.myLib = {
+  type = "sharedLib";
   name = "my-lib";
   sources = [ "lib.cc" ];
   # Output: lib/libmy-lib.so
@@ -126,10 +128,11 @@ Access the library path via `.sharedLibrary` attribute.
 
 ### Header-Only Libraries
 
-Use `native.headerOnly` when there's no compiled code:
+Use `type = "headerOnly"` when there's no compiled code:
 
 ```nix
-native.headerOnly {
+targets.myHeaders = {
+  type = "headerOnly";
   name = "my-headers";
   includeDirs = [ ./include ];
   publicDefines = [ "MY_FEATURE=1" ];  # Optional

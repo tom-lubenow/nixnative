@@ -1,15 +1,6 @@
-{ pkgs, native, packages }:
+{ pkgs, native }:
 
-{
-  mixedApp = native.test {
-    name = "mixed-app-test";
-    executable = packages.mixedApp;
-    expectedOutput = "Mixed C/C++ working correctly!";
-  };
-
-  cppApp = native.test {
-    name = "cpp-app-test";
-    executable = packages.cppApp;
-    expectedOutput = "Mixed C/C++ working correctly!";
-  };
-}
+let
+  project = import ./project.nix { inherit pkgs native; };
+in
+project.checks

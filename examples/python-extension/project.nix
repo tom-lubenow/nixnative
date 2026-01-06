@@ -5,84 +5,107 @@
 { pkgs, native }:
 
 let
-  # Python version to target
   python = pkgs.python312;
   pybind11 = python.pkgs.pybind11;
 
-  # Get the extension suffix for this Python version
-  # e.g., ".cpython-312-x86_64-linux-gnu.so"
-  extensionSuffix = python.stdenv.hostPlatform.extensions.sharedLibrary;
+in
+native.project {
+  modules = [
+    ({ config, ... }:
+      let
+        mathext = config.native.packages.mathext;
+        pythonPackage = pkgs.stdenv.mkDerivation {
+          name = "mathext-python";
 
-  # Build the extension as a shared library
-  mathext = native.sharedLib {
-    name = "mathext";
-    root = ./.;
-    sources = [ "src/mathext.cpp" ];
+          buildInputs = [ mathext.passthru.target ];
 
-    # Include pybind11 and Python headers
-    includeDirs = [
-      "${pybind11}/include"
-      "${python}/include/python${python.pythonVersion}"
-    ];
+          dontUnpack = true;
+          dontConfigure = true;
 
-    # pybind11 compile flags
-    compileFlags = [
-      "-fvisibility=hidden"
-    ];
+          buildPhase = ''
+            runHook preBuild
 
-    # C++17 is required for pybind11
-    languageFlags = {
-      cpp = [ "-std=c++17" ];
-    };
+            ext_suffix=$(${python}/bin/python3 -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
 
-    # No need to link against Python on Linux with pybind11
-    # (it uses the Python interpreter's symbols at runtime)
-  };
+            mkdir -p $out/lib/python${python.pythonVersion}/site-packages
 
-  # Create a Python package that includes the extension
-  pythonPackage = pkgs.stdenv.mkDerivation {
-    name = "mathext-python";
+            cp ${mathext.passthru.target}/mathext.so \
+               $out/lib/python${python.pythonVersion}/site-packages/mathext$ext_suffix
 
-    # We need the shared library built by nixnative
-    buildInputs = [ mathext.passthru.target ];
+            runHook postBuild
+          '';
 
-    dontUnpack = true;
-    dontConfigure = true;
+          dontInstall = true;
+          dontFixup = true;
+        };
 
-    buildPhase = ''
-      runHook preBuild
+        pythonWithExt = python.withPackages (ps: [ ]);
 
-      # Get the actual extension suffix from Python
-      ext_suffix=$(${python}/bin/python3 -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
+        pythonEnv = pkgs.buildEnv {
+          name = "python-with-mathext";
+          paths = [ pythonWithExt pythonPackage ];
+        };
 
-      mkdir -p $out/lib/python${python.pythonVersion}/site-packages
+        testScript = pkgs.writeText "test_mathext.py" ''
+          import mathext
 
-      # Copy and rename the shared library to the correct Python extension name
-      cp ${mathext.passthru.target}/mathext.so \
-         $out/lib/python${python.pythonVersion}/site-packages/mathext$ext_suffix
+          # Test basic functions
+          assert mathext.add(2, 3) == 5, "add failed"
+          assert mathext.multiply(3, 4) == 12, "multiply failed"
+          assert abs(mathext.power(2.0, 3.0) - 8.0) < 0.001, "power failed"
 
-      runHook postBuild
-    '';
+          # Test vector operations
+          assert abs(mathext.dot_product([1.0, 2.0, 3.0], [4.0, 5.0, 6.0]) - 32.0) < 0.001, "dot_product failed"
+          result = mathext.scale_vector([1.0, 2.0, 3.0], 2.0)
+          assert result == [2.0, 4.0, 6.0], f"scale_vector failed: {result}"
 
-    dontInstall = true;
-    dontFixup = true;
-  };
+          # Test Calculator class
+          calc = mathext.Calculator(10.0)
+          calc.add(5.0)
+          assert calc.value == 15.0, "Calculator.add failed"
+          calc.multiply(2.0)
+          assert calc.value == 30.0, "Calculator.multiply failed"
 
-  # Create a Python environment with the extension installed
-  pythonWithExt = python.withPackages (ps: [
-    # Add any Python dependencies here
-  ]);
+          print("Python extension tests passed!")
+        '';
 
-in {
-  # The raw shared library
-  inherit mathext;
+        pythonExtensionCheck = pkgs.runCommand "python-extension-test" {
+          buildInputs = [ python pythonPackage ];
+        } ''
+          export PYTHONPATH="${pythonPackage}/lib/python${python.pythonVersion}/site-packages:$PYTHONPATH"
 
-  # The Python package
-  inherit pythonPackage;
+          ${python}/bin/python3 ${testScript}
 
-  # Convenience: Python interpreter with the extension
-  pythonEnv = pkgs.buildEnv {
-    name = "python-with-mathext";
-    paths = [ pythonWithExt pythonPackage ];
-  };
+          mkdir -p $out
+          echo "Python extension test passed" > $out/result
+        '';
+      in
+      {
+        native = {
+          root = ./.;
+
+          targets.mathext = {
+            type = "sharedLib";
+            name = "mathext";
+            sources = [ "src/mathext.cpp" ];
+            includeDirs = [
+              "${pybind11}/include"
+              "${python}/include/python${python.pythonVersion}"
+            ];
+            compileFlags = [ "-fvisibility=hidden" ];
+            languageFlags = {
+              cpp = [ "-std=c++17" ];
+            };
+          };
+
+          extraPackages = {
+            inherit pythonPackage pythonEnv;
+          };
+
+          extraChecks = {
+            pythonExtension = pythonExtensionCheck;
+          };
+        };
+      })
+  ];
 }

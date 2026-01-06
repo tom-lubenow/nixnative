@@ -1,10 +1,6 @@
-{ pkgs, native, packages }:
+{ pkgs, native }:
 
-{
-  # Just verify the app builds and runs
-  devshell = native.test {
-    name = "devshell-app-test";
-    executable = packages.app;
-    # No expectedOutput - just verifies the app runs without error
-  };
-}
+let
+  project = import ./project.nix { inherit pkgs native; };
+in
+project.checks

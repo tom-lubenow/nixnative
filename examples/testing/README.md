@@ -1,10 +1,10 @@
 # Testing Example
 
-This example demonstrates nixnative's test infrastructure using `native.test`.
+This example demonstrates nixnative's test infrastructure using module-defined tests.
 
 ## What This Demonstrates
 
-- Running tests with `native.test`
+- Defining tests under `native.tests`
 - Passing arguments to test executables
 - Verifying expected output
 - Testing edge cases (special characters, LTO builds, sanitizers)
@@ -37,9 +37,8 @@ nix build .#testAsan       # AddressSanitizer test (Linux only)
 ### Basic Test
 
 ```nix
-test1 = native.test {
-  name = "basic-test";
-  executable = app;
+tests.test1 = {
+  executable = "app";
   expectedOutput = "Hello Test";
 };
 ```
@@ -53,9 +52,8 @@ The test:
 ### Test with Arguments
 
 ```nix
-test2 = native.test {
-  name = "arg-test";
-  executable = app;
+tests.test2 = {
+  executable = "app";
   args = [ "World" ];
   expectedOutput = "Hello World";
 };
@@ -64,9 +62,8 @@ test2 = native.test {
 ### Shell Escaping Test
 
 ```nix
-test3 = native.test {
-  name = "special-chars-test";
-  executable = app;
+tests.test3 = {
+  executable = "app";
   args = [ "it's \"quoted\" & $special" ];
   expectedOutput = "Hello it's \"quoted\" & $special";
 };
@@ -79,16 +76,15 @@ This verifies that arguments with special shell characters are properly escaped.
 #### LTO Build
 
 ```nix
-appLto = native.executable {
+targets.appLto = {
+  type = "executable";
   name = "test-app-lto";
-  root = ./.;
   sources = [ "main.cc" ];
-  flags = [ { type = "lto"; value = "thin"; } ];
+  lto = "thin";
 };
 
-testLto = native.test {
-  name = "lto-test";
-  executable = appLto;
+tests.testLto = {
+  executable = "appLto";
   expectedOutput = "Hello Test";
 };
 ```
@@ -96,27 +92,24 @@ testLto = native.test {
 #### AddressSanitizer (Linux Only)
 
 ```nix
-appAsan = native.executable {
+targets.appAsan = {
+  type = "executable";
   name = "test-app-asan";
-  root = ./.;
   sources = [ "main.cc" ];
-  flags = [
-    { type = "sanitizer"; value = "address"; }
-    { type = "sanitizer"; value = "undefined"; }
-  ];
+  sanitizers = [ "address" "undefined" ];
 };
 ```
 
 ### Minimal Configuration Test
 
 ```nix
-appMinimal = native.executable {
+targets.appMinimal = {
+  type = "executable";
   name = "test-app-minimal";
-  root = ./.;
   sources = [ "main.cc" ];
   includeDirs = [ ];
   defines = [ ];
-  extraCxxFlags = [ ];
+  compileFlags = [ ];
   libraries = [ ];
   tools = [ ];
 };
@@ -127,26 +120,25 @@ This verifies that empty optional lists work correctly.
 ## Platform-Conditional Tests
 
 ```nix
-packages = {
+tests = {
   inherit test1 test2 test3 testLto testMinimal;
 }
 // (if pkgs.stdenv.hostPlatform.isLinux then {
-  inherit appAsan testAsan;
+  inherit testAsan;
 } else { });
 ```
 
 This pattern allows tests that only work on certain platforms.
 
-## `native.test` Parameters
+## Test Parameters
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `name` | Yes | Test name (appears in logs) |
+| `name` | No | Test name (defaults to the attribute name) |
 | `executable` | Yes | The executable to run |
 | `args` | No | Command-line arguments |
 | `stdin` | No | Input to pass to stdin |
 | `expectedOutput` | No | String that must appear in stdout |
-| `env` | No | Environment variables |
 
 ## Next Steps
 

@@ -1,12 +1,12 @@
 # Executable Example
 
-This is the simplest nixnative example - a minimal executable that demonstrates the high-level API.
+This is the simplest nixnative example - a minimal executable that demonstrates the module-first API.
 
 **Start here** if you're new to nixnative.
 
 ## What This Demonstrates
 
-- Basic `native.executable` usage
+- Basic `native.project` usage
 - Project structure: `flake.nix`, `project.nix`, `checks.nix`
 - Automatic dependency scanning (no manifest needed)
 - Multiple source files with headers
@@ -39,7 +39,7 @@ Hello from nixnative executable example
 
 ## Key Points
 
-1. **High-level API**: `native.executable` handles toolchain selection automatically
+1. **Module-first API**: `native.project` and `targets` handle toolchain selection automatically
 2. **Sources**: List source files relative to `root`
 3. **Include directories**: Headers are found via `includeDirs`
 4. **Dependency scanning**: nixnative automatically discovers header dependencies
