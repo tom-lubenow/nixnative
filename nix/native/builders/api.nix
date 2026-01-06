@@ -68,7 +68,6 @@ let
 
   # Resolve a linker specification to a linker object
   # Accepts: string name ("lld", "mold", "ld") or linker object or null
-  # Note: gold support removed (deprecated upstream)
   resolveLinker =
     spec:
     if spec == null then

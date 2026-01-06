@@ -12,7 +12,7 @@ rec {
 
   mkLinker =
     {
-      name, # Identifier: "lld", "mold", "gold", "ld"
+      name, # Identifier: "lld", "mold", "ld"
       binary, # Path to linker binary
       driverFlag, # How compiler invokes this: "-fuse-ld=lld"
 
@@ -87,15 +87,6 @@ rec {
     parallelLinking = true;
     icf = true;
     splitDwarf = true;
-  };
-
-  # Gold (GNU gold) - faster than GNU ld
-  goldCapabilities = {
-    lto = true;
-    thinLto = false;
-    parallelLinking = true;
-    icf = true;
-    splitDwarf = false;
   };
 
   # GNU ld - the classic
