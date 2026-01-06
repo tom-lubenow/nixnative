@@ -19,10 +19,6 @@ in
     formatIncludes
     formatDefines
     formatFlags
-    mkCompileRule
-    mkLinkExeRule
-    mkLinkSharedRule
-    mkArchiveRule
     mkBuildStatement
     generateExecutable
     generateStaticLib
