@@ -19,6 +19,9 @@ let
   defineType = types.oneOf [ types.str types.attrs ];
   listOfDefines = types.listOf defineType;
 
+  isDedupableList = values:
+    builtins.all (value: builtins.isString value || builtins.isPath value) values;
+
   emptyPublic = {
     includeDirs = [ ];
     defines = [ ];
@@ -93,6 +96,20 @@ let
     libraryPublicType
     libraryLinkFlagsType
   ];
+
+  toolchainType =
+    types.addCheck types.attrs (
+      value:
+      builtins.isAttrs value
+      && value ? name
+      && value ? languages
+      && builtins.isAttrs value.languages
+      && value.languages != { }
+      && value ? linker
+      && builtins.isAttrs value.linker
+      && value.linker ? driverFlag
+      && value ? targetPlatform
+    );
 
   isPathLikeValue = value:
     builtins.isPath value
@@ -177,7 +194,13 @@ let
         if targetVal == null then
           defaultVal
         else if builtins.isList defaultVal && builtins.isList targetVal then
-          defaultVal ++ targetVal
+          let
+            merged = defaultVal ++ targetVal;
+          in
+          if isDedupableList merged then
+            lib.unique merged
+          else
+            merged
         else if builtins.isAttrs defaultVal && builtins.isAttrs targetVal then
           mergeDefaults defaultVal targetVal
         else
@@ -327,14 +350,14 @@ let
         };
 
         toolchain = lib.mkOption {
-          type = types.nullOr types.attrs;
+          type = types.nullOr toolchainType;
           default = null;
           description = "Explicit toolchain for this target.";
         };
 
         publicIncludeDirs = lib.mkOption {
-          type = types.nullOr listOfPathLike;
-          default = null;
+          type = listOfPathLike;
+          default = [ ];
           description = "Public include dirs (libraries).";
         };
 
@@ -406,8 +429,8 @@ let
         };
 
         publicIncludeDirs = lib.mkOption {
-          type = types.nullOr listOfPathLike;
-          default = null;
+          type = listOfPathLike;
+          default = [ ];
           description = "Default public include dirs for libraries.";
         };
 
@@ -506,7 +529,7 @@ let
         };
 
         toolchain = lib.mkOption {
-          type = types.nullOr types.attrs;
+          type = types.nullOr toolchainType;
           default = null;
           description = "Explicit toolchain for the dev shell.";
         };
@@ -570,11 +593,16 @@ let
           withLibraries = baseArgs // {
             libraries = resolveLibraryRefs (baseArgs.libraries or [ ]);
           };
-          buildArgs =
-            if withLibraries.toolchain or null == null then
-              builtins.removeAttrs withLibraries [ "toolchain" ]
+          withPublicIncludeDirs =
+            if (withLibraries.publicIncludeDirs or [ ]) == [ ] then
+              withLibraries // { publicIncludeDirs = withLibraries.includeDirs or [ ]; }
             else
               withLibraries;
+          buildArgs =
+            if withPublicIncludeDirs.toolchain or null == null then
+              builtins.removeAttrs withPublicIncludeDirs [ "toolchain" ]
+            else
+              withPublicIncludeDirs;
           headerOnlyArgs =
             let
               allowed = [
@@ -589,7 +617,7 @@ let
                 "publicCompileFlags"
                 "tools"
               ];
-              stripped = lib.filterAttrs (name: _value: lib.elem name allowed) withLibraries;
+              stripped = lib.filterAttrs (name: _value: lib.elem name allowed) withPublicIncludeDirs;
             in
             if stripped.root or null == null then
               builtins.removeAttrs stripped [ "root" ]
@@ -673,7 +701,7 @@ let
         };
 
         toolchain = lib.mkOption {
-          type = types.nullOr types.attrs;
+          type = types.nullOr toolchainType;
           default = null;
           description = "Default toolchain for all targets.";
         };
