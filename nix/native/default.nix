@@ -332,6 +332,7 @@ let
       pkgs
       lib
       utils
+      language
       ninja
       ;
     inherit (toolCore) processTools;

@@ -23,6 +23,7 @@ in
     toolInputs,     # List of store paths containing tools (compiler, linker, etc.)
     outputType,     # "executable" | "staticLib" | "sharedLib"
     libraryInputs ? [],  # List of library wrapper derivations (for dependency tracking)
+    evalInputs ? [],     # Additional build inputs (pkg-config, tool deps, headers)
   }:
     let
       # Normalize target name for use as output name (replace / with -)
@@ -54,7 +55,7 @@ in
         # Library dependencies for linking (setup hooks, pkg-config, etc.)
         # Source files are NOT included here - they're tracked via string context
         # in ninjaContent, which flows through ninjaFile to this derivation.
-        buildInputs = libraryInputs;
+        buildInputs = libraryInputs ++ evalInputs;
 
         # stdenv adds a -rpath with a self reference but self references are not
         # allowed by text output mode (patched nix-ninja with bash fix)

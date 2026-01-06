@@ -189,49 +189,6 @@ rec {
 
   collectPublic = libs: foldl' mergePublic emptyPublic (map libraryPublic libs);
 
-  # ==========================================================================
-  # Recursive Library Resolution
-  # ==========================================================================
-
-  # Recursively collect all link flags from a library and its transitive dependencies.
-  # This properly handles the case where static libraries don't embed their dependencies'
-  # objects, avoiding duplicate symbol errors.
-  #
-  # Arguments:
-  #   libs - List of library dependencies
-  #
-  # Returns:
-  #   List of unique link flags (object files, archives, shared libs) in dependency order
-  #
-  collectAllLinkFlags =
-    libs:
-    let
-      # Collect from a single library and its dependencies
-      collectFromLib =
-        lib:
-        if !(builtins.isAttrs lib) then
-          # Raw string/path link flag
-          [ (toPathLike lib) ]
-        else
-          let
-            # Get this library's direct link flags
-            directFlags = lib.public.linkFlags or [ ];
-            # Recursively get transitive dependencies' flags
-            transitiveFlags =
-              if lib ? libraries then
-                collectAllLinkFlags lib.libraries
-              else
-                [ ];
-          in
-          # Transitive deps come BEFORE this lib (dependency order for static linking)
-          transitiveFlags ++ directFlags;
-
-      # Collect from all libraries
-      allFlags = concatMap collectFromLib libs;
-    in
-    # Remove duplicates while preserving order (later occurrences kept for link order)
-    unique allFlags;
-
   # Extract evalInputs from a library (packages needed in sandbox)
   libraryEvalInputs =
     lib: if builtins.isAttrs lib && lib ? evalInputs then ensureList lib.evalInputs else [ ];
@@ -460,53 +417,6 @@ rec {
     in
     builtins.path { path = "${rootStr}/${file}"; };
 
-  # ==========================================================================
-  # Object Reference Collection (for dynamic derivations)
-  # ==========================================================================
-
-  # Recursively collect object references from library dependencies.
-  #
-  # This function gathers objectRefs from static libraries and converts
-  # legacy linkFlags (from archives, shared libs, external libs) to
-  # pseudo-refs that can be passed to the linker.
-  #
-  # Arguments:
-  #   libs - List of library dependencies
-  #
-  # Returns:
-  #   List of { wrapper?, objectName?, ref?, path } records
-  #   - Dynamic refs have: wrapper, objectName, ref, path
-  #   - Legacy/external refs have: path only
-  #
-  collectObjectRefs =
-    libs:
-    let
-      collectFromLib = lib:
-        if !(builtins.isAttrs lib) then
-          # Raw string (e.g., "-lz") - pass through as link flag, not object ref
-          []
-        else if lib ? objectRefs then
-          # New-style static library with object refs
-          let
-            # Recursively collect from transitive dependencies
-            transitiveRefs =
-              if lib ? libraries then collectObjectRefs lib.libraries
-              else [];
-          in
-          transitiveRefs ++ lib.objectRefs
-        else if lib ? public && lib.public ? linkFlags && lib.public.linkFlags != [] then
-          # Legacy library or archive - convert linkFlags to pseudo-refs
-          # These don't have compile wrappers, just direct paths
-          map (path: { inherit path; wrapper = null; }) lib.public.linkFlags
-          ++ (if lib ? libraries then collectObjectRefs lib.libraries else [])
-        else if lib ? libraries then
-          # Library without own linkFlags but with dependencies
-          collectObjectRefs lib.libraries
-        else
-          [];
-    in
-    concatMap collectFromLib libs;
-
   # Collect legacy link flags from libraries.
   # This handles external libraries (pkg-config, etc.) that don't use objectRefs.
   #
@@ -524,9 +434,8 @@ rec {
           # Raw string link flag
           [ lib ]
         else if builtins.isAttrs lib then
-          # Skip objectRefs-style libs ONLY if objectRefs is non-empty
-          # (handled by collectObjectRefs). Ninja-built libs have objectRefs = []
-          # and should use linkFlags instead.
+          # Skip objectRefs-style libs ONLY if objectRefs is non-empty.
+          # Ninja-built libs have objectRefs = [] and should use linkFlags instead.
           if lib ? objectRefs && lib.objectRefs != [] then
             if lib ? libraries then collectLinkFlags lib.libraries else []
           else if lib ? public && lib.public ? linkFlags then

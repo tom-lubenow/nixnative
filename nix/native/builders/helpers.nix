@@ -7,6 +7,7 @@
   pkgs,
   lib,
   utils,
+  language,
   platform,
   processTools, # Tool processing
   ninja,        # nix-ninja integration
@@ -21,8 +22,8 @@ let
     mergePublic
     ensureList
     collectPublic
+    collectEvalInputs
     emptyPublic
-    collectObjectRefs
     collectLinkFlags
     isGlob
     expandGlob
@@ -47,14 +48,18 @@ let
     in
     lib.unique (lib.concatMap collectFromLib libs);
 
-  # Language detection for source files
-  detectLanguage = path:
+  resolveIncludeDir = { rootBase, dir }:
     let
-      ext = lib.last (lib.splitString "." (toString path));
+      baseStr = toString rootBase;
     in
-    if builtins.elem ext [ "c" "h" ] then "c"
-    else if builtins.elem ext [ "cc" "cpp" "cxx" "C" "hpp" "hxx" ] then "cpp"
-    else null;
+    if builtins.isPath dir then
+      toString dir
+    else if builtins.isString dir then
+      if hasPrefix "/" dir then dir else "${baseStr}/${dir}"
+    else if builtins.isAttrs dir && dir ? path then
+      toString dir.path
+    else
+      throw "Invalid include dir: ${builtins.toJSON dir}";
 
   # Normalize a source file for ninja consumption
   # Returns: { storePath, relNorm, objectName, lang, path }
@@ -95,12 +100,7 @@ let
         then removePrefix "./" srcInfo.rel
         else srcInfo.rel;
 
-      lang = detectLanguage relNorm;
-      _ =
-        if lang == null then
-          throw "nixnative: unsupported source extension for '${relNorm}'"
-        else
-          null;
+      lang = language.detectLanguageName relNorm;
       ext = lib.last (lib.splitString "." relNorm);
       baseName = lib.removeSuffix ".${ext}" relNorm;
       # Include extension in object name to avoid collisions (foo.c → foo-c.o, foo.cc → foo-cc.o)
@@ -151,7 +151,7 @@ let
     map (source: normalizeSourceForNinja { inherit root source; }) expandedSources;
 
   # Common preparation for all target types
-  # Returns: { normalizedSources, resolvedIncludeDirs, combinedDefines, combinedCompileFlags, legacyLinkFlags, wrappedLinkFlags, libraryInputs }
+  # Returns: { normalizedSources, resolvedIncludeDirs, combinedIncludeDirs, combinedDefines, combinedCompileFlags, legacyLinkFlags, wrappedLinkFlags, libraryInputs, evalInputs }
   prepareTarget = {
     toolchain,
     root,
@@ -227,20 +227,14 @@ let
       };
 
       # Resolve include directories to store paths
-      resolvedIncludeDirs = map (d:
-        if builtins.isPath d then builtins.toString d
-        else if builtins.isString d then
-          if hasPrefix "/" d then d
-          else builtins.toString (rootPath + "/${d}")
-        else if d ? path then builtins.toString d.path
-        else throw "Invalid include dir: ${builtins.toJSON d}"
-      ) combinedIncludeDirs;
+      resolvedIncludeDirs = map (d: resolveIncludeDir { rootBase = rootPath; dir = d; }) combinedIncludeDirs;
 
       # Collect library wrapper derivations for dependency tracking
       libraryInputs = collectLibraryInputs libraries;
+      evalInputs = lib.unique (collectEvalInputs libraries ++ toolInfo.evalInputs);
     in {
       inherit normalizedSources resolvedIncludeDirs combinedIncludeDirs combinedDefines combinedCompileFlags;
-      inherit legacyLinkFlags wrappedLinkFlags libraryInputs;
+      inherit legacyLinkFlags wrappedLinkFlags libraryInputs evalInputs;
       inherit rootPath publicAggregate;
       runtimeInputs = tc.runtimeInputs;
     };
@@ -265,17 +259,7 @@ let
         else if root ? path then toString root.path
         else throw "Invalid root: ${builtins.toJSON root}";
 
-      mkIncludeDir = dir:
-        if builtins.isString dir then
-          if hasPrefix "/" dir then dir else "${rootStr}/${dir}"
-        else if builtins.isPath dir then
-          toString dir
-        else if builtins.isAttrs dir && dir ? path then
-          toString dir.path
-        else
-          throw "Invalid include dir: ${builtins.toJSON dir}";
-
-      mkIncludeFlag = dir: "-I${mkIncludeDir dir}";
+      mkIncludeFlag = dir: "-I${resolveIncludeDir { rootBase = rootStr; inherit dir; }}";
       mkDefineFlag = d:
         if builtins.isString d then "-D${d}"
         else if d ? name && d ? value then "-D${d.name}=${toString d.value}"
@@ -379,6 +363,7 @@ rec {
       wrapper = ninja.mkNinjaDerivation {
         inherit name ninjaContent;
         libraryInputs = prep.libraryInputs;
+        evalInputs = prep.evalInputs;
         target = name;
         # Use individual source file paths for better incrementality
         # Include directories are embedded in ninjaContent and tracked via the ninja file
@@ -467,6 +452,7 @@ rec {
         target = archiveName;
         sourceInputs = sourceFilePaths;
         toolInputs = prep.runtimeInputs;
+        evalInputs = prep.evalInputs;
         outputType = "staticLib";
       };
 
@@ -569,6 +555,7 @@ rec {
       wrapper = ninja.mkNinjaDerivation {
         inherit name ninjaContent;
         libraryInputs = prep.libraryInputs;
+        evalInputs = prep.evalInputs;
         target = sharedName;
         sourceInputs = sourceFilePaths;
         toolInputs = prep.runtimeInputs;
