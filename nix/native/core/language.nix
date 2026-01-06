@@ -31,7 +31,7 @@ rec {
   cpp = {
     name = "cpp";
     extensions = [ ".cc" ".cpp" ".cxx" ".C" ];
-    headerExtensions = [ ".hpp" ".hxx" ".hh" ".H" ];
+    headerExtensions = [ ".hpp" ".hxx" ".hh" ".H" ".h++" ".tcc" ".inc" ".inl" ];
   };
 
   rust = {

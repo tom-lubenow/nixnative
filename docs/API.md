@@ -33,7 +33,7 @@ native.executable {
 
   # Optional: toolchain selection (defaults to clang + lld)
   compiler = "clang";           # "clang", "gcc", or compiler object
-  linker = "lld";               # "lld", "mold", "gold", "ld", or linker object
+  linker = "lld";               # "lld", "mold", "ld", or linker object
 
   # Optional build configuration
   includeDirs = [ "include" ];  # Include directories
@@ -116,7 +116,7 @@ Creates a standalone development shell without a target (just the toolchain).
 ```nix
 native.shell {
   compiler = "clang";           # "clang", "gcc", or compiler object
-  linker = "mold";              # "lld", "mold", "gold", "ld", or linker object
+  linker = "mold";              # "lld", "mold", "ld", or linker object
   extraPackages = [ pkgs.cmake pkgs.ninja ];  # Additional packages
   includeTools = true;          # Include clang-tools, gdb (default: true)
 }

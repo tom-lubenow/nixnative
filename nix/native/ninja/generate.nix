@@ -3,10 +3,11 @@
 # Generates ninja build file content at Nix evaluation time.
 # The resulting file is consumed by nix-ninja at build time.
 #
-{ lib }:
+{ lib, utils }:
 
 let
   inherit (lib) concatStringsSep concatMapStringsSep;
+  inherit (utils) compileFlagsForLanguage;
 
   # Escape a string for use in ninja files
   # Ninja uses $ as escape character: $$ for literal $, $: for :, etc.
@@ -55,18 +56,17 @@ let
       cCompiler = toolchain.getCompilerForLanguage "c";
       cxxCompiler = toolchain.getCompilerForLanguage "cpp";
 
-      # Get default flags from toolchain (e.g., -std=c++20, -Wall, -Wextra)
-      cDefaultFlags = toolchain.getDefaultFlagsForLanguage "c";
-      cppDefaultFlags = toolchain.getDefaultFlagsForLanguage "cpp";
-      platformCompileFlags = toolchain.getPlatformCompileFlags or [ ];
-
       cSources = builtins.filter (s: s.lang == "c") sources;
       cppSources = builtins.filter (s: s.lang == "cpp") sources;
 
-      baseIncludeDefines = formatIncludes includeDirs + " " + formatDefines defines;
-      # Include toolchain defaults first, then user overrides
-      cFlags = formatFlags (cDefaultFlags ++ platformCompileFlags ++ extraCFlags ++ compileFlags ++ (languageFlags.c or [])) + " " + baseIncludeDefines;
-      cppFlags = formatFlags (cppDefaultFlags ++ platformCompileFlags ++ extraCFlags ++ compileFlags ++ (languageFlags.cpp or [])) + " " + baseIncludeDefines;
+      cFlags = formatFlags (compileFlagsForLanguage {
+        inherit toolchain includeDirs defines compileFlags languageFlags extraCFlags;
+        language = "c";
+      });
+      cppFlags = formatFlags (compileFlagsForLanguage {
+        inherit toolchain includeDirs defines compileFlags languageFlags extraCFlags;
+        language = "cpp";
+      });
 
       allObjects = map (s: s.objectName) sources;
 

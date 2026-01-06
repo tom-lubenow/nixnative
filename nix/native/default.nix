@@ -60,7 +60,7 @@ let
   # ==========================================================================
 
   ninja = import ./ninja {
-    inherit pkgs lib nixPackage nix-ninja nix-ninja-task;
+    inherit pkgs lib nixPackage nix-ninja nix-ninja-task utils;
   };
 
   # ==========================================================================
@@ -146,7 +146,7 @@ let
   # Assembled Collections
   # ==========================================================================
 
-  compilers = {
+  compilers = lib.filterAttrs (_: v: v != null) {
     # Clang variants (each has .c, .cpp, .bintools)
     inherit (clangCompilers)
       clang
@@ -164,7 +164,7 @@ let
       ;
   };
 
-  linkers = {
+  linkers = lib.filterAttrs (_: v: v != null) {
     # LLD variants
     inherit (lldLinkers)
       lld
@@ -303,7 +303,7 @@ let
 
     # GCC + GNU ld (the only working GCC combination)
     gcc-ld =
-      if gnuLdLinkers.isAvailable && compilers.gcc != null then
+      if gnuLdLinkers.isAvailable && compilers ? gcc && linkers ? ld then
         mkToolchain {
           languages = {
             c = compilers.gcc.c;
@@ -336,7 +336,6 @@ let
       ninja
       ;
     inherit (toolCore) processTools;
-    platform = platformUtils;
   };
 
   # High-level API (Option B style)

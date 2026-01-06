@@ -31,6 +31,10 @@
 }:
 
 let
+  compilerNames = builtins.attrNames compilers;
+  linkerNames = builtins.attrNames linkers;
+  formatNames = names: lib.concatStringsSep ", " names;
+
   # ==========================================================================
   # Resolvers
   # ==========================================================================
@@ -40,14 +44,21 @@ let
   # Returns: compiler family with .c, .cpp, .bintools
   resolveCompiler =
     spec:
+    let
+      available = formatNames compilerNames;
+      defaultCompiler = compilers.clang or null;
+    in
     if spec == null then
-      compilers.clang
+      if defaultCompiler == null then
+        throw "Default compiler 'clang' is unavailable. Available: ${available}"
+      else
+        defaultCompiler
     else if builtins.isString spec then
       let
         resolved = compilers.${spec} or null;
       in
       if resolved == null then
-        throw "Unknown or unavailable compiler: '${spec}'. Available: clang, gcc"
+        throw "Unknown or unavailable compiler: '${spec}'. Available: ${available}"
       else
         resolved
     else if builtins.isAttrs spec && spec ? c && spec ? cpp then
@@ -67,7 +78,7 @@ let
         resolved = linkers.${spec} or null;
       in
       if resolved == null then
-        throw "Unknown or unavailable linker: '${spec}'. Available: lld, mold, ld"
+        throw "Unknown or unavailable linker: '${spec}'. Available: ${formatNames linkerNames}"
       else
         resolved
     else if builtins.isAttrs spec && spec ? driverFlag then
@@ -100,9 +111,18 @@ let
         isGcc =
           (args.compiler or null == "gcc")
           || (compilerFamily ? name && lib.hasPrefix "gcc" compilerFamily.name);
-        linker = if explicitLinker != null then explicitLinker
-                 else if isGcc then linkers.ld
-                 else linkers.default;
+        linker =
+          if explicitLinker != null then
+            explicitLinker
+          else if isGcc then
+            if linkers ? ld then
+              linkers.ld
+            else
+              throw "GNU ld is required for GCC toolchains but is unavailable on this platform."
+          else if linkers ? default then
+            linkers.default
+          else
+            throw "No default linker is available for this platform.";
         contentAddressed = args.contentAddressed or false;
       in
       mkToolchain {
@@ -407,7 +427,7 @@ let
   #
   # Arguments:
   #   compiler      - (optional) "clang", "gcc", or compiler family object
-  #   linker        - (optional) "lld", "mold", "gold", "ld", or linker object
+  #   linker        - (optional) "lld", "mold", "ld", or linker object
   #   toolchain     - (optional) Pre-built toolchain (overrides compiler/linker)
   #   extraPackages - Additional packages to include in the shell
   #   includeTools  - Whether to include clang-tools and gdb (default: true)

@@ -157,6 +157,42 @@ rec {
       throw "nixnative: includeDirs entries must be relative strings, paths, or attrsets with 'path', got ${showValue dir}";
 
   # ==========================================================================
+  # Flag Formatting
+  # ==========================================================================
+
+  mkIncludeFlag = dir: "-I${toString dir}";
+
+  mkDefineFlag =
+    d:
+    if builtins.isString d then "-D${d}"
+    else if d ? name && d ? value then "-D${d.name}=${toString d.value}"
+    else if d ? name then "-D${d.name}"
+    else throw "nixnative: invalid define: ${showValue d}";
+
+  compileFlagsForLanguage =
+    {
+      toolchain,
+      language,
+      includeDirs ? [ ],
+      defines ? [ ],
+      compileFlags ? [ ],
+      languageFlags ? { },
+      extraCFlags ? [ ],
+    }:
+    let
+      langFlags = languageFlags.${language} or [ ];
+      platformFlags = toolchain.getPlatformCompileFlags or [ ];
+      defaultFlags = toolchain.getDefaultFlagsForLanguage language;
+    in
+    defaultFlags
+    ++ platformFlags
+    ++ extraCFlags
+    ++ compileFlags
+    ++ langFlags
+    ++ (map mkIncludeFlag includeDirs)
+    ++ (map mkDefineFlag defines);
+
+  # ==========================================================================
   # Public Attribute Handling
   # ==========================================================================
 

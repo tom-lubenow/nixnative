@@ -154,7 +154,7 @@ nix flake check
 │   ├── default.nix     # Main entry point, assembles all modules
 │   ├── core/           # Compiler, linker, toolchain, and flag abstractions
 │   ├── compilers/      # Compiler implementations (clang, gcc)
-│   ├── linkers/        # Linker implementations (lld, mold, gold, ld)
+│   ├── linkers/        # Linker implementations (lld, mold, ld)
 │   ├── ninja/          # nix-ninja integration (build file generation)
 │   ├── builders/       # High-level API (executable, staticLib, etc.)
 │   ├── scanner/        # Tool plugin processing
