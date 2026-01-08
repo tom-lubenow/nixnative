@@ -5,24 +5,29 @@
 
 { pkgs, native }:
 
-native.project {
-  modules = [
-    {
-      native = {
-        root = ./.;
+let
+  proj = native.project {
+    root = ./.;
+  };
 
-        targets.executableExample = {
-          type = "executable";
-          name = "executable-example";
-          sources = [ "src/*.cc" ];
-          includeDirs = [ "include" ];
-        };
+  executableExample = proj.executable {
+    name = "executable-example";
+    sources = [ "src/*.cc" ];
+    includeDirs = [ "include" ];
+  };
 
-        tests.executableExample = {
-          executable = "executableExample";
-          expectedOutput = "Hello from nixnative executable example";
-        };
-      };
-    }
-  ];
+  testExecutable = native.test {
+    name = "test-executable-example";
+    executable = executableExample;
+    expectedOutput = "Hello from nixnative executable example";
+  };
+
+in {
+  packages = {
+    inherit executableExample;
+  };
+
+  checks = {
+    inherit testExecutable;
+  };
 }

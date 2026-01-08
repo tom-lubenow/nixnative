@@ -4,9 +4,9 @@ This example demonstrates building a reusable static library with nixnative.
 
 ## What This Demonstrates
 
-- Building static libraries with module targets
+- Building static libraries with the composable project API
 - Exposing public headers via `publicIncludeDirs`
-- Consuming the library from another build (in `checks.nix`)
+- Consuming the library from another target
 
 ## Project Structure
 
@@ -14,7 +14,8 @@ This example demonstrates building a reusable static library with nixnative.
 library/
 ├── flake.nix       # Flake boilerplate
 ├── project.nix     # Library definition
-├── checks.nix      # Test that consumes the library
+├── test/
+│   └── main.cc     # Test that consumes the library
 ├── src/
 │   └── math.cc     # Implementation
 └── include/
@@ -36,31 +37,25 @@ The output contains:
 ### Building the Library
 
 ```nix
-native.project {
-  modules = [
-    {
-      native = {
-        root = ./.;
+let
+  proj = native.project {
+    root = ./.;
+  };
 
-        targets.mathLibrary = {
-          type = "staticLib";
-          name = "libmath-example";
-          sources = [ "src/math.cc" ];
-          includeDirs = [ "include" ];
-          publicIncludeDirs = [ "include" ];
-        };
+  mathLibrary = proj.staticLib {
+    name = "libmath-example";
+    sources = [ "src/math.cc" ];
+    includeDirs = [ "include" ];
+    publicIncludeDirs = [ "include" ];
+  };
 
-        targets.mathLibraryTest = {
-          type = "executable";
-          name = "math-library-test";
-          root = ./test;
-          sources = [ "main.cc" ];
-          libraries = [ { target = "mathLibrary"; } ];
-        };
-      };
-    }
-  ];
-}
+  mathLibraryTest = proj.executable {
+    name = "math-library-test";
+    root = ./test;
+    sources = [ "main.cc" ];
+    libraries = [ mathLibrary ];  # Direct reference!
+  };
+in { ... }
 ```
 
 ## Key Concepts
@@ -80,22 +75,17 @@ Libraries expose a `public` attribute containing:
 
 ## Shared Library Variant
 
-To build a shared library instead, use `type = "sharedLib"`:
+To build a shared library instead, use `proj.sharedLib`:
 
 ```nix
-targets.mySharedLib = {
-  type = "sharedLib";
+mySharedLib = proj.sharedLib {
   name = "math-example";
-  root = ./.;
   sources = [ "src/math.cc" ];
   publicIncludeDirs = [ "include" ];
 };
 ```
 
-See `examples/install/` for a side-by-side comparison.
-
 ## Next Steps
 
 - See `app-with-library/` for using libraries in an executable
-- See `install/` for static vs shared library comparison
 - See `plugins/` for dlopen-based plugin systems with shared libraries

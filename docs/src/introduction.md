@@ -17,7 +17,8 @@ nixnative generates a ninja build file at Nix evaluation time, then uses nix-nin
 
 ```
 EVALUATION TIME (instant):
-  native.project { modules = [ ... ]; }
+  proj = native.project { root = ./.; ... }
+  app = proj.executable { name = "app"; sources = [...]; }
     → Generate build.ninja content (pure Nix)
     → Create wrapper derivation that invokes nix-ninja
     → builtins.outputOf → placeholder for final output

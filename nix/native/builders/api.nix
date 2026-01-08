@@ -470,6 +470,109 @@ let
       '';
     };
 
+  # ==========================================================================
+  # Project Helper (Scoped Defaults)
+  # ==========================================================================
+  #
+  # Creates a scoped builder with shared defaults. This is the recommended
+  # way to define multiple targets with common settings.
+  #
+  # Usage:
+  #   let
+  #     proj = native.project {
+  #       root = ./.;
+  #       includeDirs = [ "include" ];
+  #       defines = [ "DEBUG" ];
+  #     };
+  #
+  #     libfoo = proj.staticLib { name = "libfoo"; sources = [ "src/foo.c" ]; };
+  #     app = proj.executable { name = "app"; sources = [ "src/main.c" ]; libraries = [ libfoo ]; };
+  #   in { packages = { inherit libfoo app; }; }
+  #
+  # The project function returns scoped builders that merge defaults with
+  # per-target arguments. Lists are concatenated, attrs are merged, and
+  # scalar values from the target override defaults.
+  #
+  project =
+    defaults:
+    let
+      # Fields that should be concatenated (lists)
+      listFields = [
+        "includeDirs"
+        "defines"
+        "compileFlags"
+        "linkFlags"
+        "libraries"
+        "tools"
+        "sanitizers"
+        "publicIncludeDirs"
+        "publicDefines"
+        "publicCompileFlags"
+      ];
+
+      # Fields that should be deeply merged (attrs)
+      attrFields = [
+        "languageFlags"
+      ];
+
+      # Merge defaults with target-specific args
+      mergeArgs = targetArgs:
+        let
+          # Start with defaults
+          base = defaults;
+
+          # For list fields: concatenate defaults ++ target
+          mergedLists = lib.foldl' (acc: field:
+            let
+              defaultVal = base.${field} or [];
+              targetVal = targetArgs.${field} or [];
+            in
+            if defaultVal == [] && targetVal == [] then acc
+            else acc // { ${field} = defaultVal ++ targetVal; }
+          ) {} listFields;
+
+          # For attr fields: merge with target taking precedence
+          mergedAttrs = lib.foldl' (acc: field:
+            let
+              defaultVal = base.${field} or {};
+              targetVal = targetArgs.${field} or {};
+            in
+            if defaultVal == {} && targetVal == {} then acc
+            else acc // { ${field} = defaultVal // targetVal; }
+          ) {} attrFields;
+
+          # Get all other fields from defaults (scalars like root, compiler, etc.)
+          scalarDefaults = builtins.removeAttrs base (listFields ++ attrFields);
+
+          # Get all other fields from target args
+          scalarTargetArgs = builtins.removeAttrs targetArgs (listFields ++ attrFields);
+        in
+        # Merge order: scalar defaults < scalar target args < merged lists < merged attrs
+        scalarDefaults // scalarTargetArgs // mergedLists // mergedAttrs;
+
+      # Create scoped builders
+      scopedExecutable = args: executable (mergeArgs args);
+      scopedStaticLib = args: staticLib (mergeArgs args);
+      scopedSharedLib = args: sharedLib (mergeArgs args);
+      scopedHeaderOnly = args: headerOnly (mergeArgs args);
+      scopedDevShell = args: devShell (mergeArgs args);
+      scopedTest = args: test (mergeArgs args);
+    in
+    {
+      executable = scopedExecutable;
+      staticLib = scopedStaticLib;
+      sharedLib = scopedSharedLib;
+      headerOnly = scopedHeaderOnly;
+      devShell = scopedDevShell;
+      test = scopedTest;
+
+      # Expose the defaults for introspection
+      inherit defaults;
+
+      # Allow creating a nested project with additional defaults
+      extend = extraDefaults: project (mergeArgs extraDefaults);
+    };
+
 in
 {
   inherit
@@ -480,6 +583,7 @@ in
     devShell
     shell
     test
+    project
     ;
 
   # Also expose resolvers for advanced use

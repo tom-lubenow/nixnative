@@ -1,3 +1,7 @@
+# project.nix - Build definition for the pkg-config example
+#
+# Demonstrates using pkg-config to wrap system libraries (zlib, curl).
+
 { pkgs, native }:
 
 let
@@ -12,25 +16,28 @@ let
     modules = [ "libcurl" ];
   };
 
-in
-native.project {
-  modules = [
-    {
-      native = {
-        root = ./.;
+  proj = native.project {
+    root = ./.;
+  };
 
-        targets.demo = {
-          type = "executable";
-          name = "pkgconfig-demo";
-          sources = [ "main.cc" ];
-          libraries = [ zlibLib curlLib ];
-        };
+  demo = proj.executable {
+    name = "pkgconfig-demo";
+    sources = [ "main.cc" ];
+    libraries = [ zlibLib curlLib ];
+  };
 
-        tests.pkgConfig = {
-          executable = "demo";
-          expectedOutput = "All libraries working correctly!";
-        };
-      };
-    }
-  ];
+  testPkgConfig = native.test {
+    name = "test-pkgconfig";
+    executable = demo;
+    expectedOutput = "All libraries working correctly!";
+  };
+
+in {
+  packages = {
+    inherit demo;
+  };
+
+  checks = {
+    inherit testPkgConfig;
+  };
 }

@@ -8,7 +8,8 @@ nixnative uses [nix-ninja](https://github.com/aspect-build/nix-ninja) as its bui
 
 ```
 EVALUATION TIME (nixnative):
-  native.project { modules = [ ... ] }
+  proj = native.project { root = ./.; ... }
+  app = proj.executable { name = "app"; sources = [...]; }
     │
     ├── Resolve toolchain (compiler, linker, flags)
     ├── Process tool plugins (code generators)

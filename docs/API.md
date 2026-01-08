@@ -8,73 +8,64 @@ nixnative provides multiple API layers:
 
 | API Level | Functions | When to Use |
 |-----------|-----------|-------------|
-| **Module-first** | `project` | Recommended - typed options, composable configuration |
-| **High-level** | `executable`, `staticLib`, `sharedLib`, `headerOnly`, `devShell`, `shell`, `test` | Compatibility - direct builders |
-| **Low-level** | `mkExecutable`, `mkStaticLib`, `mkSharedLib`, `mkHeaderOnly`, `mkDevShell`, `mkTest` | Advanced users - explicit toolchain control |
+| **Composable** | `project` | Recommended - scoped builders with shared defaults |
+| **High-level** | `executable`, `staticLib`, `sharedLib`, `headerOnly`, `devShell`, `shell`, `test` | Direct builders |
+| **Module-based** | `evalProject` | Typed options, module composition |
+| **Low-level** | `mkExecutable`, `mkStaticLib`, `mkSharedLib`, etc. | Explicit toolchain control |
 
 **Key differences:**
 
-- Module-first API returns `packages`, `checks`, and `devShells` from module config
+- Composable API returns scoped builders; targets are real Nix values
 - High-level API accepts `compiler`/`linker` as strings (e.g., `"gcc"`, `"mold"`)
+- Module-based API uses `{ target = "name"; }` string references
 - Low-level API requires explicit `toolchain` object
 - All APIs use `tools` parameters for code generation
 
 ---
 
-## Module-First Project API (Recommended)
+## Composable Project API (Recommended)
 
 ### `project`
 
-Evaluates a module configuration and returns:
-
-- `packages` - built targets
-- `checks` - test derivations
-- `devShells` - development shells
-- `config` - evaluated module config (for introspection)
+Creates a project with shared defaults and returns scoped builders.
 
 ```nix
-native.project {
-  modules = [
-    {
-      native = {
-        root = ./.;
-        defaults = {
-          includeDirs = [ "include" ];
-          warnings = "all";
-        };
+let
+  proj = native.project {
+    root = ./.;
+    includeDirs = [ "include" ];
+    warnings = "all";
+  };
 
-        targets.myApp = {
-          type = "executable";
-          name = "my-app";
-          sources = [ "src/main.cc" ];
-        };
+  myLib = proj.staticLib {
+    name = "libmylib";
+    sources = [ "src/lib.cc" ];
+    publicIncludeDirs = [ "include" ];
+  };
 
-        targets.myLib = {
-          type = "staticLib";
-          name = "libmylib";
-          sources = [ "src/lib.cc" ];
-          publicIncludeDirs = [ "include" ];
-        };
+  myApp = proj.executable {
+    name = "my-app";
+    sources = [ "src/main.cc" ];
+    libraries = [ myLib ];  # Direct reference!
+  };
 
-        tests.myApp = {
-          executable = "myApp";
-          expectedOutput = "Hello";
-        };
-
-        shells.default = {
-          target = "myApp";
-        };
-      };
-    }
-  ];
+  testMyApp = native.test {
+    name = "test-my-app";
+    executable = myApp;
+    expectedOutput = "Hello";
+  };
+in {
+  packages = { inherit myLib myApp; };
+  checks = { inherit testMyApp; };
+  devShells.default = native.devShell { target = myApp; };
 }
 ```
 
-**Target types:** `executable`, `staticLib`, `sharedLib`, `headerOnly`
+**Scoped builders:** `proj.executable`, `proj.staticLib`, `proj.sharedLib`, `proj.headerOnly`
 
-**Target references:** use `{ target = "name"; }` in `libraries`, `tests`, or `extra*` fields.
+**Direct references:** Targets are real values passed directly to `libraries`, not string references.
 
-**Extra outputs:** `extraPackages` and `extraChecks` allow custom derivations alongside targets/tests.
+**Extend:** Use `proj.extend { ... }` to create nested projects with additional defaults.
 
 ---
 

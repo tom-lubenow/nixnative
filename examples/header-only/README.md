@@ -41,11 +41,14 @@ a x b = (-3, 6, -3)
 ### Creating a Header-Only Library
 
 ```nix
-targets.vec3Lib = {
-  type = "headerOnly";
-  name = "vec3";
-  publicIncludeDirs = [ "include" ];
-};
+let
+  proj = native.project { root = ./.; };
+
+  vec3Lib = proj.headerOnly {
+    name = "vec3";
+    publicIncludeDirs = [ "include" ];
+  };
+in { ... }
 ```
 
 This creates a library with:
@@ -56,11 +59,10 @@ This creates a library with:
 ### Consuming the Library
 
 ```nix
-targets.demo = {
-  type = "executable";
+demo = proj.executable {
   name = "demo";
   sources = [ "main.cc" ];
-  libraries = [ { target = "vec3Lib"; } ];
+  libraries = [ vec3Lib ];  # Direct reference!
 };
 ```
 
@@ -87,12 +89,11 @@ For header-only libraries:
 ### Propagating Configuration
 
 ```nix
-targets.myLib = {
-  type = "headerOnly";
+myLib = proj.headerOnly {
   name = "my-lib";
   publicIncludeDirs = [ "include" ];
-  publicDefines = [ "MY_LIB_ENABLED" ];
-  publicCompileFlags = [ "-ffast-math" ];
+  defines = [ "MY_LIB_ENABLED" ];
+  compileFlags = [ "-ffast-math" ];
 };
 ```
 

@@ -50,46 +50,42 @@
               };
             };
 
-            project = native.project {
-              modules = [
-                {
-                  native = {
-                    root = ./.;
+            proj = native.project {
+              root = ./.;
+            };
 
-                    targets.app = {
-                      type = "executable";
-                      name = "cpp-calls-rust";
-                      sources = [ "src/main.cpp" ];
-                      libraries = [ rustMathLib ];
-                    };
+            app = proj.executable {
+              name = "cpp-calls-rust";
+              sources = [ "src/main.cpp" ];
+              libraries = [ rustMathLib ];
+            };
 
-                    tests.run = {
-                      executable = "app";
-                      expectedOutput = "rust_add(3, 4) = 7";
-                    };
-                  };
-                }
-              ];
+            testRun = native.test {
+              name = "test-cpp-calls-rust";
+              executable = app;
+              expectedOutput = "rust_add(3, 4) = 7";
             };
 
           in
           f {
-            inherit pkgs native project;
+            inherit pkgs native app testRun;
           }
         );
     in
     {
       packages = forAllSystems (
-        { project, ... }:
+        { app, ... }:
         {
-          default = project.packages.app;
-          cppCallsRust = project.packages.app;
+          default = app;
+          cppCallsRust = app;
         }
       );
 
       checks = forAllSystems (
-        { project, ... }:
-        project.checks
+        { testRun, ... }:
+        {
+          run = testRun;
+        }
       );
     };
 }

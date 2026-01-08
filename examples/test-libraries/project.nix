@@ -5,49 +5,61 @@
 
 { pkgs, native }:
 
-native.project {
-  modules = [
-    {
-      native = {
-        root = ./.;
+let
+  proj = native.project {
+    root = ./.;
+  };
 
-        targets = {
-          gtestExample = {
-            type = "executable";
-            name = "gtest-example";
-            sources = [ "src/gtest_tests.cc" ];
-            libraries = [ native.testLibs.gtest.withMain ];
-          };
+  gtestExample = proj.executable {
+    name = "gtest-example";
+    sources = [ "src/gtest_tests.cc" ];
+    libraries = [ native.testLibs.gtest.withMain ];
+  };
 
-          gmockExample = {
-            type = "executable";
-            name = "gmock-example";
-            sources = [ "src/gmock_tests.cc" ];
-            libraries = [ native.testLibs.gmock.withMain ];
-          };
+  gmockExample = proj.executable {
+    name = "gmock-example";
+    sources = [ "src/gmock_tests.cc" ];
+    libraries = [ native.testLibs.gmock.withMain ];
+  };
 
-          catch2Example = {
-            type = "executable";
-            name = "catch2-example";
-            sources = [ "src/catch2_tests.cc" ];
-            libraries = [ native.testLibs.catch2.withMain ];
-          };
+  catch2Example = proj.executable {
+    name = "catch2-example";
+    sources = [ "src/catch2_tests.cc" ];
+    libraries = [ native.testLibs.catch2.withMain ];
+  };
 
-          doctestExample = {
-            type = "executable";
-            name = "doctest-example";
-            sources = [ "src/doctest_tests.cc" ];
-            libraries = [ native.testLibs.doctest ];
-          };
-        };
+  doctestExample = proj.executable {
+    name = "doctest-example";
+    sources = [ "src/doctest_tests.cc" ];
+    libraries = [ native.testLibs.doctest ];
+  };
 
-        tests = {
-          gtestExample = { executable = "gtestExample"; };
-          gmockExample = { executable = "gmockExample"; };
-          catch2Example = { executable = "catch2Example"; };
-          doctestExample = { executable = "doctestExample"; };
-        };
-      };
-    }
-  ];
+  testGtest = native.test {
+    name = "test-gtest";
+    executable = gtestExample;
+  };
+
+  testGmock = native.test {
+    name = "test-gmock";
+    executable = gmockExample;
+  };
+
+  testCatch2 = native.test {
+    name = "test-catch2";
+    executable = catch2Example;
+  };
+
+  testDoctest = native.test {
+    name = "test-doctest";
+    executable = doctestExample;
+  };
+
+in {
+  packages = {
+    inherit gtestExample gmockExample catch2Example doctestExample;
+  };
+
+  checks = {
+    inherit testGtest testGmock testCatch2 testDoctest;
+  };
 }

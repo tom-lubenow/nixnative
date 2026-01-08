@@ -1,11 +1,13 @@
+# project.nix - Build definition for app-with-library example
+#
+# Demonstrates a static library consumed by an executable, with custom code
+# generation tools and pkg-config integration.
+
 { pkgs, native }:
 
 let
   lib = pkgs.lib;
   root = ./.;
-  includeDirs = [ "include" ];
-  appSources = [ "src/main.cc" ];
-  libSources = [ "src/math.cc" ];
 
   # Custom build-info generator (tool plugin)
   mkBuildInfoTool = mode:
@@ -81,40 +83,36 @@ PY
     modules = [ "zlib" ];
   };
 
-in
-native.project {
-  modules = [
-    {
-      native = {
-        root = root;
+  proj = native.project {
+    root = root;
+    includeDirs = [ "include" ];
+  };
 
-        targets = {
-          mathLib = {
-            type = "staticLib";
-            name = "libmath";
-            inherit includeDirs;
-            sources = libSources;
-            publicIncludeDirs = includeDirs;
-          };
+  mathLib = proj.staticLib {
+    name = "libmath";
+    sources = [ "src/math.cc" ];
+    publicIncludeDirs = [ "include" ];
+  };
 
-          app = {
-            type = "executable";
-            name = "simple-app";
-            inherit includeDirs;
-            sources = appSources;
-            libraries = [
-              { target = "mathLib"; }
-              zlibLib
-            ];
-            tools = [ buildInfoTool ];
-          };
-        };
+  app = proj.executable {
+    name = "simple-app";
+    sources = [ "src/main.cc" ];
+    libraries = [ mathLib zlibLib ];
+    tools = [ buildInfoTool ];
+  };
 
-        tests.simpleApp = {
-          executable = "app";
-          expectedOutput = "2 + 3 = 5";
-        };
-      };
-    }
-  ];
+  testSimpleApp = native.test {
+    name = "test-simple-app";
+    executable = app;
+    expectedOutput = "2 + 3 = 5";
+  };
+
+in {
+  packages = {
+    inherit mathLib app;
+  };
+
+  checks = {
+    inherit testSimpleApp;
+  };
 }

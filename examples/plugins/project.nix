@@ -1,43 +1,43 @@
+# project.nix - Build definition for the plugins example
+#
+# Demonstrates a plugin system with a header-only interface,
+# shared library plugin, and host application.
+
 { pkgs, native }:
 
 let
   linkFlags = if pkgs.stdenv.isLinux then [ "-ldl" ] else [ ];
 
-in
-native.project {
-  modules = [
-    {
-      native = {
-        root = ./.;
+  proj = native.project {
+    root = ./.;
+  };
 
-        targets = {
-          commonLib = {
-            type = "headerOnly";
-            name = "plugin-interface";
-            publicIncludeDirs = [ ./common ];
-          };
+  commonLib = proj.headerOnly {
+    name = "plugin-interface";
+    publicIncludeDirs = [ ./common ];
+  };
 
-          myPlugin = {
-            type = "sharedLib";
-            name = "my-plugin";
-            sources = [ "plugin/plugin.cc" ];
-            libraries = [ { target = "commonLib"; } ];
-          };
+  myPlugin = proj.sharedLib {
+    name = "my-plugin";
+    sources = [ "plugin/plugin.cc" ];
+    libraries = [ commonLib ];
+  };
 
-          hostApp = {
-            type = "executable";
-            name = "host-app";
-            sources = [ "host/main.cc" ];
-            libraries = [ { target = "commonLib"; } ];
-            inherit linkFlags;
-          };
-        };
+  hostApp = proj.executable {
+    name = "host-app";
+    sources = [ "host/main.cc" ];
+    libraries = [ commonLib ];
+    inherit linkFlags;
+  };
 
-        extraChecks = {
-          pluginsHostBuilds = { target = "hostApp"; };
-          pluginsPluginBuilds = { target = "myPlugin"; };
-        };
-      };
-    }
-  ];
+in {
+  packages = {
+    inherit commonLib myPlugin hostApp;
+  };
+
+  # Build checks - verify both host and plugin compile
+  checks = {
+    pluginsHostBuilds = hostApp;
+    pluginsPluginBuilds = myPlugin;
+  };
 }

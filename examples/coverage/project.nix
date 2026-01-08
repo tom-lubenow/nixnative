@@ -1,3 +1,7 @@
+# project.nix - Build definition for the coverage example
+#
+# Demonstrates building with coverage instrumentation.
+
 { pkgs, native }:
 
 let
@@ -5,57 +9,54 @@ let
   includeDirs = [ "src" ];
   isLinux = pkgs.stdenv.hostPlatform.isLinux;
 
-in
-native.project {
-  modules = [
-    {
-      native = {
-        root = ./.;
+  proj = native.project {
+    root = ./.;
+  };
 
-        targets = {
-          appWithCoverage = {
-            type = "executable";
-            name = "coverage-example";
-            inherit sources includeDirs;
-            compileFlags = [ "--coverage" "-g" "-O0" ];
-            linkFlags = [ "--coverage" ];
-          };
+  appWithCoverage = proj.executable {
+    name = "coverage-example";
+    inherit sources includeDirs;
+    compileFlags = [ "--coverage" "-g" "-O0" ];
+    linkFlags = [ "--coverage" ];
+  };
 
-          appNoCoverage = {
-            type = "executable";
-            name = "coverage-example-no-cov";
-            inherit sources includeDirs;
-            compileFlags = [ "-O2" ];
-          };
-        }
-        // (if isLinux then {
-          appCoverageAsan = {
-            type = "executable";
-            name = "coverage-example-asan";
-            inherit sources includeDirs;
-            compileFlags = [ "--coverage" "-fsanitize=address,undefined" "-g" "-O0" ];
-            linkFlags = [ "--coverage" "-fsanitize=address,undefined" ];
-          };
-        } else { });
+  appNoCoverage = proj.executable {
+    name = "coverage-example-no-cov";
+    inherit sources includeDirs;
+    compileFlags = [ "-O2" ];
+  };
 
-        tests = {
-          coverage = {
-            executable = "appWithCoverage";
-            expectedOutput = "All tests passed";
-          };
+  appCoverageAsan = if isLinux then proj.executable {
+    name = "coverage-example-asan";
+    inherit sources includeDirs;
+    compileFlags = [ "--coverage" "-fsanitize=address,undefined" "-g" "-O0" ];
+    linkFlags = [ "--coverage" "-fsanitize=address,undefined" ];
+  } else null;
 
-          noCoverage = {
-            executable = "appNoCoverage";
-            expectedOutput = "All tests passed";
-          };
-        }
-        // (if isLinux then {
-          coverageAsan = {
-            executable = "appCoverageAsan";
-            expectedOutput = "All tests passed";
-          };
-        } else { });
-      };
-    }
-  ];
+  testCoverage = native.test {
+    name = "test-coverage";
+    executable = appWithCoverage;
+    expectedOutput = "All tests passed";
+  };
+
+  testNoCoverage = native.test {
+    name = "test-no-coverage";
+    executable = appNoCoverage;
+    expectedOutput = "All tests passed";
+  };
+
+  testCoverageAsan = if isLinux then native.test {
+    name = "test-coverage-asan";
+    executable = appCoverageAsan;
+    expectedOutput = "All tests passed";
+  } else null;
+
+in {
+  packages = {
+    inherit appWithCoverage appNoCoverage;
+  } // (if isLinux then { inherit appCoverageAsan; } else { });
+
+  checks = {
+    inherit testCoverage testNoCoverage;
+  } // (if isLinux then { inherit testCoverageAsan; } else { });
 }

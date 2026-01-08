@@ -28,25 +28,17 @@
               inherit (ninjaPackages) nix-ninja nix-ninja-task;
             };
 
-            cppProject = native.project {
-              modules = [
-                {
-                  native = {
-                    root = ./cpp-lib;
-
-                    targets.cppLib = {
-                      type = "staticLib";
-                      name = "mathlib";
-                      sources = [ "src/mathlib.cpp" ];
-                      includeDirs = [ "include" ];
-                      publicIncludeDirs = [ "include" ];
-                    };
-                  };
-                }
-              ];
+            proj = native.project {
+              root = ./cpp-lib;
             };
 
-            cppLib = cppProject.packages.cppLib;
+            cppLib = proj.staticLib {
+              name = "mathlib";
+              sources = [ "src/mathlib.cpp" ];
+              includeDirs = [ "include" ];
+              publicIncludeDirs = [ "include" ];
+            };
+
             cppLibPath = cppLib.archivePath;
             cppLibDir = builtins.dirOf cppLibPath;
 

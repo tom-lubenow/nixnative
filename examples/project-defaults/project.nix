@@ -1,68 +1,64 @@
-# Example: Using module defaults for shared settings
+# project.nix - Example: Using project defaults for shared settings
 #
 # This example demonstrates how project-level defaults reduce boilerplate
 # by defining common settings once and applying them to all targets.
-#
+
 { pkgs, native }:
 
-native.project {
-  modules = [
-    {
-      native = {
-        root = ./.;
+let
+  proj = native.project {
+    root = ./.;
+    defines = [ "PROJECT_VERSION=100" ];
+    compileFlags = [ "-Wall" "-Wextra" ];
+    languageFlags = { cpp = [ "-std=c++17" ]; };
+    includeDirs = [ "src/common" ];
+  };
 
-        defaults = {
-          defines = [ "PROJECT_VERSION=100" ];
-          compileFlags = [ "-Wall" "-Wextra" ];
-          languageFlags = { cpp = [ "-std=c++17" ]; };
-          includeDirs = [ "src/common" ];
-        };
+  libcommon = proj.staticLib {
+    name = "libcommon";
+    sources = [ "src/common/*.cc" ];
+    publicIncludeDirs = [ "src/common" ];
+  };
 
-        targets = {
-          libcommon = {
-            type = "staticLib";
-            name = "libcommon";
-            sources = [ "src/common/*.cc" ];
-            publicIncludeDirs = [ "src/common" ];
-          };
+  cli = proj.executable {
+    name = "cli";
+    sources = [ "src/cli/main.cc" ];
+    libraries = [ libcommon ];
+  };
 
-          cli = {
-            type = "executable";
-            name = "cli";
-            sources = [ "src/cli/main.cc" ];
-            libraries = [ { target = "libcommon"; } ];
-          };
+  daemon = proj.executable {
+    name = "daemon";
+    sources = [ "src/daemon/main.cc" ];
+    libraries = [ libcommon ];
+    defines = [ "DAEMON_MODE" ];
+  };
 
-          daemon = {
-            type = "executable";
-            name = "daemon";
-            sources = [ "src/daemon/main.cc" ];
-            libraries = [ { target = "libcommon"; } ];
-            defines = [ "DAEMON_MODE" ];
-          };
+  cliDebug = proj.executable {
+    name = "cli-debug";
+    sources = [ "src/cli/main.cc" ];
+    libraries = [ libcommon ];
+    compileFlags = [ "-g" "-O0" ];
+    defines = [ "DEBUG" ];
+  };
 
-          cliDebug = {
-            type = "executable";
-            name = "cli-debug";
-            sources = [ "src/cli/main.cc" ];
-            libraries = [ { target = "libcommon"; } ];
-            compileFlags = [ "-g" "-O0" ];
-            defines = [ "DEBUG" ];
-          };
-        };
+  testCli = native.test {
+    name = "test-cli";
+    executable = cli;
+    expectedOutput = "[100] CLI tool running";
+  };
 
-        tests = {
-          cliCheck = {
-            executable = "cli";
-            expectedOutput = "[100] CLI tool running";
-          };
+  testDaemon = native.test {
+    name = "test-daemon";
+    executable = daemon;
+    expectedOutput = "daemon mode";
+  };
 
-          daemonCheck = {
-            executable = "daemon";
-            expectedOutput = "daemon mode";
-          };
-        };
-      };
-    }
-  ];
+in {
+  packages = {
+    inherit libcommon cli daemon cliDebug;
+  };
+
+  checks = {
+    inherit testCli testDaemon;
+  };
 }

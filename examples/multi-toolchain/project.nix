@@ -1,3 +1,7 @@
+# project.nix - Build definition for the multi-toolchain example
+#
+# Demonstrates building with different compilers, linkers, and optimization flags.
+
 { pkgs, native }:
 
 let
@@ -5,6 +9,11 @@ let
   root = ./.;
   sources = [ "src/main.cc" ];
 
+  proj = native.project {
+    inherit root;
+  };
+
+  # Build matrix helper
   buildMatrixTargets =
     let
       configs = [
@@ -21,122 +30,104 @@ let
         else true
       ) configs;
 
-      mkBuild = cfg: {
-        name = "matrix-${cfg.name}";
-        value = {
-          type = "executable";
-          name = "demo-${cfg.name}";
-          inherit root sources;
-          inherit (cfg) compiler linker;
-        };
+      mkBuild = cfg: proj.executable {
+        name = "demo-${cfg.name}";
+        inherit root sources;
+        inherit (cfg) compiler linker;
       };
     in
-    builtins.listToAttrs (map mkBuild availableConfigs);
+    builtins.listToAttrs (map (cfg: { name = "matrix-${cfg.name}"; value = mkBuild cfg; }) availableConfigs);
 
-in
-native.project {
-  modules = [
-    {
-      native = {
-        root = root;
+  default = proj.executable {
+    name = "demo-default";
+    inherit sources;
+  };
 
-        targets = {
-          default = {
-            type = "executable";
-            name = "demo-default";
-            inherit sources;
-          };
+  withGcc = proj.executable {
+    name = "demo-gcc";
+    inherit sources;
+    compiler = "gcc";
+  };
 
-          withGcc = {
-            type = "executable";
-            name = "demo-gcc";
-            inherit sources;
-            compiler = "gcc";
-          };
+  withO3 = proj.executable {
+    name = "demo-o3";
+    inherit sources;
+    compileFlags = [ "-O3" ];
+  };
 
-          withO3 = {
-            type = "executable";
-            name = "demo-o3";
-            inherit sources;
-            compileFlags = [ "-O3" ];
-          };
+  withLtoThin = proj.executable {
+    name = "demo-lto-thin";
+    inherit sources;
+    compileFlags = [ "-O2" "-flto=thin" ];
+    linkFlags = [ "-flto=thin" ];
+  };
 
-          withLtoThin = {
-            type = "executable";
-            name = "demo-lto-thin";
-            inherit sources;
-            compileFlags = [ "-O2" "-flto=thin" ];
-            linkFlags = [ "-flto=thin" ];
-          };
+  withLtoFull = proj.executable {
+    name = "demo-lto-full";
+    inherit sources;
+    compileFlags = [ "-O2" "-flto" ];
+    linkFlags = [ "-flto" ];
+  };
 
-          withLtoFull = {
-            type = "executable";
-            name = "demo-lto-full";
-            inherit sources;
-            compileFlags = [ "-O2" "-flto" ];
-            linkFlags = [ "-flto" ];
-          };
+  withDebug = proj.executable {
+    name = "demo-debug";
+    inherit sources;
+    compileFlags = [ "-g" "-O0" ];
+  };
 
-          withDebug = {
-            type = "executable";
-            name = "demo-debug";
-            inherit sources;
-            compileFlags = [ "-g" "-O0" ];
-          };
+  lowLevelDefault = proj.executable {
+    name = "demo-lowlevel-default";
+    inherit sources;
+    toolchain = native.toolchains.default;
+  };
 
-          lowLevelDefault = {
-            type = "executable";
-            name = "demo-lowlevel-default";
-            inherit sources;
-            toolchain = native.toolchains.default;
-          };
-
-          lowLevelCustom = {
-            type = "executable";
-            name = "demo-lowlevel-custom";
-            inherit sources;
-            toolchain = native.mkToolchain {
-              languages = {
-                c = native.compilers.clang.c;
-                cpp = native.compilers.clang.cpp;
-              };
-              linker = native.linkers.lld;
-              bintools = native.compilers.clang.bintools;
-            };
-            compileFlags = [ "-O2" ];
-          };
-        }
-        // buildMatrixTargets
-        // (if isLinux then {
-          withClangMold = {
-            type = "executable";
-            name = "demo-clang-mold";
-            inherit sources;
-            compiler = "clang";
-            linker = "mold";
-          };
-
-          withAsan = {
-            type = "executable";
-            name = "demo-asan";
-            inherit sources;
-            compileFlags = [ "-fsanitize=address,undefined" ];
-            linkFlags = [ "-fsanitize=address,undefined" ];
-          };
-        } else { });
-
-        tests = {
-          multiToolchainDefault = {
-            executable = "default";
-            expectedOutput = "Compiler:";
-          };
-
-          multiToolchainO3 = {
-            executable = "withO3";
-            expectedOutput = "compute(100)";
-          };
-        };
+  lowLevelCustom = proj.executable {
+    name = "demo-lowlevel-custom";
+    inherit sources;
+    toolchain = native.mkToolchain {
+      languages = {
+        c = native.compilers.clang.c;
+        cpp = native.compilers.clang.cpp;
       };
-    }
-  ];
+      linker = native.linkers.lld;
+      bintools = native.compilers.clang.bintools;
+    };
+    compileFlags = [ "-O2" ];
+  };
+
+  withClangMold = if isLinux then proj.executable {
+    name = "demo-clang-mold";
+    inherit sources;
+    compiler = "clang";
+    linker = "mold";
+  } else null;
+
+  withAsan = if isLinux then proj.executable {
+    name = "demo-asan";
+    inherit sources;
+    compileFlags = [ "-fsanitize=address,undefined" ];
+    linkFlags = [ "-fsanitize=address,undefined" ];
+  } else null;
+
+  testDefault = native.test {
+    name = "test-default";
+    executable = default;
+    expectedOutput = "Compiler:";
+  };
+
+  testO3 = native.test {
+    name = "test-o3";
+    executable = withO3;
+    expectedOutput = "compute(100)";
+  };
+
+in {
+  packages = {
+    inherit default withGcc withO3 withLtoThin withLtoFull withDebug lowLevelDefault lowLevelCustom;
+  } // buildMatrixTargets
+    // (if isLinux then { inherit withClangMold withAsan; } else { });
+
+  checks = {
+    inherit testDefault testO3;
+  };
 }

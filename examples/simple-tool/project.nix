@@ -1,3 +1,7 @@
+# project.nix - Build definition for the simple-tool example
+#
+# Demonstrates code generation using tool plugins.
+
 { pkgs, native }:
 
 let
@@ -28,38 +32,35 @@ let
     includeDirs = [ { path = versionDrv; } ];
   };
 
-in
-native.project {
-  modules = [
-    {
-      native = {
-        root = ./.;
+  proj = native.project {
+    root = ./.;
+  };
 
-        targets = {
-          appInline = {
-            type = "executable";
-            name = "simple-tool-inline";
-            sources = [ "main.cc" ];
-            tools = [ versionTool ];
-          };
+  appInline = proj.executable {
+    name = "simple-tool-inline";
+    sources = [ "main.cc" ];
+    tools = [ versionTool ];
+  };
 
-          appManual = {
-            type = "executable";
-            name = "simple-tool-manual";
-            sources = [ "main.cc" ];
-            tools = [ versionGeneratorManual ];
-          };
-        };
+  appManual = proj.executable {
+    name = "simple-tool-manual";
+    sources = [ "main.cc" ];
+    tools = [ versionGeneratorManual ];
+  };
 
-        tests.simpleTool = {
-          executable = "appInline";
-          expectedOutput = "Code generation working";
-        };
+  testSimpleTool = native.test {
+    name = "test-simple-tool";
+    executable = appInline;
+    expectedOutput = "Code generation working";
+  };
 
-        extraPackages = {
-          simpleToolExample = { target = "appInline"; };
-        };
-      };
-    }
-  ];
+in {
+  packages = {
+    inherit appInline appManual;
+    simpleToolExample = appInline;
+  };
+
+  checks = {
+    inherit testSimpleTool;
+  };
 }

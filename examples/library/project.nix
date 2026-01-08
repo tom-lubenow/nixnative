@@ -4,35 +4,37 @@
 
 { pkgs, native }:
 
-native.project {
-  modules = [
-    {
-      native = {
-        root = ./.;
+let
+  proj = native.project {
+    root = ./.;
+  };
 
-        targets = {
-          mathLibrary = {
-            type = "staticLib";
-            name = "libmath-example";
-            sources = [ "src/math.cc" ];
-            includeDirs = [ "include" ];
-            publicIncludeDirs = [ "include" ];
-          };
+  mathLibrary = proj.staticLib {
+    name = "libmath-example";
+    sources = [ "src/math.cc" ];
+    includeDirs = [ "include" ];
+    publicIncludeDirs = [ "include" ];
+  };
 
-          mathLibraryTest = {
-            type = "executable";
-            name = "math-library-test";
-            root = ./test;
-            sources = [ "main.cc" ];
-            libraries = [ { target = "mathLibrary"; } ];
-          };
-        };
+  mathLibraryTest = proj.executable {
+    name = "math-library-test";
+    root = ./test;
+    sources = [ "main.cc" ];
+    libraries = [ mathLibrary ];
+  };
 
-        tests.mathLibrary = {
-          executable = "mathLibraryTest";
-          expectedOutput = "5 12";
-        };
-      };
-    }
-  ];
+  testMathLibrary = native.test {
+    name = "test-math-library";
+    executable = mathLibraryTest;
+    expectedOutput = "5 12";
+  };
+
+in {
+  packages = {
+    inherit mathLibrary mathLibraryTest;
+  };
+
+  checks = {
+    inherit testMathLibrary;
+  };
 }

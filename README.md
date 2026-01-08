@@ -38,7 +38,8 @@ nixnative generates a ninja build file at Nix evaluation time, then uses nix-nin
 
 ```
 EVALUATION TIME (instant):
-  native.project { modules = [ ... ]; }
+  proj = native.project { root = ./.; ... }
+  app = proj.executable { name = "app"; sources = [...]; }
     → Generate build.ninja content (pure Nix)
     → Create wrapper derivation that invokes nix-ninja
     → builtins.outputOf → placeholder for final output
@@ -69,25 +70,25 @@ This architecture gives you:
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
   inputs.nixnative.url = "github:your/nixnative";
 
-  outputs = { nixpkgs, nixnative, ... }: {
-    packages.x86_64-linux.default = let
+  outputs = { nixpkgs, nixnative, ... }:
+    let
       pkgs = import nixpkgs { system = "x86_64-linux"; };
       native = nixnative.lib.native { inherit pkgs; };
-    in (native.project {
-      modules = [
-        {
-          native = {
-            root = ./.;
-            targets.hello = {
-              type = "executable";
-              name = "hello";
-              sources = [ "src/main.cc" ];
-            };
-          };
-        }
-      ];
-    }).packages.hello;
-  };
+
+      # Create a project with shared defaults
+      proj = native.project {
+        root = ./.;
+        warnings = "all";
+      };
+
+      # Build targets - real values, not string references
+      hello = proj.executable {
+        name = "hello";
+        sources = [ "src/main.cc" ];
+      };
+    in {
+      packages.x86_64-linux.default = hello;
+    };
 }
 ```
 

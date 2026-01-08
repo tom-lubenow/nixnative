@@ -1,111 +1,103 @@
 # Python C++ extension example
 #
 # Builds a Python module using pybind11 and nixnative
-#
+
 { pkgs, native }:
 
 let
   python = pkgs.python312;
   pybind11 = python.pkgs.pybind11;
 
-in
-native.project {
-  modules = [
-    ({ config, ... }:
-      let
-        mathext = config.native.packages.mathext;
-        pythonPackage = pkgs.stdenv.mkDerivation {
-          name = "mathext-python";
+  proj = native.project {
+    root = ./.;
+  };
 
-          buildInputs = [ mathext.passthru.target ];
+  mathext = proj.sharedLib {
+    name = "mathext";
+    sources = [ "src/mathext.cpp" ];
+    includeDirs = [
+      "${pybind11}/include"
+      "${python}/include/python${python.pythonVersion}"
+    ];
+    compileFlags = [ "-fvisibility=hidden" ];
+    languageFlags = {
+      cpp = [ "-std=c++17" ];
+    };
+  };
 
-          dontUnpack = true;
-          dontConfigure = true;
+  # Package the shared library as a Python module
+  pythonPackage = pkgs.stdenv.mkDerivation {
+    name = "mathext-python";
 
-          buildPhase = ''
-            runHook preBuild
+    buildInputs = [ mathext.passthru.target ];
 
-            ext_suffix=$(${python}/bin/python3 -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
+    dontUnpack = true;
+    dontConfigure = true;
 
-            mkdir -p $out/lib/python${python.pythonVersion}/site-packages
+    buildPhase = ''
+      runHook preBuild
 
-            cp ${mathext.passthru.target}/mathext.so \
-               $out/lib/python${python.pythonVersion}/site-packages/mathext$ext_suffix
+      ext_suffix=$(${python}/bin/python3 -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
 
-            runHook postBuild
-          '';
+      mkdir -p $out/lib/python${python.pythonVersion}/site-packages
 
-          dontInstall = true;
-          dontFixup = true;
-        };
+      cp ${mathext.passthru.target}/mathext.so \
+         $out/lib/python${python.pythonVersion}/site-packages/mathext$ext_suffix
 
-        pythonWithExt = python.withPackages (ps: [ ]);
+      runHook postBuild
+    '';
 
-        pythonEnv = pkgs.buildEnv {
-          name = "python-with-mathext";
-          paths = [ pythonWithExt pythonPackage ];
-        };
+    dontInstall = true;
+    dontFixup = true;
+  };
 
-        testScript = pkgs.writeText "test_mathext.py" ''
-          import mathext
+  pythonWithExt = python.withPackages (ps: [ ]);
 
-          # Test basic functions
-          assert mathext.add(2, 3) == 5, "add failed"
-          assert mathext.multiply(3, 4) == 12, "multiply failed"
-          assert abs(mathext.power(2.0, 3.0) - 8.0) < 0.001, "power failed"
+  pythonEnv = pkgs.buildEnv {
+    name = "python-with-mathext";
+    paths = [ pythonWithExt pythonPackage ];
+  };
 
-          # Test vector operations
-          assert abs(mathext.dot_product([1.0, 2.0, 3.0], [4.0, 5.0, 6.0]) - 32.0) < 0.001, "dot_product failed"
-          result = mathext.scale_vector([1.0, 2.0, 3.0], 2.0)
-          assert result == [2.0, 4.0, 6.0], f"scale_vector failed: {result}"
+  testScript = pkgs.writeText "test_mathext.py" ''
+    import mathext
 
-          # Test Calculator class
-          calc = mathext.Calculator(10.0)
-          calc.add(5.0)
-          assert calc.value == 15.0, "Calculator.add failed"
-          calc.multiply(2.0)
-          assert calc.value == 30.0, "Calculator.multiply failed"
+    # Test basic functions
+    assert mathext.add(2, 3) == 5, "add failed"
+    assert mathext.multiply(3, 4) == 12, "multiply failed"
+    assert abs(mathext.power(2.0, 3.0) - 8.0) < 0.001, "power failed"
 
-          print("Python extension tests passed!")
-        '';
+    # Test vector operations
+    assert abs(mathext.dot_product([1.0, 2.0, 3.0], [4.0, 5.0, 6.0]) - 32.0) < 0.001, "dot_product failed"
+    result = mathext.scale_vector([1.0, 2.0, 3.0], 2.0)
+    assert result == [2.0, 4.0, 6.0], f"scale_vector failed: {result}"
 
-        pythonExtensionCheck = pkgs.runCommand "python-extension-test" {
-          buildInputs = [ python pythonPackage ];
-        } ''
-          export PYTHONPATH="${pythonPackage}/lib/python${python.pythonVersion}/site-packages:$PYTHONPATH"
+    # Test Calculator class
+    calc = mathext.Calculator(10.0)
+    calc.add(5.0)
+    assert calc.value == 15.0, "Calculator.add failed"
+    calc.multiply(2.0)
+    assert calc.value == 30.0, "Calculator.multiply failed"
 
-          ${python}/bin/python3 ${testScript}
+    print("Python extension tests passed!")
+  '';
 
-          mkdir -p $out
-          echo "Python extension test passed" > $out/result
-        '';
-      in
-      {
-        native = {
-          root = ./.;
+  pythonExtensionCheck = pkgs.runCommand "python-extension-test" {
+    buildInputs = [ python pythonPackage ];
+  } ''
+    export PYTHONPATH="${pythonPackage}/lib/python${python.pythonVersion}/site-packages:$PYTHONPATH"
 
-          targets.mathext = {
-            type = "sharedLib";
-            name = "mathext";
-            sources = [ "src/mathext.cpp" ];
-            includeDirs = [
-              "${pybind11}/include"
-              "${python}/include/python${python.pythonVersion}"
-            ];
-            compileFlags = [ "-fvisibility=hidden" ];
-            languageFlags = {
-              cpp = [ "-std=c++17" ];
-            };
-          };
+    ${python}/bin/python3 ${testScript}
 
-          extraPackages = {
-            inherit pythonPackage pythonEnv;
-          };
+    mkdir -p $out
+    echo "Python extension test passed" > $out/result
+  '';
 
-          extraChecks = {
-            pythonExtension = pythonExtensionCheck;
-          };
-        };
-      })
-  ];
+in {
+  packages = {
+    inherit mathext pythonPackage pythonEnv;
+  };
+
+  checks = {
+    pythonExtension = pythonExtensionCheck;
+  };
 }

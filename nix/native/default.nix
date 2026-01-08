@@ -430,8 +430,33 @@ in
     test
     ;
 
-  # Module-first project evaluation
-  project = projectModules.evalProject;
+  # ==========================================================================
+  # Project Helper (recommended for multi-target projects)
+  # ==========================================================================
+  #
+  # Creates scoped builders with shared defaults. Returns an attrset with
+  # executable, staticLib, sharedLib, headerOnly, devShell, test functions
+  # that automatically merge the project defaults with per-target args.
+  #
+  # Usage:
+  #   let
+  #     proj = native.project {
+  #       root = ./.;
+  #       includeDirs = [ "include" ];
+  #       defines = [ "DEBUG" ];
+  #     };
+  #     libfoo = proj.staticLib { name = "libfoo"; sources = [...]; };
+  #     app = proj.executable { name = "app"; libraries = [ libfoo ]; ... };
+  #   in { packages = { inherit libfoo app; }; }
+  #
+  # Targets are real values that can be passed directly to `libraries`,
+  # imported from other files, or composed with plain Nix functions.
+  #
+  inherit (api) project;
+
+  # Module-based project evaluation (alternative API using Nix module system)
+  # Use this if you prefer typed options and module composition.
+  evalProject = projectModules.evalProject;
   projectModule = projectModules.projectModule;
 
   # Project defaults - create scoped builders with shared settings (legacy)

@@ -1,35 +1,38 @@
+# project.nix - Build definition for the header-only library example
+#
+# Demonstrates a header-only library consumed by an executable.
+
 { pkgs, native }:
 
-native.project {
-  modules = [
-    {
-      native = {
-        root = ./.;
+let
+  proj = native.project {
+    root = ./.;
+  };
 
-        targets = {
-          vec3Lib = {
-            type = "headerOnly";
-            name = "vec3";
-            publicIncludeDirs = [ ./include ];
-          };
+  vec3Lib = proj.headerOnly {
+    name = "vec3";
+    publicIncludeDirs = [ ./include ];
+  };
 
-          testApp = {
-            type = "executable";
-            name = "header-only-test";
-            sources = [ "main.cc" ];
-            libraries = [ { target = "vec3Lib"; } ];
-          };
-        };
+  testApp = proj.executable {
+    name = "header-only-test";
+    sources = [ "main.cc" ];
+    libraries = [ vec3Lib ];
+  };
 
-        tests.headerOnly = {
-          executable = "testApp";
-          expectedOutput = "a + b = (5, 7, 9)";
-        };
+  testHeaderOnly = native.test {
+    name = "test-header-only";
+    executable = testApp;
+    expectedOutput = "a + b = (5, 7, 9)";
+  };
 
-        extraPackages = {
-          headerOnlyExample = { target = "testApp"; };
-        };
-      };
-    }
-  ];
+in {
+  packages = {
+    inherit vec3Lib testApp;
+    headerOnlyExample = testApp;
+  };
+
+  checks = {
+    inherit testHeaderOnly;
+  };
 }

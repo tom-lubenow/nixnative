@@ -1,10 +1,10 @@
 # Testing Example
 
-This example demonstrates nixnative's test infrastructure using module-defined tests.
+This example demonstrates nixnative's test infrastructure using `native.test`.
 
 ## What This Demonstrates
 
-- Defining tests under `native.tests`
+- Defining tests with `native.test`
 - Passing arguments to test executables
 - Verifying expected output
 - Testing edge cases (special characters, LTO builds, sanitizers)
@@ -25,11 +25,8 @@ testing/
 nix flake check
 
 # Build individual tests
-nix build .#test1          # Basic test
-nix build .#test2          # Test with arguments
-nix build .#test3          # Special characters test
-nix build .#testLto        # LTO build test
-nix build .#testAsan       # AddressSanitizer test (Linux only)
+nix build .#checks.x86_64-linux.test1   # Basic test
+nix build .#checks.x86_64-linux.test2   # Test with arguments
 ```
 
 ## How It Works
@@ -37,10 +34,20 @@ nix build .#testAsan       # AddressSanitizer test (Linux only)
 ### Basic Test
 
 ```nix
-tests.test1 = {
-  executable = "app";
-  expectedOutput = "Hello Test";
-};
+let
+  proj = native.project { root = ./.; };
+
+  app = proj.executable {
+    name = "test-app";
+    sources = [ "main.cc" ];
+  };
+
+  test1 = native.test {
+    name = "test-1";
+    executable = app;  # Direct reference!
+    expectedOutput = "Hello Test";
+  };
+in { ... }
 ```
 
 The test:
@@ -52,8 +59,9 @@ The test:
 ### Test with Arguments
 
 ```nix
-tests.test2 = {
-  executable = "app";
+test2 = native.test {
+  name = "test-2";
+  executable = app;
   args = [ "World" ];
   expectedOutput = "Hello World";
 };
@@ -62,8 +70,9 @@ tests.test2 = {
 ### Shell Escaping Test
 
 ```nix
-tests.test3 = {
-  executable = "app";
+test3 = native.test {
+  name = "test-3";
+  executable = app;
   args = [ "it's \"quoted\" & $special" ];
   expectedOutput = "Hello it's \"quoted\" & $special";
 };
@@ -76,15 +85,16 @@ This verifies that arguments with special shell characters are properly escaped.
 #### LTO Build
 
 ```nix
-targets.appLto = {
-  type = "executable";
+appLto = proj.executable {
   name = "test-app-lto";
   sources = [ "main.cc" ];
-  lto = "thin";
+  compileFlags = [ "-flto=thin" ];
+  linkFlags = [ "-flto=thin" ];
 };
 
-tests.testLto = {
-  executable = "appLto";
+testLto = native.test {
+  name = "test-lto";
+  executable = appLto;
   expectedOutput = "Hello Test";
 };
 ```
@@ -92,19 +102,18 @@ tests.testLto = {
 #### AddressSanitizer (Linux Only)
 
 ```nix
-targets.appAsan = {
-  type = "executable";
+appAsan = if isLinux then proj.executable {
   name = "test-app-asan";
   sources = [ "main.cc" ];
-  sanitizers = [ "address" "undefined" ];
-};
+  compileFlags = [ "-fsanitize=address,undefined" ];
+  linkFlags = [ "-fsanitize=address,undefined" ];
+} else null;
 ```
 
 ### Minimal Configuration Test
 
 ```nix
-targets.appMinimal = {
-  type = "executable";
+appMinimal = proj.executable {
   name = "test-app-minimal";
   sources = [ "main.cc" ];
   includeDirs = [ ];
@@ -120,12 +129,9 @@ This verifies that empty optional lists work correctly.
 ## Platform-Conditional Tests
 
 ```nix
-tests = {
+checks = {
   inherit test1 test2 test3 testLto testMinimal;
-}
-// (if pkgs.stdenv.hostPlatform.isLinux then {
-  inherit testAsan;
-} else { });
+} // (if isLinux then { inherit testAsan; } else { });
 ```
 
 This pattern allows tests that only work on certain platforms.
@@ -134,8 +140,8 @@ This pattern allows tests that only work on certain platforms.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `name` | No | Test name (defaults to the attribute name) |
-| `executable` | Yes | The executable to run |
+| `name` | Yes | Test name |
+| `executable` | Yes | The executable target to run |
 | `args` | No | Command-line arguments |
 | `stdin` | No | Input to pass to stdin |
 | `expectedOutput` | No | String that must appear in stdout |

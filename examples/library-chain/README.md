@@ -79,33 +79,36 @@ Library chain working correctly!
 ### Building Each Layer
 
 ```nix
-targets.libUtil = {
-  type = "staticLib";
-  name = "libutil";
-  sources = [ "libutil/util.cc" ];
-  publicIncludeDirs = [ "libutil/include" ];
-};
+let
+  proj = native.project {
+    root = ./.;
+  };
 
-targets.libCore = {
-  type = "staticLib";
-  name = "libcore";
-  sources = [ "libcore/core.cc" ];
-  publicIncludeDirs = [ "libcore/include" ];
-  libraries = [ { target = "libUtil"; } ];
-};
+  libUtil = proj.staticLib {
+    name = "libutil";
+    sources = [ "libutil/util.cc" ];
+    publicIncludeDirs = [ "libutil/include" ];
+  };
 
-targets.libMath = {
-  type = "staticLib";
-  name = "libmath_ext";
-  sources = [ "libmath/math_ext.cc" ];
-  publicIncludeDirs = [ "libmath/include" ];
-  libraries = [ { target = "libCore"; } ];
-};
+  libCore = proj.staticLib {
+    name = "libcore";
+    sources = [ "libcore/core.cc" ];
+    publicIncludeDirs = [ "libcore/include" ];
+    libraries = [ libUtil ];  # Direct reference!
+  };
+
+  libMath = proj.staticLib {
+    name = "libmath_ext";
+    sources = [ "libmath/math_ext.cc" ];
+    publicIncludeDirs = [ "libmath/include" ];
+    libraries = [ libCore ];  # Transitive dep on libUtil handled automatically
+  };
+in { ... }
 ```
 
 ### Transitive Dependencies
 
-When you declare `libraries = [ { target = "libCore"; } ]`:
+When you declare `libraries = [ libCore ]`:
 - libcore's `publicIncludeDirs` are added to your include paths
 - libcore's `publicDefines` are added to your defines
 - libcore's link flags (including transitive ones) are collected

@@ -1,25 +1,35 @@
+# project.nix - Build definition for the devshell example
+#
+# Demonstrates creating a development shell with clangd support.
+
 { pkgs, native }:
 
-native.project {
-  modules = [
-    {
-      native = {
-        root = ./.;
+let
+  proj = native.project {
+    root = ./.;
+  };
 
-        targets.app = {
-          type = "executable";
-          name = "devshell-app";
-          sources = [ "main.cc" ];
-        };
+  app = proj.executable {
+    name = "devshell-app";
+    sources = [ "main.cc" ];
+  };
 
-        tests.devshell = {
-          executable = "app";
-        };
+  testDevshell = native.test {
+    name = "test-devshell";
+    executable = app;
+  };
 
-        extraPackages = {
-          devshellExample = { target = "app"; };
-        };
-      };
-    }
-  ];
+in {
+  packages = {
+    inherit app;
+    devshellExample = app;
+  };
+
+  checks = {
+    inherit testDevshell;
+  };
+
+  devShells.default = native.devShell {
+    target = app;
+  };
 }

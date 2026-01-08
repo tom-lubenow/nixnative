@@ -1,80 +1,80 @@
+# project.nix - Build definition for the multi-binary example
+#
+# Demonstrates building multiple executables from a shared library,
+# and combining them into a single package.
+
 { pkgs, native }:
 
-native.project {
-  modules = [
-    ({ config, ... }:
-      let
-        combined = pkgs.symlinkJoin {
-          name = "myapp";
-          paths = [
-            config.native.packages.cli.passthru.target
-            config.native.packages.daemon.passthru.target
-            config.native.packages.tests.passthru.target
-          ];
-        };
-      in
-      {
-        native = {
-          root = ./.;
+let
+  proj = native.project {
+    root = ./.;
+  };
 
-          targets = {
-            commonLib = {
-              type = "staticLib";
-              name = "libmyapp-common";
-              sources = [ "common/*.cc" ];
-              includeDirs = [ "common/include" ];
-              publicIncludeDirs = [ "common/include" ];
-            };
+  commonLib = proj.staticLib {
+    name = "libmyapp-common";
+    sources = [ "common/*.cc" ];
+    includeDirs = [ "common/include" ];
+    publicIncludeDirs = [ "common/include" ];
+  };
 
-            cli = {
-              type = "executable";
-              name = "myapp-cli";
-              sources = [ "cli/main.cc" ];
-              libraries = [ { target = "commonLib"; } ];
-            };
+  cli = proj.executable {
+    name = "myapp-cli";
+    sources = [ "cli/main.cc" ];
+    libraries = [ commonLib ];
+  };
 
-            daemon = {
-              type = "executable";
-              name = "myapp-daemon";
-              sources = [ "daemon/main.cc" ];
-              libraries = [ { target = "commonLib"; } ];
-              defines = [ "DAEMON_MODE" ];
-            };
+  daemon = proj.executable {
+    name = "myapp-daemon";
+    sources = [ "daemon/main.cc" ];
+    libraries = [ commonLib ];
+    defines = [ "DAEMON_MODE" ];
+  };
 
-            tests = {
-              type = "executable";
-              name = "myapp-tests";
-              sources = [ "tests/main.cc" ];
-              libraries = [ { target = "commonLib"; } ];
-              defines = [ "TEST_MODE" ];
-              compileFlags = [ "-g" "-O0" ];
-            };
-          };
+  tests = proj.executable {
+    name = "myapp-tests";
+    sources = [ "tests/main.cc" ];
+    libraries = [ commonLib ];
+    defines = [ "TEST_MODE" ];
+    compileFlags = [ "-g" "-O0" ];
+  };
 
-          tests = {
-            multiBinaryTests = {
-              executable = "tests";
-              expectedOutput = "All tests passed";
-            };
+  # Combined package with all binaries
+  combined = pkgs.symlinkJoin {
+    name = "myapp";
+    paths = [
+      cli.passthru.target
+      daemon.passthru.target
+      tests.passthru.target
+    ];
+  };
 
-            multiBinaryCli = {
-              executable = "cli";
-              args = [ "--version" ];
-              expectedOutput = "myapp version";
-            };
+  testTests = native.test {
+    name = "test-multi-binary-tests";
+    executable = tests;
+    expectedOutput = "All tests passed";
+  };
 
-            multiBinaryDaemon = {
-              executable = "daemon";
-              args = [ "--check" ];
-              expectedOutput = "Configuration OK";
-            };
-          };
+  testCli = native.test {
+    name = "test-multi-binary-cli";
+    executable = cli;
+    args = [ "--version" ];
+    expectedOutput = "myapp version";
+  };
 
-          extraPackages = {
-            inherit combined;
-            multiBinaryExample = combined;
-          };
-        };
-      })
-  ];
+  testDaemon = native.test {
+    name = "test-multi-binary-daemon";
+    executable = daemon;
+    args = [ "--check" ];
+    expectedOutput = "Configuration OK";
+  };
+
+in {
+  packages = {
+    inherit commonLib cli daemon tests combined;
+    multiBinaryExample = combined;
+  };
+
+  checks = {
+    inherit testTests testCli testDaemon;
+  };
 }

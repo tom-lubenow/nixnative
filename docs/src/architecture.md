@@ -8,7 +8,8 @@ nixnative uses [nix-ninja](https://github.com/aspect-build/nix-ninja) as its bui
 
 ```
 EVALUATION TIME (nixnative):
-  native.project { modules = [ ... ] }
+  proj = native.project { root = ./.; ... }
+  app = proj.executable { name = "app"; sources = [...]; }
     │
     ├── Resolve toolchain (compiler, linker, flags)
     ├── Process tool plugins (code generators)
@@ -33,14 +34,22 @@ BUILD TIME (nix-ninja):
 
 ## Key Components
 
-### 1. Module-First Project Interface (`modules/project.nix`)
+### 1. Composable Project API (`builders/api.nix`)
 
-The primary entrypoint for new code:
+The primary user-facing API:
+- `native.project { root, defaults... }` returns scoped builders
+- `proj.executable`, `proj.staticLib`, etc. create targets with merged defaults
+- Targets are real Nix values, not string references
+- Supports helper patterns and standard Nix composition
+
+### 2. Module-Based API (`modules/project.nix`)
+
+Alternative module-based interface (via `native.evalProject`):
 - Typed module options for targets, tests, and dev shells
 - Applies defaults and resolves target references
 - Emits `packages`, `checks`, and `devShells`
 
-### 2. High-Level API (`builders/api.nix`)
+### 3. High-Level API (`builders/api.nix`)
 
 The user-facing API that handles:
 - Compiler/linker resolution from string names to objects

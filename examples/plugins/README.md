@@ -62,21 +62,23 @@ using CreatePluginFunc = Plugin* (*)();
 ### 2. Build the Interface as Header-Only Library
 
 ```nix
-targets.commonLib = {
-  type = "headerOnly";
-  name = "plugin-interface";
-  includeDirs = [ ./common ];
-};
+let
+  proj = native.project { root = ./.; };
+
+  commonLib = proj.headerOnly {
+    name = "plugin-interface";
+    publicIncludeDirs = [ ./common ];
+  };
+in { ... }
 ```
 
 ### 3. Build the Plugin as a Shared Library
 
 ```nix
-targets.myPlugin = {
-  type = "sharedLib";
+myPlugin = proj.sharedLib {
   name = "my-plugin";
   sources = [ "plugin/plugin.cc" ];
-  libraries = [ { target = "commonLib"; } ];
+  libraries = [ commonLib ];  # Direct reference!
 };
 ```
 
@@ -91,11 +93,10 @@ extern "C" {
 ### 4. Build the Host Application
 
 ```nix
-targets.hostApp = {
-  type = "executable";
+hostApp = proj.executable {
   name = "host-app";
   sources = [ "host/main.cc" ];
-  libraries = [ { target = "commonLib"; } ];
+  libraries = [ commonLib ];
   linkFlags = if pkgs.stdenv.isLinux then [ "-ldl" ] else [ ];
 };
 ```
@@ -113,11 +114,10 @@ plugin->doSomething();
 
 ### Shared Libraries
 
-Use `type = "sharedLib"` to build `.so` files:
+Use `proj.sharedLib` to build `.so` files:
 
 ```nix
-targets.myLib = {
-  type = "sharedLib";
+myLib = proj.sharedLib {
   name = "my-lib";
   sources = [ "lib.cc" ];
   # Output: lib/libmy-lib.so
@@ -128,14 +128,13 @@ Access the library path via `.sharedLibrary` attribute.
 
 ### Header-Only Libraries
 
-Use `type = "headerOnly"` when there's no compiled code:
+Use `proj.headerOnly` when there's no compiled code:
 
 ```nix
-targets.myHeaders = {
-  type = "headerOnly";
+myHeaders = proj.headerOnly {
   name = "my-headers";
-  includeDirs = [ ./include ];
-  publicDefines = [ "MY_FEATURE=1" ];  # Optional
+  publicIncludeDirs = [ ./include ];
+  defines = [ "MY_FEATURE=1" ];  # Optional
 };
 ```
 
