@@ -33,20 +33,21 @@ let
   # Returns list of builtins.outputOf references that ensure dynamic derivations are built
   collectLibraryInputs = libs:
     let
-      collectFromLib = lib:
-        if builtins.isAttrs lib then
+      # Named 'library' to avoid shadowing nixpkgs 'lib'
+      collectFromLibrary = library:
+        if builtins.isAttrs library then
           # Check if this is a ninja-built library (has passthru.target)
-          if lib ? passthru && lib.passthru ? target then
+          if library ? passthru && library.passthru ? target then
             # Return the target (builtins.outputOf) so Nix builds the dynamic derivation
-            [ lib.passthru.target ] ++ (if lib ? libraries then collectLibraryInputs lib.libraries else [])
-          else if lib ? libraries then
-            collectLibraryInputs lib.libraries
+            [ library.passthru.target ] ++ (if library ? libraries then collectLibraryInputs library.libraries else [])
+          else if library ? libraries then
+            collectLibraryInputs library.libraries
           else
             []
         else
           [];
     in
-    lib.unique (lib.concatMap collectFromLib libs);
+    lib.unique (lib.concatMap collectFromLibrary libs);
 
   resolveIncludeDir = { rootBase, dir }:
     let

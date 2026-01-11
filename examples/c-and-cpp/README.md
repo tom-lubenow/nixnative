@@ -205,5 +205,5 @@ private:
 ## Next Steps
 
 - See `library/` for building standalone libraries
-- See `rust-integration/` for another FFI example
-- See `interop/` for Zig integration
+- See `rust-calls-cpp/` for Rust/C++ FFI example
+- See `cpp-calls-rust/` for C++/Rust FFI example

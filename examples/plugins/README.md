@@ -144,6 +144,6 @@ On Linux, `-ldl` is required for `dlopen`/`dlsym`.
 
 ## Next Steps
 
-- See `install/` for library installation and consumption
 - See `library/` for static libraries
+- See `header-only/` for header-only libraries
 - See `testing/` for test infrastructure

@@ -225,10 +225,12 @@ let
 
       # Sanitizers
       requestedSanitizers =
-        if !(args ? sanitizers) || args.sanitizers == null then [ ] else args.sanitizers;
-      _ = if !(builtins.isList requestedSanitizers) then
-        throw "sanitizers must be a list (e.g., [ \"address\" \"undefined\" ])"
-      else null;
+        if !(args ? sanitizers) || args.sanitizers == null then
+          [ ]
+        else if !(builtins.isList args.sanitizers) then
+          throw "sanitizers must be a list (e.g., [ \"address\" \"undefined\" ])"
+        else
+          args.sanitizers;
       supportedSanitizers = caps.sanitizers or [ ];
       unsupportedSanitizers =
         builtins.filter (s: !(builtins.elem s supportedSanitizers)) requestedSanitizers;

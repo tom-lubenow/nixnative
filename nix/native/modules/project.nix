@@ -578,14 +578,17 @@ let
 
       resolvedTargets = lib.mapAttrs resolveTarget cfg.targets;
 
-      resolveTargetAttrRef = value:
+      # Resolve a target reference: { target = "name"; }, string, or passthrough
+      resolveRef = value:
         if builtins.isAttrs value && value ? target then
           packages.${value.target} or (throw "nixnative.project: unknown target '${value.target}'")
+        else if builtins.isString value then
+          packages.${value} or (throw "nixnative.project: unknown target '${value}'")
         else
           value;
 
       resolveLibraryRefs = libs:
-        map resolveTargetAttrRef libs;
+        map resolveRef libs;
 
       buildTarget = target:
         let
@@ -639,21 +642,13 @@ let
 
       builtPackages = lib.mapAttrs (_: buildTarget) resolvedTargets;
 
-      resolveTargetRef = ref:
-        if builtins.isAttrs ref && ref ? target then
-          packages.${ref.target} or (throw "nixnative.project: unknown target '${ref.target}'")
-        else if builtins.isString ref then
-          packages.${ref} or (throw "nixnative.project: unknown target '${ref}'")
-        else
-          ref;
-
       buildTest = name: test:
         let
-          _ = if test.executable == null then
-            throw "nixnative.project: test '${test.name or name}' must set executable"
-          else
-            null;
-          executable = resolveTargetRef test.executable;
+          executable =
+            if test.executable == null then
+              throw "nixnative.project: test '${test.name or name}' must set executable"
+            else
+              resolveRef test.executable;
         in
         helpers.mkTest {
           inherit (test) args stdin expectedOutput;
@@ -665,7 +660,7 @@ let
 
       buildShell = name: shell:
         let
-          resolvedTarget = if shell.target == null then null else resolveTargetRef shell.target;
+          resolvedTarget = if shell.target == null then null else resolveRef shell.target;
         in
         helpers.mkDevShell {
           target = resolvedTarget;
@@ -675,7 +670,7 @@ let
       devShells = lib.mapAttrs buildShell cfg.shells;
 
       resolveExtraOutputs = extras:
-        lib.mapAttrs (_: resolveTargetAttrRef) extras;
+        lib.mapAttrs (_: resolveRef) extras;
 
       packages = builtPackages // resolveExtraOutputs cfg.extraPackages;
       checks = builtChecks // resolveExtraOutputs cfg.extraChecks;

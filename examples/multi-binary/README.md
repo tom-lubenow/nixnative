@@ -73,62 +73,58 @@ CLI ready!
 ### Shared Library
 
 ```nix
-# Build common code as a static library
-targets.commonLib = {
-  type = "staticLib";
-  name = "myapp-common";
-  sources = [
-    "common/config.cc"
-    "common/logger.cc"
-    "common/database.cc"
-  ];
-  includeDirs = [ "common/include" ];
-  publicIncludeDirs = [ "common/include" ];
-};
+let
+  proj = native.project { root = ./.; };
+
+  # Build common code as a static library
+  commonLib = proj.staticLib {
+    name = "libmyapp-common";
+    sources = [ "common/*.cc" ];  # Glob patterns supported!
+    includeDirs = [ "common/include" ];
+    publicIncludeDirs = [ "common/include" ];
+  };
+in { ... }
 ```
 
 ### Multiple Executables
 
 ```nix
-# CLI tool
-targets.cli = {
-  type = "executable";
-  name = "myapp-cli";
-  sources = [ "cli/main.cc" ];
-  libraries = [ { target = "commonLib"; } ];
-};
+  # CLI tool
+  cli = proj.executable {
+    name = "myapp-cli";
+    sources = [ "cli/main.cc" ];
+    libraries = [ commonLib ];  # Direct reference!
+  };
 
-# Daemon
-targets.daemon = {
-  type = "executable";
-  name = "myapp-daemon";
-  sources = [ "daemon/main.cc" ];
-  libraries = [ { target = "commonLib"; } ];
-  defines = [ "DAEMON_MODE" ];
-};
+  # Daemon
+  daemon = proj.executable {
+    name = "myapp-daemon";
+    sources = [ "daemon/main.cc" ];
+    libraries = [ commonLib ];
+    defines = [ "DAEMON_MODE" ];
+  };
 
-# Test binary
-targets.tests = {
-  type = "executable";
-  name = "myapp-tests";
-  sources = [ "tests/main.cc" ];
-  libraries = [ { target = "commonLib"; } ];
-  defines = [ "TEST_MODE" ];
-};
+  # Test binary
+  tests = proj.executable {
+    name = "myapp-tests";
+    sources = [ "tests/main.cc" ];
+    libraries = [ commonLib ];
+    defines = [ "TEST_MODE" ];
+  };
 ```
 
 ### Combined Package
 
 ```nix
-# Combine all binaries into one package
-combined = pkgs.symlinkJoin {
-  name = "myapp";
-  paths = [
-    config.native.packages.cli.passthru.target
-    config.native.packages.daemon.passthru.target
-    config.native.packages.tests.passthru.target
-  ];
-};
+  # Combine all binaries into one package
+  combined = pkgs.symlinkJoin {
+    name = "myapp";
+    paths = [
+      cli.passthru.target
+      daemon.passthru.target
+      tests.passthru.target
+    ];
+  };
 ```
 
 ## Key Patterns
@@ -181,10 +177,10 @@ targets.cli = {
 The test binary includes the same common code but with test-specific configuration:
 
 ```nix
-targets.tests = {
-  type = "executable";
+tests = proj.executable {
   name = "myapp-tests";
-  libraries = [ { target = "commonLib"; } ];
+  sources = [ "tests/main.cc" ];
+  libraries = [ commonLib ];  # Direct reference!
   defines = [ "TEST_MODE" "ENABLE_MOCKS" ];
   sanitizers = [ "address" ];
 };

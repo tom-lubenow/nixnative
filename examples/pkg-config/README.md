@@ -100,5 +100,5 @@ targets.myApp = {
 ## Next Steps
 
 - See `app-with-library/` for combining pkg-config with custom libraries
-- See `protobuf/` for another pkg-config usage example
 - See `library/` for creating your own libraries
+- See `simple-tool/` for code generation examples
