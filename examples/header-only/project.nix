@@ -28,8 +28,9 @@ let
 
 in {
   packages = {
-    inherit vec3Lib testApp;
+    inherit testApp;
     headerOnlyExample = testApp;
+    default = testApp;
   };
 
   checks = {

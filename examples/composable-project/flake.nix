@@ -5,14 +5,19 @@
 # can be passed directly to `libraries`, imported from other files,
 # or composed with plain Nix functions.
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
   inputs.nixnative.url = "../..";
 
   outputs = { nixpkgs, nixnative, ... }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; };
-      native = nixnative.lib.native { inherit pkgs; };
+      nixPackage = nixnative.inputs.nix.packages.${system}.default;
+      ninjaPackages = nixnative.inputs.nix-ninja.packages.${system};
+      native = nixnative.lib.native {
+        inherit pkgs nixPackage;
+        inherit (ninjaPackages) nix-ninja nix-ninja-task;
+      };
 
       # Create a project with shared defaults
       proj = native.project {

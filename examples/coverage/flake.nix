@@ -29,7 +29,7 @@
           project = import ./project.nix { inherit pkgs native; };
           packages = project.packages;
         in
-        packages // { default = packages.coverageExample; }
+        packages // { default = packages.appWithCoverage; }
       );
 
       # Development shell with coverage tools
