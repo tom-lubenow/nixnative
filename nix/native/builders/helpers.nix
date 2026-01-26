@@ -396,7 +396,7 @@ rec {
     wrapper // {
       artifactType = "executable";
       inherit name libraries tools;
-      executablePath = "${targetOut}/bin/${name}";
+      executablePath = "${targetOut}/${name}";
       compileCommands = build.compileCommands;
       passthru = wrapper.passthru // {
         inherit toolchain;

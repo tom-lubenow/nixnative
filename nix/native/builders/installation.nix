@@ -100,6 +100,8 @@ in
         ${lib.concatMapStringsSep "\n" (exe: ''
           if [ -d "${exe.path}/bin" ]; then
             cp -r "${exe.path}/bin/"* $out/bin/
+          elif [ -f "${exe.path}/${exe.name}" ]; then
+            cp "${exe.path}/${exe.name}" $out/bin/${exe.name}
           elif [ -f "${exe.path}" ]; then
             cp "${exe.path}" $out/bin/${exe.name}
           fi

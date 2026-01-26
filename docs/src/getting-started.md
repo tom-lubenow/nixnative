@@ -39,7 +39,7 @@ nix build --print-out-paths
 # Output: /nix/store/xxx-hello
 
 # Run directly
-$(nix build --print-out-paths)/bin/hello
+$(nix build --print-out-paths)/hello
 ```
 
 > **Note**: Dynamic derivations don't create the traditional `./result` symlink.

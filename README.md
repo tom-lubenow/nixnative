@@ -100,7 +100,7 @@ nix build --print-out-paths
 # Output: /nix/store/xxx-hello
 
 # Run directly from the store path
-$(nix build --print-out-paths)/bin/hello
+$(nix build --print-out-paths)/hello
 ```
 
 > **Note**: Dynamic derivations don't create the traditional `./result` symlink.
@@ -142,7 +142,7 @@ nix build .#executableExample --print-out-paths
 # Output: /nix/store/xxx-executable-example
 
 # Or in one line:
-$(nix build .#executableExample --print-out-paths)/bin/executable-example
+$(nix build .#executableExample --print-out-paths)/executable-example
 ```
 
 Run all checks:
