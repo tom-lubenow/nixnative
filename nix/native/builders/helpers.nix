@@ -15,7 +15,6 @@
 let
   inherit (lib) concatStringsSep hasPrefix removePrefix;
   inherit (utils)
-    sanitizePath
     sanitizeName
     normalizeIncludeDir
     mergePublic
@@ -597,7 +596,17 @@ rec {
       tools ? [],
     }:
     let
-      rootPath = sanitizePath { path = root; };
+      isHeaderFile = name: type:
+        type == "regular" && language.isHeaderFile name;
+
+      headersAndDirsFilter = name: type:
+        type == "directory" || isHeaderFile name type;
+
+      rootPath = builtins.path {
+        path = root;
+        name = "headers";
+        filter = headersAndDirsFilter;
+      };
       rootHost = builtins.toString rootPath;
 
       # Process tools for generated headers
