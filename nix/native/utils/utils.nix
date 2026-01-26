@@ -3,10 +3,36 @@
 # Common helpers used across the build system.
 # Adapted from nix/cpp/utils.nix with updates for the new architecture.
 #
-{ pkgs }:
+{ pkgs, globset ? null }:
 
 let
   lib = pkgs.lib;
+  globsetLib =
+    if globset == null then
+      null
+    else if builtins.isAttrs globset && globset ? lib then
+      globset.lib
+    else
+      globset;
+
+  globsetSrc =
+    if globset == null then
+      null
+    else if builtins.isAttrs globset && globset ? outPath then
+      globset.outPath
+    else if builtins.isPath globset || builtins.isString globset then
+      globset
+    else
+      null;
+
+  globsetInternal =
+    if globsetLib != null && globsetSrc != null then
+      import "${globsetSrc}/internal" {
+        lib = lib // { globset = globsetLib; };
+      }
+    else
+      null;
+
   inherit (lib)
     concatMap
     concatStringsSep
@@ -237,7 +263,14 @@ rec {
   # ==========================================================================
 
   # Check if a string contains glob characters
-  isGlob = s: builtins.isString s && (lib.hasInfix "*" s);
+  hasExtendedGlobMeta = s:
+    lib.hasInfix "[" s || lib.hasInfix "{" s;
+
+  isGlob = s:
+    builtins.isString s && (
+      lib.hasInfix "*" s
+      || (globsetInternal != null && hasExtendedGlobMeta s)
+    );
 
   # Check if a filename matches a simple pattern like "*.cc" or "foo*.h"
   # Supports only single * at one position in the pattern
@@ -303,55 +336,62 @@ rec {
   expandGlob = { root, pattern }:
     let
       rootStr = builtins.toString root;
-
-      # Check if pattern is recursive (contains **)
-      isRecursive = lib.hasInfix "**" pattern;
-
-      # Split pattern into directory prefix and file pattern
-      # e.g., "src/foo/*.cc" -> { dir = "src/foo"; filePattern = "*.cc"; }
-      # e.g., "src/**/*.cc" -> { dir = "src"; filePattern = "*.cc"; recursive = true; }
-      parsePattern = pat:
-        let
-          # Handle recursive patterns
-          recursiveParts = lib.splitString "/**/" pat;
-          hasRecursiveMid = builtins.length recursiveParts == 2;
-
-          # Handle patterns starting with **/
-          startsWithRecursive = hasPrefix "**/" pat;
-          patAfterStart = if startsWithRecursive then removePrefix "**/" pat else pat;
-
-          # For non-recursive, split on last /
-          lastSlash = lastIndexOf "/" pat;
-          nonRecursiveDir = if lastSlash == -1 then "." else builtins.substring 0 lastSlash pat;
-          nonRecursiveFile = if lastSlash == -1 then pat else builtins.substring (lastSlash + 1) (builtins.stringLength pat) pat;
-        in
-        if hasRecursiveMid then
-          { dir = builtins.elemAt recursiveParts 0; filePattern = builtins.elemAt recursiveParts 1; recursive = true; }
-        else if startsWithRecursive then
-          { dir = "."; filePattern = patAfterStart; recursive = true; }
-        else
-          { dir = nonRecursiveDir; filePattern = nonRecursiveFile; recursive = false; };
-
-      parsed = parsePattern pattern;
-      baseDir = if parsed.dir == "." then rootStr else "${rootStr}/${parsed.dir}";
-      dirPrefix = if parsed.dir == "." then "" else "${parsed.dir}/";
-
-      # Get list of files to check
-      filesToCheck =
-        if parsed.recursive then
-          map (f: "${dirPrefix}${f}") (listFilesRecursive baseDir)
-        else
-          map (f: "${dirPrefix}${f}") (listFiles baseDir);
-
-      # Filter files matching the pattern
-      matchingFiles = filter (f:
-        let
-          basename = basestring f;
-        in
-        matchPattern parsed.filePattern basename
-      ) filesToCheck;
     in
-    matchingFiles;
+    if globsetInternal != null then
+      let
+        segments = globsetInternal.globSegments rootStr pattern true;
+      in
+      filter (s: s != "") segments
+    else
+      let
+        # Check if pattern is recursive (contains **)
+        isRecursive = lib.hasInfix "**" pattern;
+
+        # Split pattern into directory prefix and file pattern
+        # e.g., "src/foo/*.cc" -> { dir = "src/foo"; filePattern = "*.cc"; }
+        # e.g., "src/**/*.cc" -> { dir = "src"; filePattern = "*.cc"; recursive = true; }
+        parsePattern = pat:
+          let
+            # Handle recursive patterns
+            recursiveParts = lib.splitString "/**/" pat;
+            hasRecursiveMid = builtins.length recursiveParts == 2;
+
+            # Handle patterns starting with **/
+            startsWithRecursive = hasPrefix "**/" pat;
+            patAfterStart = if startsWithRecursive then removePrefix "**/" pat else pat;
+
+            # For non-recursive, split on last /
+            lastSlash = lastIndexOf "/" pat;
+            nonRecursiveDir = if lastSlash == -1 then "." else builtins.substring 0 lastSlash pat;
+            nonRecursiveFile = if lastSlash == -1 then pat else builtins.substring (lastSlash + 1) (builtins.stringLength pat) pat;
+          in
+          if hasRecursiveMid then
+            { dir = builtins.elemAt recursiveParts 0; filePattern = builtins.elemAt recursiveParts 1; recursive = true; }
+          else if startsWithRecursive then
+            { dir = "."; filePattern = patAfterStart; recursive = true; }
+          else
+            { dir = nonRecursiveDir; filePattern = nonRecursiveFile; recursive = false; };
+
+        parsed = parsePattern pattern;
+        baseDir = if parsed.dir == "." then rootStr else "${rootStr}/${parsed.dir}";
+        dirPrefix = if parsed.dir == "." then "" else "${parsed.dir}/";
+
+        # Get list of files to check
+        filesToCheck =
+          if parsed.recursive then
+            map (f: "${dirPrefix}${f}") (listFilesRecursive baseDir)
+          else
+            map (f: "${dirPrefix}${f}") (listFiles baseDir);
+
+        # Filter files matching the pattern
+        matchingFiles = filter (f:
+          let
+            basename = basestring f;
+          in
+          matchPattern parsed.filePattern basename
+        ) filesToCheck;
+      in
+      matchingFiles;
 
   # Get basename of a path (last component)
   basestring = path:

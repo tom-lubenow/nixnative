@@ -8,6 +8,10 @@
   inputs.nix.url = "github:NixOS/nix/d904921eecbc17662fef67e8162bd3c7d1a54ce0";
   inputs.nix.inputs.nixpkgs.follows = "nixpkgs";
 
+  # globset: Pure Nix globbing library for robust source expansion
+  inputs.globset.url = "github:pdtpartners/globset";
+  inputs.globset.inputs.nixpkgs-lib.follows = "nixpkgs";
+
   # nix-ninja: Incremental builds with per-file derivations
   # Fork with patchelf fix for system libraries
   inputs.nix-ninja.url = "git+ssh://git@github.com/tom-lubenow/nix-ninja";
@@ -18,6 +22,7 @@
       self,
       nixpkgs,
       nix,
+      globset,
       nix-ninja,
     }:
     let
@@ -36,7 +41,7 @@
             # nix-ninja packages for incremental builds
             ninjaPackages = nix-ninja.packages.${system};
             native = import ./nix/native {
-              inherit pkgs nixPackage;
+              inherit pkgs nixPackage globset;
               inherit (ninjaPackages) nix-ninja nix-ninja-task;
             };
             examples = import ./examples/examples.nix {

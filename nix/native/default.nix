@@ -22,6 +22,8 @@
   # nix-ninja packages for incremental builds
   nix-ninja ? null,
   nix-ninja-task ? null,
+  # Optional globset flake input for robust globbing
+  globset ? null,
 }:
 
 let
@@ -29,7 +31,7 @@ let
   # Utility Modules (loaded first - needed by other modules)
   # ==========================================================================
 
-  utils = import ./utils/utils.nix { inherit pkgs; };
+  utils = import ./utils/utils.nix { inherit pkgs globset; };
 
   pkgConfigUtils = import ./utils/pkgconfig.nix { inherit pkgs lib; };
 
