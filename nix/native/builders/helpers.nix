@@ -404,7 +404,7 @@ rec {
       compileCommands = build.compileCommands;
       passthru = wrapper.passthru // {
         inherit toolchain;
-        tus = build.prep.normalizedSources;
+        translationUnits = build.prep.normalizedSources;
         ninjaContent = build.ninjaContent;
         compileCommands = build.compileCommands;
       };
@@ -484,7 +484,7 @@ rec {
       compileCommands = build.compileCommands;
       passthru = wrapper.passthru // {
         inherit toolchain;
-        tus = build.prep.normalizedSources;
+        translationUnits = build.prep.normalizedSources;
         ninjaContent = build.ninjaContent;
         compileCommands = build.compileCommands;
       };
@@ -571,7 +571,7 @@ rec {
       compileCommands = build.compileCommands;
       passthru = wrapper.passthru // {
         inherit toolchain;
-        tus = build.prep.normalizedSources;
+        translationUnits = build.prep.normalizedSources;
         ninjaContent = build.ninjaContent;
         compileCommands = build.compileCommands;
       };

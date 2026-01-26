@@ -18,7 +18,7 @@
   - [x] Compiler defaults vs ergonomic flags: clang/gcc defaults already include -Wall -Wextra, but warnings = "all"/"extra"
     duplicates them. It’s harmless but noisy; consider deduping compileFlags or removing defaults in compiler configs and
     relying on the ergonomic flags.
-  - Naming clarity: passthru.tus is opaque. Rename to translationUnits or drop if unused. nix/native/builders/helpers.nix:404-
+  - [x] Naming clarity: passthru.tus is opaque. Rename to translationUnits or drop if unused. nix/native/builders/helpers.nix:404-
     408.
 
   API consistency
