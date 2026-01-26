@@ -20,6 +20,7 @@ let
     normalizeIncludeDir
     mergePublic
     ensureList
+    toPathLike
     collectPublic
     collectEvalInputs
     compileFlagsForLanguage
@@ -141,10 +142,44 @@ let
   # Normalize all sources for ninja (with glob expansion)
   normalizeSourcesForNinja = { root, sources }:
     let
+      rootPath = toPathLike root;
+      rootStr = toString rootPath;
+
+      expandFilteredSource = source:
+        let
+          basePath = toPathLike source.path;
+          basePathStr = toString basePath;
+          patterns = ensureList source.filter;
+          invalidPatterns = builtins.filter (p: !(builtins.isString p)) patterns;
+          _ = if invalidPatterns != [ ] then
+            throw "nixnative: source filter patterns must be strings, got ${builtins.toJSON invalidPatterns}"
+          else
+            null;
+          matches = lib.concatMap (pattern:
+            expandGlob { root = basePath; inherit pattern; }
+          ) patterns;
+          relPrefix =
+            if basePathStr == rootStr then
+              ""
+            else if hasPrefix (rootStr + "/") basePathStr then
+              removePrefix (rootStr + "/") basePathStr
+            else
+              builtins.baseNameOf basePathStr;
+        in
+        map (match:
+          let
+            rel = if relPrefix == "" then match else "${relPrefix}/${match}";
+            path = "${basePathStr}/${match}";
+          in
+          { inherit rel path; }
+        ) matches;
+
       # Expand globs first
       expandedSources = lib.concatMap (source:
-        if isGlob source then
-          expandGlob { inherit root; pattern = source; }
+        if builtins.isAttrs source && source ? path && source ? filter then
+          expandFilteredSource source
+        else if isGlob source then
+          expandGlob { root = rootPath; pattern = source; }
         else
           [ source ]
       ) sources;
