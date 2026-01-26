@@ -106,8 +106,6 @@ let
         };
       };
 
-      # Bintools for this compiler
-      inherit bintools;
     };
 
 in
