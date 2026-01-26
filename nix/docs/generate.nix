@@ -134,7 +134,6 @@ let
           Source files to compile. Can be:
           - Paths: `./src/main.cc`
           - Strings: `"src/*.cc"` (glob patterns)
-          - Attrs with `path`: `{ path = ./src; filter = "*.cc"; }`
         '';
       };
       includeDirs = lib.mkOption {
