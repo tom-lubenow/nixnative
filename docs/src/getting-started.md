@@ -86,6 +86,7 @@ in {
 When you call a scoped builder like `proj.executable { ... }`:
 
 - **Lists** (includeDirs, defines, libraries, etc.) are **concatenated**: defaults ++ target
+  - Lists of strings/paths are deduplicated (first occurrence wins); lists of attrsets are not
 - **Attrs** (languageFlags) are **merged**: `defaults // target`
 - **Scalars** (name, root, compiler, etc.) from target **override** defaults
 

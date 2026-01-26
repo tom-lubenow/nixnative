@@ -61,7 +61,8 @@ The project returns these scoped builder functions:
 - `proj.sharedLib { ... }` - Build a shared library
 - `proj.headerOnly { ... }` - Define a header-only library
 
-All builders inherit the project's defaults but can override them.
+All builders inherit the project's defaults but can override them. Lists are concatenated; lists of strings/paths are
+deduplicated (first occurrence wins) while lists of attrsets are not.
 
 ## Extending Projects
 
