@@ -101,7 +101,6 @@ in
   # Create a test derivation that runs an executable built with nix-ninja
   mkNinjaTest = {
     name,
-    wrapper,         # Wrapper derivation from mkNinjaDerivation (for dependency)
     target,          # builtins.outputOf reference to the actual target
     executableName,  # Actual executable name (from wrapper.name)
     args ? [],       # Command-line arguments
@@ -114,7 +113,7 @@ in
       name = "test-${name}";
 
       # The target placeholder ensures Nix builds the wrapper and then the dynamic output
-      buildInputs = [ wrapper target ];
+      buildInputs = [ target ];
 
       dontUnpack = true;
       dontConfigure = true;

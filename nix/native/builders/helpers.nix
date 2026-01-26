@@ -733,8 +733,6 @@ rec {
       exeName = lib.removeSuffix ".drv" (executable.name or "unknown");
       ninjaTest = ninja.mkNinjaTest {
         inherit name args;
-        # Pass both the wrapper (for dependency) and target (for path resolution)
-        wrapper = executable;
         target = executable.passthru.target;
         executableName = exeName;
         inherit expectedOutput;
