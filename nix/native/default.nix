@@ -238,21 +238,11 @@ let
       # Use default linker if not specified
       resolvedLinker = if linker != null then linker else linkers.default;
 
-      # Try to infer bintools from the first language's compiler
-      # (users can override by passing bintools explicitly)
-      inferredBintools =
-        if bintools != null then bintools
+      resolvedBintools =
+        if bintools != null then
+          bintools
         else
-          let
-            langNames = builtins.attrNames languages;
-            firstLang = builtins.head langNames;
-            langBintools = languages.${firstLang}.bintools or null;
-          in
-          if langBintools != null then
-            langBintools
-          else
-            # Fallback to clang bintools for custom language configs
-            clangCompilers.clang.bintools;
+          throw "nixnative.mkToolchain: 'bintools' is required. Pass a bintools set (e.g., native.compilers.clang.bintools).";
 
       targetPlatform = pkgs.stdenv.targetPlatform;
     in
@@ -260,7 +250,7 @@ let
       {
         inherit languages targetPlatform;
         linker = resolvedLinker;
-        bintools = inferredBintools;
+        bintools = resolvedBintools;
       }
       // (builtins.removeAttrs args [
         "languages"

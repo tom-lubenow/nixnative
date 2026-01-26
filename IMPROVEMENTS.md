@@ -11,7 +11,7 @@
 
   Toolchain ergonomics / assumptions
 
-  - Default bintools inference now uses the first language; however attrset ordering is lexical, not intent. If the first
+  - [x] Default bintools inference now uses the first language; however attrset ordering is lexical, not intent. If the first
     language is not C/C++ (future Rust, etc.), you may get surprising bintools. Consider:
       - Prefer cpp/c bintools if present, otherwise require explicit bintools for non‑C/C++ toolchains (fail fast instead of
         silently using clang).
