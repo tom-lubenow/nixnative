@@ -36,7 +36,7 @@
 
   Potentially awkward or surprising behavior
 
-  - mkToolchain name generation uses the first language name; with multiple languages it may not be intuitive (e.g., c- vs
+  - [x] mkToolchain name generation uses the first language name; with multiple languages it may not be intuitive (e.g., c- vs
     cpp-). Maybe prefer cpp if present, or require explicit name for multi‑lang toolchains.
   - Header‑only path capture: mkHeaderOnly uses sanitizePath (captures entire root) while compiled targets use header‑only
     capture. This is consistent with “no compilation” but can be a perf surprise. Consider documenting it or adopting the

@@ -40,12 +40,14 @@ rec {
       environment ? { }, # Additional environment variables
     }:
     let
-      # Generate name from languages if not provided
+      # Generate name from languages if not provided (prefer C++/C)
       generatedName =
         let
-          langNames = builtins.attrNames languages;
-          firstLang = builtins.head langNames;
-          compilerName = languages.${firstLang}.name or "unknown";
+          langKey =
+            if languages ? cpp then "cpp"
+            else if languages ? c then "c"
+            else builtins.head (builtins.attrNames languages);
+          compilerName = languages.${langKey}.name or "unknown";
         in
         "${compilerName}-${linker.name}";
 
