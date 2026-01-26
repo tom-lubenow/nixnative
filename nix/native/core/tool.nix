@@ -134,8 +134,16 @@ rec {
             defines = outputInfo.defines or [ ];
             compileFlags = outputInfo.compileFlags or [ ];
             linkFlags =
-              (outputInfo.linkFlags or [ ])
-              ++ (map (dep: if builtins.isString dep then dep else dep.linkFlags or [ ]) dependencies);
+              let
+                depLinkFlags = lib.concatMap (
+                  dep:
+                  if builtins.isString dep then
+                    [ dep ]
+                  else
+                    dep.linkFlags or [ ]
+                ) dependencies;
+              in
+              (outputInfo.linkFlags or [ ]) ++ depLinkFlags;
           };
 
           # Evaluation inputs (for Nix to track)
