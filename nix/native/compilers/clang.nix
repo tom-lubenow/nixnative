@@ -48,13 +48,6 @@ let
         colorDiagnostics = true;
       };
 
-    in
-    {
-      inherit name;
-      version = llvm.release_version;
-      package = llvm.clang;
-
-      # Bintools for this compiler
       bintools = {
         ar = "${llvm.bintools}/bin/ar";
         ranlib = "${llvm.bintools}/bin/ranlib";
@@ -62,6 +55,15 @@ let
         objcopy = "${llvm.bintools}/bin/objcopy";
         strip = "${llvm.bintools}/bin/strip";
       };
+
+    in
+    {
+      inherit name;
+      version = llvm.release_version;
+      package = llvm.clang;
+
+      # Bintools for this compiler
+      inherit bintools;
 
       # Language configs
       c = {

@@ -46,13 +46,7 @@ let
         pch = true;
         colorDiagnostics = true;
       };
-    in
-    {
-      inherit name;
-      version = gcc.version;
-      package = gcc;
 
-      # Bintools for this compiler
       bintools = {
         ar = "${pkgs.binutils}/bin/ar";
         ranlib = "${pkgs.binutils}/bin/ranlib";
@@ -60,6 +54,14 @@ let
         objcopy = "${pkgs.binutils}/bin/objcopy";
         strip = "${pkgs.binutils}/bin/strip";
       };
+    in
+    {
+      inherit name;
+      version = gcc.version;
+      package = gcc;
+
+      # Bintools for this compiler
+      inherit bintools;
 
       # Language configs
       c = {
