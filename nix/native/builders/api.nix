@@ -321,7 +321,7 @@ let
     in
     args
     // {
-      compileFlags = extraCompileFlags ++ baseCompileFlags;
+      compileFlags = lib.unique (extraCompileFlags ++ baseCompileFlags);
       linkFlags = extraLinkFlags ++ baseLinkFlags;
     };
 

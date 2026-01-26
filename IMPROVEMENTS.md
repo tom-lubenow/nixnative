@@ -15,7 +15,7 @@
     language is not C/C++ (future Rust, etc.), you may get surprising bintools. Consider:
       - Prefer cpp/c bintools if present, otherwise require explicit bintools for non‑C/C++ toolchains (fail fast instead of
         silently using clang).
-  - Compiler defaults vs ergonomic flags: clang/gcc defaults already include -Wall -Wextra, but warnings = "all"/"extra"
+  - [x] Compiler defaults vs ergonomic flags: clang/gcc defaults already include -Wall -Wextra, but warnings = "all"/"extra"
     duplicates them. It’s harmless but noisy; consider deduping compileFlags or removing defaults in compiler configs and
     relying on the ergonomic flags.
   - Naming clarity: passthru.tus is opaque. Rename to translationUnits or drop if unused. nix/native/builders/helpers.nix:404-
