@@ -105,22 +105,4 @@ rec {
   # Linux uses --start-group/--end-group for circular deps
   linuxGroupFlags = _: libs: [ "-Wl,--start-group" ] ++ libs ++ [ "-Wl,--end-group" ];
 
-  # ==========================================================================
-  # Validation Helpers
-  # ==========================================================================
-
-  validateLinker =
-    linker:
-    let
-      required = [
-        "name"
-        "binary"
-        "driverFlag"
-      ];
-      missing = builtins.filter (f: !(linker ? ${f})) required;
-    in
-    if missing != [ ] then
-      throw "nixnative: linker missing required fields: ${lib.concatStringsSep ", " missing}"
-    else
-      linker;
 }

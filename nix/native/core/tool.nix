@@ -191,39 +191,6 @@ rec {
       throw "nixnative: mkIncludeDir expects a path or attrset with 'path'";
 
   # ==========================================================================
-  # Validation
-  # ==========================================================================
-
-  validateTool =
-    tool:
-    let
-      required = [
-        "name"
-        "transform"
-      ];
-      missing = builtins.filter (f: !(tool ? ${f})) required;
-    in
-    if missing != [ ] then
-      throw "nixnative: tool missing required fields: ${lib.concatStringsSep ", " missing}"
-    else
-      tool;
-
-  # Validate tool run output
-  validateToolOutput =
-    output:
-    let
-      required = [
-        "drv"
-        "name"
-      ];
-      missing = builtins.filter (f: !(output ? ${f})) required;
-    in
-    if missing != [ ] then
-      throw "nixnative: tool output missing required fields: ${lib.concatStringsSep ", " missing}"
-    else
-      output;
-
-  # ==========================================================================
   # Simplified Tool API
   # ==========================================================================
 

@@ -110,26 +110,6 @@ rec {
     };
 
   # ==========================================================================
-  # Validation Helpers
-  # ==========================================================================
-
-  # Validate compiler structure
-  validateCompiler =
-    compiler:
-    let
-      required = [
-        "name"
-        "cc"
-        "cxx"
-      ];
-      missing = builtins.filter (f: !(compiler ? ${f})) required;
-    in
-    if missing != [ ] then
-      throw "nixnative: compiler missing required fields: ${lib.concatStringsSep ", " missing}"
-    else
-      compiler;
-
-  # ==========================================================================
   # Scanner Helpers
   # ==========================================================================
 

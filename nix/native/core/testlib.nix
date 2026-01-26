@@ -83,22 +83,4 @@ rec {
     in
     self;
 
-  # ==========================================================================
-  # Validation
-  # ==========================================================================
-
-  validateTestLib =
-    testLib:
-    let
-      required = [
-        "name"
-        "package"
-        "public"
-      ];
-      missing = builtins.filter (f: !(testLib ? ${f})) required;
-    in
-    if missing != [ ] then
-      throw "nixnative: test library missing required fields: ${lib.concatStringsSep ", " missing}"
-    else
-      testLib;
 }

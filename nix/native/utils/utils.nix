@@ -305,14 +305,6 @@ rec {
     in
     builtins.attrNames files;
 
-  # List subdirectories in a directory
-  listDirs = dir:
-    let
-      entries = builtins.readDir dir;
-      dirs = lib.filterAttrs (_: type: type == "directory") entries;
-    in
-    builtins.attrNames dirs;
-
   # Recursively list all files under a directory
   listFilesRecursive = dir:
     let
@@ -476,22 +468,6 @@ rec {
       '';
     in
     assembled;
-
-  # Capture a single file from a directory.
-  # Convenience wrapper around builtins.path for explicit single-file capture.
-  #
-  # Example:
-  #   captureFile { root = ./.; file = "src/main.cc"; }
-  #
-  captureFile =
-    {
-      root,
-      file,
-    }:
-    let
-      rootStr = builtins.toString root;
-    in
-    builtins.path { path = "${rootStr}/${file}"; };
 
   # Collect legacy link flags from libraries.
   # This handles external libraries (pkg-config, etc.) that don't use objectRefs.
