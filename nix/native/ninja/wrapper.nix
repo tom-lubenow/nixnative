@@ -114,7 +114,7 @@ in
       name = "test-${name}";
 
       # The target placeholder ensures Nix builds the wrapper and then the dynamic output
-      buildInputs = [ target ];
+      buildInputs = [ wrapper target ];
 
       dontUnpack = true;
       dontConfigure = true;

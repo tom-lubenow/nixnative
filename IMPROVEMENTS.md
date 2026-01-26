@@ -25,7 +25,7 @@
 
   - [x] Dedup behavior is now aligned (module system and project helper), but consider documenting that lists of strings/paths are
     deduped and attrset lists are not. This can surprise users expecting stable list ordering/duplicates.
-  - mkNinjaTest takes wrapper but doesn’t use it. Either remove the parameter or add it to buildInputs so the wrapper is an
+  - [x] mkNinjaTest takes wrapper but doesn’t use it. Either remove the parameter or add it to buildInputs so the wrapper is an
     explicit dependency. nix/native/ninja/wrapper.nix:101-118.
 
   Dead code / cleanup candidates
