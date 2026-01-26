@@ -279,12 +279,17 @@ let
           throw "lto must be false, true, \"thin\", or \"full\"";
 
       ltoCaps = caps.lto or null;
+      linkerCaps = toolchain.linker.capabilities or { };
+      linkerSupportsFullLto = linkerCaps.lto or false;
+      linkerSupportsThinLto = linkerCaps.thinLto or false;
       ltoFlags =
         if ltoValue == null then
           { compile = [ ]; link = [ ]; }
         else if ltoValue == "thin" then
           if ltoCaps == null || !(ltoCaps.thin or false) then
             throw "thin LTO not supported by compiler '${langName}'"
+          else if !linkerSupportsThinLto then
+            throw "thin LTO not supported by linker '${toolchain.linker.name or "unknown"}'"
           else if compilerFlavor != "clang" then
             throw "thin LTO flag mapping not implemented for compiler '${langName}'"
           else
@@ -292,6 +297,8 @@ let
         else if ltoValue == "full" then
           if ltoCaps == null || !(ltoCaps.full or false) then
             throw "full LTO not supported by compiler '${langName}'"
+          else if !linkerSupportsFullLto then
+            throw "full LTO not supported by linker '${toolchain.linker.name or "unknown"}'"
           else
             { compile = [ "-flto" ]; link = [ "-flto" ]; }
         else

@@ -6,7 +6,7 @@
   - [x] Tool dependency linkFlags shape: mkTool builds public.linkFlags via a map that can return lists for non‑string deps, which
     yields list‑of‑lists (not flattened). It works for the bundled tools (strings), but breaks for attrset deps. Either
     enforce string deps or flatten. nix/native/core/tool.nix:78-90.
-  - LTO validation checks only compiler caps: linker capability isn’t checked, so LTO can be accepted and fail later. Add a
+  - [x] LTO validation checks only compiler caps: linker capability isn’t checked, so LTO can be accepted and fail later. Add a
     linker check in applyErgonomicFlags using toolchain.linker caps. nix/native/builders/api.nix:284-300.
 
   Toolchain ergonomics / assumptions
