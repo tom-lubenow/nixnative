@@ -289,12 +289,6 @@ let
           description = "Raw link flags.";
         };
 
-        contentAddressed = lib.mkOption {
-          type = types.nullOr types.bool;
-          default = null;
-          description = "Enable content-addressed derivations for this target.";
-        };
-
         lto = lib.mkOption {
           type = types.nullOr (types.oneOf [ types.bool types.str ]);
           default = null;
@@ -408,12 +402,6 @@ let
           type = listOfStrings;
           default = [ ];
           description = "Default link flags.";
-        };
-
-        contentAddressed = lib.mkOption {
-          type = types.nullOr types.bool;
-          default = null;
-          description = "Default content-addressed setting.";
         };
 
         libraries = lib.mkOption {
@@ -570,7 +558,6 @@ let
           compiler = cfg.compiler;
           linker = cfg.linker;
           toolchain = cfg.toolchain;
-          contentAddressed = cfg.contentAddressed;
         };
 
       resolveTarget = _name: target:
@@ -699,12 +686,6 @@ let
           type = types.nullOr toolchainType;
           default = null;
           description = "Default toolchain for all targets.";
-        };
-
-        contentAddressed = lib.mkOption {
-          type = types.nullOr types.bool;
-          default = null;
-          description = "Default content-addressed setting.";
         };
 
         defaults = lib.mkOption {

@@ -23,6 +23,9 @@
 }:
 
 let
+  isDedupableList = values:
+    builtins.all (value: builtins.isString value || builtins.isPath value) values;
+
   # Merge two attribute sets, concatenating lists and recursively merging attrs
   # Target values take precedence over defaults for non-list values
   mergeDefaults = defaults: target:
@@ -32,7 +35,10 @@ let
           defaultVal
         else if builtins.isList defaultVal && builtins.isList targetVal then
           # Lists are concatenated (defaults first, then target additions)
-          defaultVal ++ targetVal
+          let
+            merged = defaultVal ++ targetVal;
+          in
+          if isDedupableList merged then lib.unique merged else merged
         else if builtins.isAttrs defaultVal && builtins.isAttrs targetVal then
           # Attrs are recursively merged
           mergeDefaults defaultVal targetVal

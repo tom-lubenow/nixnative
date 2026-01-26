@@ -54,6 +54,15 @@ let
       version = llvm.release_version;
       package = llvm.clang;
 
+      # Bintools for this compiler
+      bintools = {
+        ar = "${llvm.bintools}/bin/ar";
+        ranlib = "${llvm.bintools}/bin/ranlib";
+        nm = "${llvm.bintools}/bin/nm";
+        objcopy = "${llvm.bintools}/bin/objcopy";
+        strip = "${llvm.bintools}/bin/strip";
+      };
+
       # Language configs
       c = {
         name = "${name}-c";
@@ -63,6 +72,7 @@ let
         runtimeInputs = sharedRuntimeInputs;
         environment = { };
         inherit capabilities;
+        inherit bintools;
 
         # Scanner configuration for C files
         scanner = mkGccStyleScanner {
@@ -86,6 +96,7 @@ let
         environment = { };
         inherit capabilities;
         cxxRuntimeLibPath = "${pkgs.stdenv.cc.cc.lib}/lib";
+        inherit bintools;
 
         # Scanner configuration for C++ files
         scanner = mkGccStyleScanner {
@@ -96,13 +107,7 @@ let
       };
 
       # Bintools for this compiler
-      bintools = {
-        ar = "${llvm.bintools}/bin/ar";
-        ranlib = "${llvm.bintools}/bin/ranlib";
-        nm = "${llvm.bintools}/bin/nm";
-        objcopy = "${llvm.bintools}/bin/objcopy";
-        strip = "${llvm.bintools}/bin/strip";
-      };
+      inherit bintools;
     };
 
 in

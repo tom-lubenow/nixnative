@@ -91,7 +91,6 @@ let
 
   # Extract toolchain from args, building one if needed
   # Priority: toolchain > compiler/linker > defaults
-  # Also handles contentAddressed - passes to toolchain if building one
   extractToolchain =
     args:
     if args ? toolchain then
@@ -122,14 +121,13 @@ let
             linkers.default
           else
             throw "No default linker is available for this platform.";
-        contentAddressed = args.contentAddressed or false;
       in
       mkToolchain {
         languages = {
           c = compilerFamily.c;
           cpp = compilerFamily.cpp;
         };
-        inherit linker contentAddressed;
+        inherit linker;
         bintools = compilerFamily.bintools;
       };
 
@@ -140,7 +138,6 @@ let
       "compiler"
       "linker"
       "toolchain"
-      "contentAddressed"  # Handled by extractToolchain, stored in toolchain
       "lto"
       "sanitizers"
       "coverage"
@@ -498,6 +495,9 @@ let
   project =
     defaults:
     let
+      isDedupableList = values:
+        builtins.all (value: builtins.isString value || builtins.isPath value) values;
+
       # Fields that should be concatenated (lists)
       listFields = [
         "includeDirs"
@@ -528,9 +528,11 @@ let
             let
               defaultVal = base.${field} or [];
               targetVal = targetArgs.${field} or [];
+              merged = defaultVal ++ targetVal;
+              value = if isDedupableList merged then lib.unique merged else merged;
             in
             if defaultVal == [] && targetVal == [] then acc
-            else acc // { ${field} = defaultVal ++ targetVal; }
+            else acc // { ${field} = value; }
           ) {} listFields;
 
           # For attr fields: merge with target taking precedence

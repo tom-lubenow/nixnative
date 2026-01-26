@@ -212,11 +212,6 @@ let
         default = null;
         description = "Explicit toolchain object. Overrides compiler/linker settings.";
       };
-      contentAddressed = lib.mkOption {
-        type = types.nullOr types.bool;
-        default = null;
-        description = "Enable content-addressed derivations for better caching.";
-      };
       lto = lib.mkOption {
         type = types.nullOr (types.oneOf [ types.bool types.str ]);
         default = null;
@@ -320,11 +315,6 @@ let
         type = types.listOf toolType;
         default = [ ];
         description = "Default tools applied to all targets.";
-      };
-      contentAddressed = lib.mkOption {
-        type = types.nullOr types.bool;
-        default = null;
-        description = "Default content-addressed setting.";
       };
       lto = lib.mkOption {
         type = types.nullOr (types.oneOf [ types.bool types.str ]);
@@ -471,11 +461,6 @@ let
         type = types.nullOr toolchainType;
         default = null;
         description = "Default toolchain for all targets.";
-      };
-      contentAddressed = lib.mkOption {
-        type = types.nullOr types.bool;
-        default = null;
-        description = "Default content-addressed setting for all targets.";
       };
       defaults = lib.mkOption {
         type = types.submodule defaultsDocModule;

@@ -238,13 +238,21 @@ let
       # Use default linker if not specified
       resolvedLinker = if linker != null then linker else linkers.default;
 
-      # Try to infer bintools from the first language's parent compiler
+      # Try to infer bintools from the first language's compiler
       # (users can override by passing bintools explicitly)
       inferredBintools =
         if bintools != null then bintools
         else
-          # Default to clang bintools
-          clangCompilers.clang.bintools;
+          let
+            langNames = builtins.attrNames languages;
+            firstLang = builtins.head langNames;
+            langBintools = languages.${firstLang}.bintools or null;
+          in
+          if langBintools != null then
+            langBintools
+          else
+            # Fallback to clang bintools for custom language configs
+            clangCompilers.clang.bintools;
 
       targetPlatform = pkgs.stdenv.targetPlatform;
     in

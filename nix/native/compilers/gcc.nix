@@ -52,6 +52,15 @@ let
       version = gcc.version;
       package = gcc;
 
+      # Bintools for this compiler
+      bintools = {
+        ar = "${pkgs.binutils}/bin/ar";
+        ranlib = "${pkgs.binutils}/bin/ranlib";
+        nm = "${pkgs.binutils}/bin/nm";
+        objcopy = "${pkgs.binutils}/bin/objcopy";
+        strip = "${pkgs.binutils}/bin/strip";
+      };
+
       # Language configs
       c = {
         name = "${name}-c";
@@ -61,6 +70,7 @@ let
         runtimeInputs = sharedRuntimeInputs;
         environment = { };
         inherit capabilities;
+        inherit bintools;
 
         # Scanner configuration for C files
         scanner = mkGccStyleScanner {
@@ -84,6 +94,7 @@ let
         environment = { };
         inherit capabilities;
         cxxRuntimeLibPath = "${gcc.cc.lib}/lib";
+        inherit bintools;
 
         # Scanner configuration for C++ files
         scanner = mkGccStyleScanner {
@@ -94,13 +105,7 @@ let
       };
 
       # Bintools for this compiler
-      bintools = {
-        ar = "${pkgs.binutils}/bin/ar";
-        ranlib = "${pkgs.binutils}/bin/ranlib";
-        nm = "${pkgs.binutils}/bin/nm";
-        objcopy = "${pkgs.binutils}/bin/objcopy";
-        strip = "${pkgs.binutils}/bin/strip";
-      };
+      inherit bintools;
     };
 
 in
