@@ -1,6 +1,6 @@
   High‑impact improvements
 
-  - Object name collisions in ninja builds: normalizeSourceForNinja sanitizes relNorm by replacing / and . with -, which can
+  - [x] Object name collisions in ninja builds: normalizeSourceForNinja sanitizes relNorm by replacing / and . with -, which can
     collide (foo/bar.cc vs foo-bar.cc). This can silently overwrite object outputs. Consider including a short hash of the
     full relative path or use a reversible escaping scheme. nix/native/builders/helpers.nix:104-110.
   - Tool dependency linkFlags shape: mkTool builds public.linkFlags via a map that can return lists for non‑string deps, which

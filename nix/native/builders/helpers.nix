@@ -108,7 +108,8 @@ let
       # Include extension in object name to avoid collisions (foo.c → foo-c.o, foo.cc → foo-cc.o)
       # Don't use sanitizeName since it strips extensions - just replace special chars
       sanitizedPath = lib.replaceStrings [ "/" ":" " " "." ] [ "-" "-" "-" "-" ] relNorm;
-      objectName = sanitizedPath + ".o";
+      objectHash = builtins.substring 0 8 (builtins.hashString "sha256" relNorm);
+      objectName = "${sanitizedPath}-${objectHash}.o";
 
       # For incremental builds: create individual store paths for each source file
       # This is the key to incrementality - each file is its own store path, so
