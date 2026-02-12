@@ -53,10 +53,13 @@ in
     let
       # Realize all targets
       realizedExecutables = map (exe:
-        let target = realizeTarget exe;
+        let
+          target = realizeTarget exe;
+          binaryPath = exe.executablePath or null;
         in {
           name = exe.name or (builtins.baseNameOf (toString target));
           path = target;
+          inherit binaryPath;
         }
       ) executables;
 
@@ -67,7 +70,7 @@ in
         in {
           name = libName;
           path = target;
-          archivePath = lib.archivePath or "${target}/lib${libName}.a";
+          archivePath = lib.archivePath or "${target}/${libName}.a";
           sharedPath = lib.sharedLibrary or null;
           publicIncludeDirs = lib.public.includeDirs or [];
         }
@@ -100,13 +103,25 @@ in
 
         # Install executables
         ${lib.concatMapStringsSep "\n" (exe: ''
-          if [ -d "${exe.path}/bin" ]; then
-            cp -r "${exe.path}/bin/"* $out/bin/
-          elif [ -f "${exe.path}/${exe.name}" ]; then
-            cp "${exe.path}/${exe.name}" $out/bin/${exe.name}
-          elif [ -f "${exe.path}" ]; then
-            cp "${exe.path}" $out/bin/${exe.name}
-          fi
+          ${if exe.binaryPath != null then ''
+            if [ -f "${exe.binaryPath}" ]; then
+              cp "${exe.binaryPath}" $out/bin/${exe.name}
+            elif [ -d "${exe.path}/bin" ]; then
+              cp -r "${exe.path}/bin/"* $out/bin/
+            elif [ -f "${exe.path}/${exe.name}" ]; then
+              cp "${exe.path}/${exe.name}" $out/bin/${exe.name}
+            elif [ -f "${exe.path}" ]; then
+              cp "${exe.path}" $out/bin/${exe.name}
+            fi
+          '' else ''
+            if [ -d "${exe.path}/bin" ]; then
+              cp -r "${exe.path}/bin/"* $out/bin/
+            elif [ -f "${exe.path}/${exe.name}" ]; then
+              cp "${exe.path}/${exe.name}" $out/bin/${exe.name}
+            elif [ -f "${exe.path}" ]; then
+              cp "${exe.path}" $out/bin/${exe.name}
+            fi
+          ''}
         '') realizedExecutables}
 
         # Install libraries
@@ -176,8 +191,5 @@ in
     pkgs.runCommand "${name}-${version}" {
       inherit version;
       buildInputs = deps;
-      passthru = {
-        inherit executables libraries headers;
-      };
     } installScript;
 }
