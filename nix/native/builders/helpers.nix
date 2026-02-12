@@ -167,7 +167,7 @@ let
     builtins.seq globError (map (source: normalizeSourceForNinja { inherit root source; }) sources);
 
   # Common preparation for all target types
-  # Returns: { normalizedSources, resolvedIncludeDirs, combinedIncludeDirs, combinedDefines, combinedCompileFlags, legacyLinkFlags, wrappedLinkFlags, libraryInputs, evalInputs }
+  # Returns: { normalizedSources, resolvedIncludeDirs, combinedIncludeDirs, combinedDefines, combinedCompileFlags, libraryLinkFlags, wrappedLibraryLinkFlags, libraryInputs, evalInputs }
   prepareTarget = {
     toolchain,
     root,
@@ -199,7 +199,7 @@ let
         filter = headersAndDirsFilter;
       };
 
-      # Keep rootPath for backwards compatibility, but prefer headersOnlyPath for includes
+      # Include resolution uses the header-only tree for stable incremental behavior.
       rootPath = headersOnlyPath;
 
       # Process tools for generated headers/sources
@@ -225,13 +225,13 @@ let
       # Combine compile flags
       combinedCompileFlags = compileFlags ++ publicAggregate.compileFlags ++ toolInfo.compileFlags;
 
-      # Collect legacy link flags (for external libs like pkg-config)
-      legacyLinkFlags = collectLinkFlags libraries;
-      wrappedLinkFlags =
-        if legacyLinkFlags == [ ] then
+      # Collect raw link flags from library values (for external libs like pkg-config)
+      libraryLinkFlags = collectLinkFlags libraries;
+      wrappedLibraryLinkFlags =
+        if libraryLinkFlags == [ ] then
           [ ]
         else
-          tc.wrapLibraryFlags legacyLinkFlags;
+          tc.wrapLibraryFlags libraryLinkFlags;
 
       # Normalize sources for ninja
       normalizedSources = normalizeSourcesForNinja {
@@ -247,7 +247,7 @@ let
       evalInputs = lib.unique (collectEvalInputs libraries ++ toolInfo.evalInputs);
     in {
       inherit normalizedSources resolvedIncludeDirs combinedIncludeDirs combinedDefines combinedCompileFlags;
-      inherit legacyLinkFlags wrappedLinkFlags libraryInputs evalInputs;
+      inherit libraryLinkFlags wrappedLibraryLinkFlags libraryInputs evalInputs;
       inherit rootPath publicAggregate;
       runtimeInputs = tc.runtimeInputs;
     };
@@ -401,7 +401,7 @@ rec {
           includeDirs = prep.resolvedIncludeDirs;
           defines = prep.combinedDefines;
           compileFlags = prep.combinedCompileFlags;
-          linkFlags = linkFlags ++ prep.wrappedLinkFlags;
+          linkFlags = linkFlags ++ prep.wrappedLibraryLinkFlags;
         };
       };
 
@@ -553,7 +553,7 @@ rec {
           includeDirs = prep.resolvedIncludeDirs;
           defines = prep.combinedDefines;
           compileFlags = prep.combinedCompileFlags;
-          linkFlags = linkFlags ++ prep.wrappedLinkFlags;
+          linkFlags = linkFlags ++ prep.wrappedLibraryLinkFlags;
         };
       };
 
@@ -621,6 +621,7 @@ rec {
       publicCompileFlags ? [],
       publicLinkFlags ? [],
       tools ? [],
+      ...
     }:
     let
       isHeaderFile = name: type:

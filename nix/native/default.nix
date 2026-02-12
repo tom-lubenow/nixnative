@@ -272,62 +272,15 @@ let
     );
 
   # Create a toolchain by composing a toolset and a policy.
-  # Compatibility: if toolset/policy are omitted, they are derived from
-  # legacy mkToolchain fields.
   mkToolchain =
     {
       name ? null,
-      toolset ? null,
-      policy ? null,
-      ...
-    }@args:
-    let
-      hasLegacyToolsetFields = args ? languages || args ? linker || args ? bintools;
-      hasLegacyPolicyFields = args ? targetPlatform || args ? runtimeInputs || args ? environment || args ? flags;
-
-      _toolsetConflict =
-        if toolset != null && hasLegacyToolsetFields then
-          throw "nixnative.mkToolchain: pass either 'toolset' or legacy fields ('languages'/'linker'/'bintools'), not both."
-        else
-          null;
-
-      _policyConflict =
-        if policy != null && hasLegacyPolicyFields then
-          throw "nixnative.mkToolchain: pass either 'policy' or legacy policy fields ('targetPlatform'/'runtimeInputs'/'environment'/'flags'), not both."
-        else
-          null;
-
-      legacyToolsetArgs = builtins.removeAttrs args [
-        "name"
-        "toolset"
-        "policy"
-        "targetPlatform"
-        "runtimeInputs"
-        "environment"
-        "flags"
-      ];
-
-      legacyPolicyArgs = builtins.removeAttrs args [
-        "name"
-        "toolset"
-        "policy"
-        "languages"
-        "linker"
-        "bintools"
-      ];
-
-      resolvedToolset = if toolset != null then toolset else mkToolset legacyToolsetArgs;
-      resolvedPolicy = if policy != null then policy else mkPolicy legacyPolicyArgs;
-    in
-    builtins.seq _toolsetConflict (
-      builtins.seq _policyConflict (
-        toolchainCore.mkToolchain {
-          inherit name;
-          toolset = resolvedToolset;
-          policy = resolvedPolicy;
-        }
-      )
-    );
+      toolset,
+      policy,
+    }:
+    toolchainCore.mkToolchain {
+      inherit name toolset policy;
+    };
 
   # ==========================================================================
   # Pre-Built Toolchains
@@ -434,14 +387,11 @@ let
       defaultsCore
       compilers
       linkers
+      mkToolset
+      mkPolicy
       mkToolchain
       helpers
       ;
-  };
-
-  # Project defaults (legacy mkProject)
-  projectBuilders = import ./builders/project.nix {
-    inherit lib utils defaultsCore api helpers;
   };
 
   # Module-first project interface
@@ -548,14 +498,6 @@ in
   # imported from other files, or composed with plain Nix functions.
   #
   inherit (api) project;
-
-  # Module-based project evaluation (alternative API using Nix module system)
-  # Use this if you prefer typed options and module composition.
-  evalProject = projectModules.evalProject;
-  projectModule = projectModules.projectModule;
-
-  # Project defaults - create scoped builders with shared settings (legacy)
-  inherit (projectBuilders) mkProject;
 
   # Installation packaging - create installable packages
   inherit (installation) mkInstallation;

@@ -28,6 +28,8 @@
   defaultsCore,
   compilers,
   linkers,
+  mkToolset,
+  mkPolicy,
   mkToolchain,
   helpers,
 }:
@@ -36,21 +38,6 @@ let
   compilerNames = builtins.attrNames compilers;
   linkerNames = builtins.attrNames linkers;
   formatNames = names: lib.concatStringsSep ", " names;
-  legacyFlagAliases = [
-    "cFlags"
-    "cxxFlags"
-    "ldFlags"
-  ];
-
-  assertNoLegacyFlagAliases =
-    { context, args }:
-    let
-      found = builtins.filter (field: args ? ${field}) legacyFlagAliases;
-    in
-    if found == [ ] then
-      null
-    else
-      throw "nixnative.${context}: unsupported flag fields: ${formatNames found}. Use compileFlags/languageFlags/linkFlags instead.";
 
   # ==========================================================================
   # Resolvers
@@ -140,12 +127,15 @@ let
             throw "No default linker is available for this platform.";
       in
       mkToolchain {
-        languages = {
-          c = compilerFamily.c;
-          cpp = compilerFamily.cpp;
+        toolset = mkToolset {
+          languages = {
+            c = compilerFamily.c;
+            cpp = compilerFamily.cpp;
+          };
+          inherit linker;
+          bintools = compilerFamily.bintools;
         };
-        inherit linker;
-        bintools = compilerFamily.bintools;
+        policy = mkPolicy { };
       };
 
   # Remove our special params from args before passing to mk* functions
@@ -155,8 +145,6 @@ let
       "compiler"
       "linker"
       "toolchain"
-      "scanMode"          # Deprecated, all builds use dynamic mode now
-      "dynamic"           # Deprecated alias
     ];
 
   # ==========================================================================
@@ -183,16 +171,15 @@ let
   executable =
     args:
     let
-      _legacyCheck = assertNoLegacyFlagAliases { context = "executable"; inherit args; };
       toolchain = extractToolchain args;
       rootCheck = if !(args ? root) then
         throw "nixnative.executable: 'root' is required. Add 'root = ./.;' to specify your project directory."
       else null;
       cleanedArgs = cleanArgs args;
     in
-    builtins.seq _legacyCheck (builtins.seq rootCheck (
+    builtins.seq rootCheck (
       helpers.mkExecutable (cleanedArgs // { inherit toolchain; })
-    ));
+    );
 
   # Build a static library (.a)
   #
@@ -204,16 +191,15 @@ let
   staticLib =
     args:
     let
-      _legacyCheck = assertNoLegacyFlagAliases { context = "staticLib"; inherit args; };
       toolchain = extractToolchain args;
       rootCheck = if !(args ? root) then
         throw "nixnative.staticLib: 'root' is required. Add 'root = ./.;' to specify your project directory."
       else null;
       cleanedArgs = cleanArgs args;
     in
-    builtins.seq _legacyCheck (builtins.seq rootCheck (
+    builtins.seq rootCheck (
       helpers.mkStaticLib (cleanedArgs // { inherit toolchain; })
-    ));
+    );
 
   # Build a shared library (.so/.dylib)
   #
@@ -223,16 +209,15 @@ let
   sharedLib =
     args:
     let
-      _legacyCheck = assertNoLegacyFlagAliases { context = "sharedLib"; inherit args; };
       toolchain = extractToolchain args;
       rootCheck = if !(args ? root) then
         throw "nixnative.sharedLib: 'root' is required. Add 'root = ./.;' to specify your project directory."
       else null;
       cleanedArgs = cleanArgs args;
     in
-    builtins.seq _legacyCheck (builtins.seq rootCheck (
+    builtins.seq rootCheck (
       helpers.mkSharedLib (cleanedArgs // { inherit toolchain; })
-    ));
+    );
 
   # Create a header-only library (no compilation)
   #
@@ -339,7 +324,6 @@ let
   project =
     defaults:
     let
-      _legacyDefaultsCheck = assertNoLegacyFlagAliases { context = "project(defaults)"; args = defaults; };
       baseDefaults = defaultsCore.project // defaults;
 
       isDedupableList = values:
@@ -378,8 +362,6 @@ let
       # Merge defaults with target-specific args
       mergeArgs = targetArgs:
         let
-          _legacyTargetCheck = assertNoLegacyFlagAliases { context = "project(target)"; args = targetArgs; };
-
           # Start with defaults
           base = baseDefaults;
 
@@ -418,9 +400,7 @@ let
           };
         in
         # Merge order: scalar defaults < scalar target args < merged lists < merged attrs
-        builtins.seq _legacyTargetCheck (
-          scalarDefaults // scalarTargetArgs // mergedLists // mergedAttrs // mergedFlags
-        );
+        scalarDefaults // scalarTargetArgs // mergedLists // mergedAttrs // mergedFlags;
 
       # Create scoped builders
       scopedExecutable = args: executable (mergeArgs args);
@@ -430,7 +410,7 @@ let
       scopedDevShell = args: devShell (mergeArgs args);
       scopedTest = args: test (mergeArgs args);
     in
-    builtins.seq _legacyDefaultsCheck {
+    {
       executable = scopedExecutable;
       staticLib = scopedStaticLib;
       sharedLib = scopedSharedLib;

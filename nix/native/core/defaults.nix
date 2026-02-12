@@ -1,7 +1,7 @@
 # Baseline defaults and merge metadata for project-facing APIs.
 #
-# This centralizes baseline target defaults so high-level, legacy, and
-# module-first entry points share one source of truth.
+# This centralizes baseline target defaults so public builders and module
+# schemas share one source of truth.
 {
   project = {
     includeDirs = [ ];

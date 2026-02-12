@@ -664,7 +664,7 @@ rec {
     in
     assembled;
 
-  # Collect legacy link flags from libraries.
+  # Collect raw link flags from library values.
   # This handles external libraries (pkg-config, etc.) that don't use objectRefs.
   #
   # Arguments:
