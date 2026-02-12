@@ -114,6 +114,38 @@ $(nix build --print-out-paths)/hello
 - **Structured libraries**: Static, shared, and header-only libraries propagate their public interface to dependents.
 - **IDE integration**: Every target exports `compile_commands.json` for clangd/LSP.
 
+## Recommended Pattern: System Link Dependencies
+
+When multiple targets share system linker flags (for example `-lpthread`/`-ldl`/`-lm`), define local "system library" objects and compose them through `libraries` instead of repeating `linkFlags` everywhere:
+
+```nix
+let
+  mkSystemLibrary = { name, compileFlags ? [ ], linkFlags ? [ ] }: {
+    inherit name;
+    public = {
+      includeDirs = [ ];
+      defines = [ ];
+      inherit compileFlags linkFlags;
+    };
+  };
+
+  sys = {
+    threads = mkSystemLibrary { name = "threads"; linkFlags = [ "-lpthread" ]; };
+    dl = mkSystemLibrary { name = "dl"; linkFlags = [ "-ldl" ]; };
+    m = mkSystemLibrary { name = "m"; linkFlags = [ "-lm" ]; };
+  };
+
+  commonSystemLibraries = [ sys.threads sys.dl sys.m ];
+in
+proj.executable {
+  name = "app";
+  sources = [ "src/main.c" ];
+  libraries = [ myLib ] ++ commonSystemLibraries;
+}
+```
+
+This keeps link policy explicit, reusable, and local to your project without requiring a dedicated framework abstraction.
+
 ## Examples
 
 See the `examples/` directory for working examples:

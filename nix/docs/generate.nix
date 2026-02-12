@@ -185,6 +185,10 @@ let
           - Package: `pkgs.zlib`
           - String/path for manual linking
           - Public interface: `{ public = { includeDirs = [...]; }; }`
+
+          Recommended pattern for shared system flags: define local library
+          objects with `public.linkFlags`/`public.compileFlags` and reuse them
+          through this `libraries` list.
         '';
       };
       tools = lib.mkOption {
@@ -269,7 +273,12 @@ let
       libraries = lib.mkOption {
         type = types.listOf libraryType;
         default = [ ];
-        description = "Default libraries linked to all targets.";
+        description = ''
+          Default libraries linked to all targets.
+
+          This is a good place for reusable local "system library" objects
+          (for example `pthread`, `dl`, `m`) defined via `public.linkFlags`.
+        '';
       };
       tools = lib.mkOption {
         type = types.listOf toolType;
