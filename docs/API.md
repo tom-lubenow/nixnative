@@ -34,7 +34,7 @@ let
   proj = native.project {
     root = ./.;
     includeDirs = [ "include" ];
-    warnings = "all";
+    compileFlags = [ "-Wall" "-Wextra" ];
   };
 
   myLib = proj.staticLib {
@@ -95,13 +95,6 @@ native.executable {
   linkFlags = [ "-lm" ];          # Additional linker flags
   libraries = [ myLib ];        # Library dependencies
   tools = [ myTool ];           # Tool plugins (protobuf, jinja, etc.)
-
-  # Ergonomic optimization flags (alternative to `flags` list)
-  lto = "thin";                 # false, true, "thin", or "full"
-  sanitizers = [ "address" ];   # [ "address" "undefined" "thread" "memory" "leak" ]
-  coverage = false;             # Enable code coverage
-  optimize = "2";               # "0", "1", "2", "3", "s", "z", "fast"
-  warnings = "all";             # "none", "default", "all", "extra", "pedantic"
 }
 ```
 

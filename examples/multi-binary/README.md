@@ -182,7 +182,8 @@ tests = proj.executable {
   sources = [ "tests/main.cc" ];
   libraries = [ commonLib ];  # Direct reference!
   defines = [ "TEST_MODE" "ENABLE_MOCKS" ];
-  sanitizers = [ "address" ];
+  compileFlags = [ "-fsanitize=address" "-g" ];
+  linkFlags = [ "-fsanitize=address" ];
 };
 ```
 

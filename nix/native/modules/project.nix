@@ -289,36 +289,6 @@ let
           description = "Raw link flags.";
         };
 
-        lto = lib.mkOption {
-          type = types.nullOr (types.oneOf [ types.bool types.str ]);
-          default = null;
-          description = "LTO mode: false, true, \"thin\", or \"full\".";
-        };
-
-        sanitizers = lib.mkOption {
-          type = listOfStrings;
-          default = [ ];
-          description = "Sanitizers to enable.";
-        };
-
-        coverage = lib.mkOption {
-          type = types.nullOr types.bool;
-          default = null;
-          description = "Enable coverage instrumentation.";
-        };
-
-        optimize = lib.mkOption {
-          type = types.nullOr types.str;
-          default = null;
-          description = "Optimization level (e.g., \"0\", \"2\", \"s\", \"fast\").";
-        };
-
-        warnings = lib.mkOption {
-          type = types.nullOr types.str;
-          default = null;
-          description = "Warnings preset (e.g., \"all\", \"extra\").";
-        };
-
         libraries = lib.mkOption {
           type = types.listOf libraryType;
           default = [ ];
@@ -365,6 +335,12 @@ let
           type = listOfStrings;
           default = [ ];
           description = "Public compile flags (libraries).";
+        };
+
+        publicLinkFlags = lib.mkOption {
+          type = listOfLinkFlags;
+          default = [ ];
+          description = "Public link flags (libraries).";
         };
 
       };
@@ -434,35 +410,12 @@ let
           description = "Default public compile flags for libraries.";
         };
 
-        lto = lib.mkOption {
-          type = types.nullOr (types.oneOf [ types.bool types.str ]);
-          default = null;
-          description = "Default LTO mode.";
-        };
-
-        sanitizers = lib.mkOption {
-          type = listOfStrings;
+        publicLinkFlags = lib.mkOption {
+          type = listOfLinkFlags;
           default = [ ];
-          description = "Default sanitizers.";
+          description = "Default public link flags for libraries.";
         };
 
-        coverage = lib.mkOption {
-          type = types.nullOr types.bool;
-          default = null;
-          description = "Default coverage setting.";
-        };
-
-        optimize = lib.mkOption {
-          type = types.nullOr types.str;
-          default = null;
-          description = "Default optimization level.";
-        };
-
-        warnings = lib.mkOption {
-          type = types.nullOr types.str;
-          default = null;
-          description = "Default warnings preset.";
-        };
       };
     };
 
@@ -605,6 +558,7 @@ let
                 "publicIncludeDirs"
                 "publicDefines"
                 "publicCompileFlags"
+                "publicLinkFlags"
                 "tools"
               ];
               stripped = lib.filterAttrs (name: _value: lib.elem name allowed) withPublicIncludeDirs;

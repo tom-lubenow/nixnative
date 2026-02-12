@@ -49,19 +49,15 @@ A generator is an attrset with this shape:
 {
   name = "my-generator";     # Optional: for error messages
 
-  # Generated headers
-  headers = [
+  # Generated files (headers/sources are categorized by extension)
+  outputs = [
     {
       rel = "foo.h";         # Path used in #include
-      path = "/nix/store/..."; # Actual file location
+      path = "/nix/store/.../foo.h"; # Actual file location
     }
-  ];
-
-  # Generated source files (optional)
-  sources = [
     {
       rel = "foo.cc";
-      path = "/nix/store/...";
+      path = "/nix/store/.../foo.cc";
     }
   ];
 
@@ -70,6 +66,9 @@ A generator is an attrset with this shape:
 
   # Optional: preprocessor defines
   defines = [ "GENERATED=1" ];
+
+  # Optional: additional compile flags
+  compileFlags = [ "-Wno-unused-parameter" ];
 }
 ```
 
@@ -84,7 +83,7 @@ myHeader = pkgs.writeText "config.h" ''
 '';
 
 generator = {
-  headers = [ { rel = "config.h"; path = myHeader; } ];
+  outputs = [ { rel = "config.h"; path = myHeader; } ];
   includeDirs = [ { path = builtins.dirOf myHeader; } ];
 };
 
@@ -113,7 +112,7 @@ generatorDrv = pkgs.runCommand "my-gen" {} ''
 '';
 
 generator = {
-  headers = [
+  outputs = [
     { rel = "config.h"; path = "${generatorDrv}/include/config.h"; }
   ];
   includeDirs = [ { path = "${generatorDrv}/include"; } ];

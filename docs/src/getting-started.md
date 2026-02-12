@@ -17,7 +17,7 @@
       # Create a project with shared defaults
       proj = native.project {
         root = ./.;
-        warnings = "all";
+        compileFlags = [ "-Wall" "-Wextra" ];
       };
 
       # Build a simple executable
@@ -55,7 +55,7 @@ let
     root = ./.;
     includeDirs = [ "include" ];
     defines = [ "DEBUG" ];
-    warnings = "all";
+    compileFlags = [ "-Wall" "-Wextra" ];
   };
 
   # All targets inherit the defaults above

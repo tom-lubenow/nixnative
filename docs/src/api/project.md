@@ -9,7 +9,7 @@ let
   proj = native.project {
     root = ./.;
     includeDirs = [ "include" ];
-    warnings = "all";
+    compileFlags = [ "-Wall" "-Wextra" ];
   };
 
   myLib = proj.staticLib {
@@ -48,9 +48,12 @@ in {
 | `compileFlags` | No | `[]` | Default compiler flags |
 | `languageFlags` | No | `{}` | Per-language flags (`{ c = [...]; cpp = [...]; }`) |
 | `linkFlags` | No | `[]` | Default linker flags |
-| `warnings` | No | `"default"` | Warning level: `"none"`, `"default"`, `"all"`, `"extra"`, `"pedantic"` |
-| `optimize` | No | `null` | Optimization: `"0"`, `"1"`, `"2"`, `"3"`, `"s"`, `"z"`, `"fast"` |
-| `lto` | No | `false` | LTO: `false`, `true`, `"thin"`, or `"full"` |
+| `libraries` | No | `[]` | Default libraries for all targets |
+| `tools` | No | `[]` | Default code-generation tools |
+| `publicIncludeDirs` | No | `[]` | Default public include dirs for library targets |
+| `publicDefines` | No | `[]` | Default public defines for library targets |
+| `publicCompileFlags` | No | `[]` | Default public compile flags for library targets |
+| `publicLinkFlags` | No | `[]` | Default public link flags for library targets |
 
 ## Scoped Builders
 
@@ -72,17 +75,17 @@ Use `proj.extend` to create nested projects with additional defaults:
 let
   proj = native.project {
     root = ./.;
-    warnings = "all";
+    compileFlags = [ "-Wall" "-Wextra" ];
   };
 
   debugProj = proj.extend {
     defines = [ "DEBUG" ];
-    optimize = "0";
+    compileFlags = [ "-g" "-O0" ];
   };
 
   releaseProj = proj.extend {
-    lto = "thin";
-    optimize = "2";
+    compileFlags = [ "-O2" "-flto=thin" ];
+    linkFlags = [ "-flto=thin" ];
   };
 in { ... }
 ```

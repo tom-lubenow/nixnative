@@ -4,7 +4,7 @@ Incremental C/C++ builds using Nix dynamic derivations and nix-ninja.
 
 ## Overview
 
-nixnative provides a module-first API for building C/C++ projects with true per-file incrementality. It uses [nix-ninja](https://github.com/aspect-build/nix-ninja) as the build driver, which generates one derivation per source file at build time using [RFC 92 dynamic derivations](https://github.com/NixOS/rfcs/blob/master/rfcs/0092-plan-dynamism.md).
+nixnative provides a module-first API for building C/C++ projects with true per-file incrementality. It uses [nix-ninja](https://github.com/tom-lubenow/nix-ninja) as the build driver, which generates one derivation per source file at build time using [RFC 92 dynamic derivations](https://github.com/NixOS/rfcs/blob/master/rfcs/0092-plan-dynamism.md).
 
 **This project requires Nix with dynamic derivations support.** All builds use nix-ninja for incremental compilation—there is no fallback to traditional builds.
 
@@ -78,7 +78,7 @@ This architecture gives you:
       # Create a project with shared defaults
       proj = native.project {
         root = ./.;
-        warnings = "all";
+        compileFlags = [ "-Wall" "-Wextra" ];
       };
 
       # Build targets - real values, not string references
@@ -109,7 +109,7 @@ $(nix build --print-out-paths)/hello
 ## Features
 
 - **Modular toolchains**: Compilers and linkers are independent, composable pieces. Use clang with mold, gcc with lld, or define your own.
-- **Abstract flags**: Write `lto = "thin";` once—nixnative translates it to the right CLI flags for each compiler.
+- **Explicit flags**: Use raw `compileFlags`, `languageFlags`, and `linkFlags` for precise and predictable control.
 - **Tool plugins**: Code generators (templates, etc.) integrate cleanly—generated sources and headers flow through automatically.
 - **Structured libraries**: Static, shared, and header-only libraries propagate their public interface to dependents.
 - **IDE integration**: Every target exports `compile_commands.json` for clangd/LSP.
@@ -162,13 +162,12 @@ nix flake check
 ├── flake.nix           # Top-level flake exposing native.lib and examples
 ├── nix/native/
 │   ├── default.nix     # Main entry point, assembles all modules
-│   ├── core/           # Compiler, linker, toolchain, and flag abstractions
+│   ├── core/           # Compiler, linker, toolchain, and tool plugin abstractions
 │   ├── compilers/      # Compiler implementations (clang, gcc)
 │   ├── linkers/        # Linker implementations (lld, mold, ld)
 │   ├── ninja/          # nix-ninja integration (build file generation)
 │   ├── modules/        # Module-first project interface
 │   ├── builders/       # High-level API (executable, staticLib, etc.)
-│   ├── scanner/        # Tool plugin processing
 │   ├── tools/          # Built-in tool plugins (protobuf, jinja, binary-blob)
 │   ├── testlibs/       # Test framework integrations (gtest, catch2, doctest)
 │   ├── lsps/           # LSP/IDE support (clangd)
@@ -183,7 +182,7 @@ This project builds on experimental Nix features. The dynamic derivations implem
 Key references:
 - [RFC 92: Plan Dynamism](https://github.com/NixOS/rfcs/blob/master/rfcs/0092-plan-dynamism.md)
 - [Farid Zakaria's nix-ninja blog posts](https://fzakaria.com/)
-- [nix-ninja project](https://github.com/aspect-build/nix-ninja)
+- [nix-ninja project fork used by this repo](https://github.com/tom-lubenow/nix-ninja)
 
 ## License
 

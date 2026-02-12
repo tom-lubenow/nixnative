@@ -94,9 +94,7 @@ cliDebug = proj.executable {
 | `compileFlags` | Target flags added to project flags |
 | `languageFlags` | Merged by language |
 | `includeDirs` | Target dirs added to project dirs |
-| `warnings` | Target overrides project |
-| `optimize` | Target overrides project |
-| `lto` | Target overrides project |
+| `linkFlags` | Target flags added to project flags |
 
 ## Pattern: Build Variants
 
@@ -106,18 +104,18 @@ Create debug and release configurations:
 let
   proj = native.project {
     root = ./.;
-    warnings = "all";
+    compileFlags = [ "-Wall" "-Wextra" ];
   };
 
   # Extend for different configurations
   debug = proj.extend {
-    optimize = "0";
+    compileFlags = [ "-g" "-O0" ];
     defines = [ "DEBUG" ];
   };
 
   release = proj.extend {
-    optimize = "2";
-    lto = "thin";
+    compileFlags = [ "-O2" "-flto=thin" ];
+    linkFlags = [ "-flto=thin" ];
   };
 in {
   app-debug = debug.executable { ... };

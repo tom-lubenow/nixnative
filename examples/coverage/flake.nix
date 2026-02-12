@@ -1,6 +1,6 @@
 # Code coverage example for nixnative
 #
-# Demonstrates code coverage instrumentation using abstract flags.
+# Demonstrates code coverage instrumentation using explicit compiler/linker flags.
 # Shows how to build coverage-enabled binaries and generate reports.
 
 {

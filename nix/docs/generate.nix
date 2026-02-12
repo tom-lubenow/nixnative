@@ -212,54 +212,6 @@ let
         default = null;
         description = "Explicit toolchain object. Overrides compiler/linker settings.";
       };
-      lto = lib.mkOption {
-        type = types.nullOr (types.oneOf [ types.bool types.str ]);
-        default = null;
-        description = ''
-          Link-time optimization mode:
-          - `false`: Disabled
-          - `true` or `"full"`: Full LTO
-          - `"thin"`: ThinLTO (faster, recommended)
-        '';
-      };
-      sanitizers = lib.mkOption {
-        type = listOfStrings;
-        default = [ ];
-        description = ''
-          Sanitizers to enable. Common values:
-          - `"address"`: AddressSanitizer (ASan)
-          - `"undefined"`: UndefinedBehaviorSanitizer (UBSan)
-          - `"thread"`: ThreadSanitizer (TSan)
-        '';
-      };
-      coverage = lib.mkOption {
-        type = types.nullOr types.bool;
-        default = null;
-        description = "Enable code coverage instrumentation.";
-      };
-      optimize = lib.mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = ''
-          Optimization level:
-          - `"0"`: No optimization (debug)
-          - `"1"`, `"2"`, `"3"`: Increasing optimization
-          - `"s"`: Optimize for size
-          - `"fast"`: Aggressive optimization
-        '';
-      };
-      warnings = lib.mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = ''
-          Warnings preset:
-          - `"none"`: No warnings
-          - `"default"`: Compiler default
-          - `"all"`: -Wall
-          - `"extra"`: -Wall -Wextra
-          - `"pedantic"`: -Wall -Wextra -Wpedantic
-        '';
-      };
       publicIncludeDirs = lib.mkOption {
         type = listOfPathLike;
         default = [ ];
@@ -274,6 +226,11 @@ let
         type = listOfStrings;
         default = [ ];
         description = "Compile flags exposed to dependents (for libraries).";
+      };
+      publicLinkFlags = lib.mkOption {
+        type = listOfLinkFlags;
+        default = [ ];
+        description = "Link flags exposed to dependents (for libraries).";
       };
     };
   };
@@ -316,31 +273,6 @@ let
         default = [ ];
         description = "Default tools applied to all targets.";
       };
-      lto = lib.mkOption {
-        type = types.nullOr (types.oneOf [ types.bool types.str ]);
-        default = null;
-        description = "Default LTO mode.";
-      };
-      sanitizers = lib.mkOption {
-        type = listOfStrings;
-        default = [ ];
-        description = "Default sanitizers.";
-      };
-      coverage = lib.mkOption {
-        type = types.nullOr types.bool;
-        default = null;
-        description = "Default coverage setting.";
-      };
-      optimize = lib.mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = "Default optimization level.";
-      };
-      warnings = lib.mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = "Default warnings preset.";
-      };
       publicIncludeDirs = lib.mkOption {
         type = listOfPathLike;
         default = [ ];
@@ -355,6 +287,11 @@ let
         type = listOfStrings;
         default = [ ];
         description = "Default public compile flags for library targets.";
+      };
+      publicLinkFlags = lib.mkOption {
+        type = listOfLinkFlags;
+        default = [ ];
+        description = "Default public link flags for library targets.";
       };
     };
   };

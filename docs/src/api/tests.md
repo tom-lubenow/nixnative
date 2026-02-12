@@ -95,7 +95,8 @@ test3 = native.test {
 appLto = proj.executable {
   name = "test-app-lto";
   sources = [ "main.cc" ];
-  lto = "thin";
+  compileFlags = [ "-O2" "-flto=thin" ];
+  linkFlags = [ "-flto=thin" ];
 };
 
 testLto = native.test {
@@ -111,7 +112,8 @@ testLto = native.test {
 appAsan = proj.executable {
   name = "test-app-asan";
   sources = [ "main.cc" ];
-  sanitizers = [ "address" "undefined" ];
+  compileFlags = [ "-fsanitize=address,undefined" "-g" ];
+  linkFlags = [ "-fsanitize=address,undefined" ];
 };
 
 testAsan = native.test {

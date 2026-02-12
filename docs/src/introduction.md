@@ -1,6 +1,6 @@
 # Introduction
 
-nixnative provides a module-first API for building C/C++ projects with true per-file incrementality. It uses [nix-ninja](https://github.com/aspect-build/nix-ninja) as the build driver, which generates one derivation per source file at build time using [RFC 92 dynamic derivations](https://github.com/NixOS/rfcs/blob/master/rfcs/0092-plan-dynamism.md).
+nixnative provides a module-first API for building C/C++ projects with true per-file incrementality. It uses [nix-ninja](https://github.com/tom-lubenow/nix-ninja) as the build driver, which generates one derivation per source file at build time using [RFC 92 dynamic derivations](https://github.com/NixOS/rfcs/blob/master/rfcs/0092-plan-dynamism.md).
 
 ## Why Dynamic Derivations?
 
@@ -42,7 +42,7 @@ This architecture gives you:
 ## Features
 
 - **Modular toolchains**: Compilers and linkers are independent, composable pieces. Use clang with mold, gcc with lld, or define your own.
-- **Abstract flags**: Write `lto = "thin";` once—nixnative translates it to the right CLI flags for each compiler.
+- **Explicit flags**: Use `compileFlags`, `languageFlags`, and `linkFlags` directly for predictable compiler and linker behavior.
 - **Tool plugins**: Code generators (templates, etc.) integrate cleanly—generated sources and headers flow through automatically.
 - **Structured libraries**: Static, shared, and header-only libraries propagate their public interface to dependents.
 - **IDE integration**: Every target exports `compile_commands.json` for clangd/LSP.

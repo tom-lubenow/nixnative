@@ -46,4 +46,4 @@ nix build .#withO3
 ## Notes
 
 - **Mold linker**: Significantly faster than lld for large projects. Linux-only.
-- **Ergonomic flags**: Use `lto`, `sanitizers`, `coverage`, `optimize`, and `warnings` to apply semantic build settings per target.
+- **Explicit flags**: Use `compileFlags` and `linkFlags` directly for optimization, LTO, sanitizers, and coverage settings.

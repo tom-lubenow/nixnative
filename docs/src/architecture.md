@@ -2,7 +2,7 @@
 
 ## Overview
 
-nixnative uses [nix-ninja](https://github.com/aspect-build/nix-ninja) as its build driver. At Nix evaluation time, nixnative generates a ninja build file describing the compilation graph. At build time, nix-ninja parses this file and creates one derivation per source file using RFC 92 dynamic derivations.
+nixnative uses [nix-ninja](https://github.com/tom-lubenow/nix-ninja) as its build driver. At Nix evaluation time, nixnative generates a ninja build file describing the compilation graph. At build time, nix-ninja parses this file and creates one derivation per source file using RFC 92 dynamic derivations.
 
 ## Build Pipeline
 
@@ -53,7 +53,7 @@ Alternative module-based interface (via `native.evalProject`):
 
 The user-facing API that handles:
 - Compiler/linker resolution from string names to objects
-- Abstract flag translation (e.g., `lto = "thin"` → `-flto=thin`)
+- Validation and normalization of explicit build fields
 - Parameter validation and helpful error messages
 
 ### 3. Helpers (`builders/helpers.nix`)
@@ -109,7 +109,7 @@ mkNinjaDerivation = { name, ninjaContent, ... }:
 
 Composes compilers, linkers, and binutils:
 - Language-aware (C, C++, potentially Rust)
-- Flag translation for abstract flags
+- Explicit compile/link flag composition
 - Platform-specific defaults
 
 ### 7. Tool Plugins (`tools/`)
@@ -188,7 +188,12 @@ native.mkToolchain {
 native.mkTool {
   name = "my-generator";
   transform = { inputFiles, root, config }: pkgs.runCommand "gen" {} ''...'';
-  outputs = { drv, ... }: { headers = [...]; sources = [...]; };
+  outputs = { drv, ... }: {
+    outputs = [
+      { rel = "gen/output.h"; path = "${drv}/output.h"; }
+      { rel = "gen/output.cc"; path = "${drv}/output.cc"; }
+    ];
+  };
 }
 ```
 

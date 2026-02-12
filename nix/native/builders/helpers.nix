@@ -376,7 +376,7 @@ rec {
       libraries ? [],
       tools ? [],
       ...
-    }@args:
+    }:
     let
       build = mkCompiledTarget {
         inherit name toolchain root sources includeDirs defines compileFlags languageFlags libraries tools;
@@ -432,8 +432,9 @@ rec {
       publicIncludeDirs ? null,  # Defaults to includeDirs if not specified
       publicDefines ? [],
       publicCompileFlags ? [],
+      publicLinkFlags ? [],
       ...
-    }@args:
+    }:
     let
       build = mkCompiledTarget {
         inherit name toolchain root sources includeDirs defines compileFlags languageFlags libraries tools;
@@ -465,7 +466,7 @@ rec {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
         compileFlags = publicCompileFlags;
-        linkFlags = [ "${archiveOut}/${archiveName}" ];
+        linkFlags = [ "${archiveOut}/${archiveName}" ] ++ publicLinkFlags;
       };
 
       combinedPublic = {
@@ -511,8 +512,9 @@ rec {
       publicIncludeDirs ? null,  # Defaults to includeDirs if not specified
       publicDefines ? [],
       publicCompileFlags ? [],
+      publicLinkFlags ? [],
       ...
-    }@args:
+    }:
     let
       sharedExtraCFlags =
         if builtins.elem "-fPIC" (toolchain.getPlatformCompileFlags or [ ])
@@ -552,7 +554,7 @@ rec {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
         compileFlags = publicCompileFlags;
-        linkFlags = [ sharedLibPath ];
+        linkFlags = [ sharedLibPath ] ++ publicLinkFlags;
       };
 
       combinedPublic = {
@@ -593,6 +595,7 @@ rec {
       publicIncludeDirs ? null,  # Defaults to includeDirs if not specified
       publicDefines ? [],
       publicCompileFlags ? [],
+      publicLinkFlags ? [],
       tools ? [],
     }:
     let
@@ -629,7 +632,7 @@ rec {
         includeDirs = map (dir: { path = dir; }) publicIncludeStores;
         defines = publicDefines;
         compileFlags = publicCompileFlags;
-        linkFlags = [];
+        linkFlags = publicLinkFlags;
       };
 
       combinedPublic = mergePublic publicAggregate basePublic;
@@ -650,7 +653,7 @@ rec {
   #
   mkDevShell =
     {
-      target,
+      target ? null,
       toolchain ? null,
       extraPackages ? [],
       linkCompileCommands ? true,
@@ -661,10 +664,16 @@ rec {
       tc =
         if toolchain != null then
           toolchain
+        else if target != null then
+          target.passthru.toolchain or (throw "mkDevShell: target has no passthru.toolchain; pass 'toolchain' explicitly")
         else
-          target.passthru.toolchain or (throw "mkDevShell: no toolchain provided or found in target");
+          throw "mkDevShell: provide either 'toolchain' or 'target'";
 
-      compileCommands = target.compileCommands or target.passthru.compileCommands or null;
+      compileCommands =
+        if target == null then
+          null
+        else
+          target.compileCommands or target.passthru.compileCommands or null;
 
       # Include common development tools
       devTools =

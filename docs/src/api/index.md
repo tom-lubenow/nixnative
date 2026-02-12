@@ -24,7 +24,7 @@ let
   proj = native.project {
     root = ./.;
     includeDirs = [ "include" ];
-    warnings = "all";
+    compileFlags = [ "-Wall" "-Wextra" ];
   };
 
   myLib = proj.staticLib {

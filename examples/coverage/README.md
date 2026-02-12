@@ -1,10 +1,10 @@
 # Code Coverage Example
 
-This example demonstrates code coverage instrumentation using nixnative's abstract flags system.
+This example demonstrates code coverage instrumentation using explicit compiler and linker flags.
 
 ## What This Demonstrates
 
-- Enabling code coverage with `{ type = "coverage"; }`
+- Enabling code coverage with `compileFlags` and `linkFlags`
 - Building coverage-instrumented binaries
 - Generating coverage reports with lcov/gcov
 - Comparing coverage vs non-coverage builds
@@ -129,10 +129,8 @@ Ensure you:
 
 Build with:
 ```nix
-flags = [
-  { type = "coverage"; }
-  { type = "optimize"; value = "0"; }  # Critical for accuracy
-];
+compileFlags = [ "--coverage" "-g" "-O0" ];
+linkFlags = [ "--coverage" ];
 ```
 
 ### Missing files in report
@@ -164,4 +162,4 @@ The coverage tools need access to source files. Ensure the paths in `.gcno` file
 
 - See `testing/` for test infrastructure
 - See `multi-toolchain/` for other build flag examples
-- See the API documentation for other abstract flags (sanitizers, LTO, etc.)
+- See `multi-toolchain/` for additional explicit flag combinations (sanitizers, LTO, etc.)

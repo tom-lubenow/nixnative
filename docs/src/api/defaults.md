@@ -9,57 +9,17 @@ This page covers the common options shared across all target types and how defau
 | `compiler` | `"clang"`, `"gcc"`, or object | `"clang"` | C/C++ compiler |
 | `linker` | `"lld"`, `"mold"`, `"ld"`, or object | `"lld"` | Linker |
 
-## Warning Levels
+## Explicit Flag Presets
 
-| Level | Description |
-|-------|-------------|
-| `"none"` | Disable all warnings |
-| `"default"` | Compiler defaults |
-| `"all"` | `-Wall` |
-| `"extra"` | `-Wall -Wextra` |
-| `"pedantic"` | `-Wall -Wextra -Wpedantic` |
+Use raw flags directly in `compileFlags` and `linkFlags`.
 
-## Optimization Levels
-
-| Level | Flag | Description |
-|-------|------|-------------|
-| `"0"` | `-O0` | No optimization (fastest compile) |
-| `"1"` | `-O1` | Basic optimization |
-| `"2"` | `-O2` | Standard optimization |
-| `"3"` | `-O3` | Aggressive optimization |
-| `"s"` | `-Os` | Optimize for size |
-| `"z"` | `-Oz` | Aggressive size optimization |
-| `"fast"` | `-Ofast` | Fast math, may break IEEE compliance |
-
-## LTO Options
-
-| Value | Description |
-|-------|-------------|
-| `false` | Disable LTO |
-| `true` | Enable LTO (full) |
-| `"thin"` | Thin LTO (faster, good for development) |
-| `"full"` | Full LTO (slower, best optimization) |
-
-## Sanitizers
-
-Available sanitizers (can combine multiple):
-
-| Sanitizer | Description |
-|-----------|-------------|
-| `"address"` | AddressSanitizer - memory errors |
-| `"undefined"` | UBSan - undefined behavior |
-| `"thread"` | ThreadSanitizer - data races |
-| `"memory"` | MemorySanitizer - uninitialized reads |
-| `"leak"` | LeakSanitizer - memory leaks |
-
-Example:
-```nix
-proj.executable {
-  name = "test-app";
-  sources = [ "test.cc" ];
-  sanitizers = [ "address" "undefined" ];
-}
-```
+| Intent | `compileFlags` | `linkFlags` |
+|--------|----------------|-------------|
+| Strict warnings | `[ "-Wall" "-Wextra" "-Wpedantic" ]` | `[]` |
+| Release | `[ "-O2" ]` | `[]` |
+| LTO thin | `[ "-O2" "-flto=thin" ]` | `[ "-flto=thin" ]` |
+| Address/UB sanitizers | `[ "-fsanitize=address,undefined" "-g" ]` | `[ "-fsanitize=address,undefined" ]` |
+| Coverage | `[ "--coverage" "-g" "-O0" ]` | `[ "--coverage" ]` |
 
 ## Per-Language Flags
 
@@ -110,8 +70,7 @@ Project defaults flow to all targets:
 let
   proj = native.project {
     root = ./.;
-    warnings = "all";       # All targets get -Wall
-    optimize = "2";         # All targets get -O2
+    compileFlags = [ "-Wall" "-Wextra" "-O2" ];
     includeDirs = [ "include" ];  # All targets include this
   };
 
@@ -125,7 +84,7 @@ let
   debugApp = proj.executable {
     name = "debug-app";
     sources = [ "main.cc" ];
-    optimize = "0";         # Override: -O0 instead of -O2
+    compileFlags = [ "-g" "-O0" ];  # Added after project defaults
     defines = [ "DEBUG" ];  # Add debug define
   };
 in { ... }
@@ -139,19 +98,19 @@ Use `proj.extend` for variant configurations:
 let
   proj = native.project {
     root = ./.;
-    warnings = "all";
+    compileFlags = [ "-Wall" "-Wextra" ];
   };
 
   # Debug variant
   debug = proj.extend {
-    optimize = "0";
+    compileFlags = [ "-g" "-O0" ];
     defines = [ "DEBUG" ];
   };
 
   # Release variant
   release = proj.extend {
-    optimize = "2";
-    lto = "thin";
+    compileFlags = [ "-O2" "-flto=thin" ];
+    linkFlags = [ "-flto=thin" ];
   };
 
   debugApp = debug.executable { name = "app-debug"; sources = [ "main.cc" ]; };

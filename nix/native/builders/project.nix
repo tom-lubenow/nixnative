@@ -82,7 +82,7 @@ let
       # Default settings applied to all targets
       # Supported fields: defines, compileFlags, languageFlags, linkFlags,
       #                   includeDirs, libraries, tools, publicDefines,
-      #                   publicIncludeDirs, publicCompileFlags
+      #                   publicIncludeDirs, publicCompileFlags, publicLinkFlags
       defaults ? {},
 
       # Optional: compiler/linker for all targets

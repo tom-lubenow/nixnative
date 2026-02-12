@@ -1,6 +1,6 @@
 # project.nix - Build definition for the testing example
 #
-# Demonstrates various testing configurations including LTO, sanitizers, and args.
+# Demonstrates testing configurations with explicit LTO/sanitizer flags and args.
 
 { pkgs, native }:
 

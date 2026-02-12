@@ -106,7 +106,8 @@ let
   debugApp = proj.executable {
     name = "app-debug";
     sources = [ "main.cc" ];
-    sanitizers = [ "address" ];
+    compileFlags = [ "-fsanitize=address" "-g" ];
+    linkFlags = [ "-fsanitize=address" ];
   };
 in {
   devShells = {

@@ -7,7 +7,7 @@ This example demonstrates nixnative's test infrastructure using `native.test`.
 - Defining tests with `native.test`
 - Passing arguments to test executables
 - Verifying expected output
-- Testing edge cases (special characters, LTO builds, sanitizers)
+- Testing edge cases (special characters, explicit LTO/sanitizer flags)
 - Platform-conditional tests
 
 ## Project Structure

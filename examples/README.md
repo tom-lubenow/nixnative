@@ -37,7 +37,7 @@ Follow this progression to learn nixnative:
        ↓
 5. app-with-library/    → Combining libraries, code generation
        ↓
-6. multi-toolchain/     → Compilers, linkers, optimization flags
+6. multi-toolchain/     → Compilers, linkers, explicit optimization flags
 ```
 
 Then explore specific features as needed:
@@ -59,7 +59,7 @@ Then explore specific features as needed:
 | [header-only](./header-only/) | Header-only library | `type = "headerOnly"` |
 | [library-chain](./library-chain/) | Multi-library deps | Transitive dependencies |
 | [app-with-library](./app-with-library/) | Complete application | Libraries, tool plugins, pkg-config |
-| [multi-toolchain](./multi-toolchain/) | Compiler/linker variations | Ergonomic flags, build matrices |
+| [multi-toolchain](./multi-toolchain/) | Compiler/linker variations | Explicit compile/link flags, build matrices |
 | [testing](./testing/) | Test infrastructure | Module `tests`, edge cases |
 | [test-libraries](./test-libraries/) | Test frameworks | GTest, Catch2, doctest |
 | [devshell](./devshell/) | Development environment | `native.lsps.clangd`, IDE integration |
@@ -69,7 +69,7 @@ Then explore specific features as needed:
 | [pkg-config](./pkg-config/) | System libraries | `makeLibrary` |
 | [c-and-cpp](./c-and-cpp/) | Mixed C/C++ | `.c` + `.cc` sources, `extern "C"` |
 | [multi-binary](./multi-binary/) | Multiple executables | Shared libraries, CLI + daemon |
-| [coverage](./coverage/) | Code coverage | `coverage = true`, lcov |
+| [coverage](./coverage/) | Code coverage | `compileFlags`/`linkFlags` with `--coverage`, lcov |
 | [dynamic-derivations](./dynamic-derivations/) | Dynamic mode | Explicit dynamic derivations example |
 
 ## Feature Matrix
@@ -80,7 +80,7 @@ Then explore specific features as needed:
 | Static libraries | `library/`, `library-chain/`, `app-with-library/`, `install/`, `multi-binary/` |
 | Shared libraries | `plugins/`, `install/` |
 | Header-only libraries | `header-only/`, `plugins/` |
-| Abstract flags (LTO, sanitizers, coverage) | `multi-toolchain/`, `testing/`, `coverage/` |
+| Explicit flags (LTO, sanitizers, coverage) | `multi-toolchain/`, `testing/`, `coverage/` |
 | Custom toolchains | `multi-toolchain/` |
 | Code generation tools | `app-with-library/`, `simple-tool/` |
 | pkg-config integration | `pkg-config/`, `app-with-library/` |

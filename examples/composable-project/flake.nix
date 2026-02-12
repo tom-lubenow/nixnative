@@ -23,7 +23,7 @@
       proj = native.project {
         root = ./.;
         includeDirs = [ "include" ];
-        warnings = "all";
+        compileFlags = [ "-Wall" "-Wextra" ];
       };
 
       # Build targets - these are real values, not string references!

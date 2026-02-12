@@ -45,7 +45,7 @@ nix build .#tool2
 proj = native.project {
   root = ./.;
   includeDirs = [ "include" ];
-  warnings = "all";
+  compileFlags = [ "-Wall" "-Wextra" ];
 };
 ```
 

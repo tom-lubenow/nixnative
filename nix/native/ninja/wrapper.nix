@@ -131,9 +131,17 @@ in
 
         # Run the test
         echo "Running: $exe ${escapedArgs}"
-        output=$("$exe" ${escapedArgs} 2>&1) || true
+        set +e
+        output=$("$exe" ${escapedArgs} 2>&1)
+        status=$?
+        set -e
 
         echo "Output: $output"
+
+        if [ "$status" -ne 0 ]; then
+          echo "Test failed: executable exited with status $status"
+          exit "$status"
+        fi
 
         ${lib.optionalString (expectedOutput != null) ''
           # Use grep -F for fixed string matching (no regex interpretation)
