@@ -23,6 +23,12 @@ Enable the required experimental features in your Nix configuration (`~/.config/
 experimental-features = nix-command dynamic-derivations ca-derivations recursive-nix
 ```
 
+## Language Scope
+
+nixnative currently compiles **C and C++** sources.
+
+Other languages can still participate through normal library composition (for example prebuilt/static/shared libraries produced by external toolchains), but the native compilation pipeline in nixnative is intentionally C/C++ only for now.
+
 ## Why Dynamic Derivations?
 
 Traditional approaches to incremental C++ builds in Nix face a fundamental tradeoff:

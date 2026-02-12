@@ -2,6 +2,8 @@
 
 nixnative provides a module-first API for building C/C++ projects with true per-file incrementality. It uses [nix-ninja](https://github.com/tom-lubenow/nix-ninja) as the build driver, which generates one derivation per source file at build time using [RFC 92 dynamic derivations](https://github.com/NixOS/rfcs/blob/master/rfcs/0092-plan-dynamism.md).
 
+Launch scope: nixnative's native compilation pipeline is C/C++ only.
+
 ## Why Dynamic Derivations?
 
 Traditional approaches to incremental C++ builds in Nix face a fundamental tradeoff:

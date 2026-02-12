@@ -253,7 +253,6 @@ rec {
 
       hasC = languages ? c;
       hasCpp = languages ? cpp;
-      hasRust = languages ? rust;
 
       getCConfig =
         if languages ? c then languages.c
@@ -262,10 +261,6 @@ rec {
       getCppConfig =
         if languages ? cpp then languages.cpp
         else throw "nixnative: toolchain '${finalName}' does not have C++ support";
-
-      getRustConfig =
-        if languages ? rust then languages.rust
-        else throw "nixnative: toolchain '${finalName}' does not have Rust support";
 
       # =======================================================================
       # Linker Methods

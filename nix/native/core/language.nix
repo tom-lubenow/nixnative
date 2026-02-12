@@ -1,8 +1,6 @@
-# Language detection and registry for nixnative
+# Language detection and registry for nixnative.
 #
-# Defines supported languages and their file extension mappings.
-# Languages are first-class concepts - adding a new language is just
-# adding an entry here, then providing compiler support in the toolchain.
+# Launch scope is C/C++ only.
 #
 { lib }:
 
@@ -34,39 +32,12 @@ rec {
     headerExtensions = [ ".hpp" ".hxx" ".hh" ".H" ".h++" ".tcc" ".inc" ".inl" ];
   };
 
-  rust = {
-    name = "rust";
-    extensions = [ ".rs" ];
-    headerExtensions = [ ];
-  };
-
-  # Future languages can be added here:
-  # objc = {
-  #   name = "objc";
-  #   extensions = [ ".m" ];
-  # };
-  #
-  # objcpp = {
-  #   name = "objcpp";
-  #   extensions = [ ".mm" ];
-  # };
-  #
-  # zig = {
-  #   name = "zig";
-  #   extensions = [ ".zig" ];
-  # };
-  #
-  # asm = {
-  #   name = "asm";
-  #   extensions = [ ".s" ".S" ".asm" ];
-  # };
-
   # ==========================================================================
   # Language Registry
   # ==========================================================================
 
   # All known languages
-  all = [ c cpp rust ];
+  all = [ c cpp ];
 
   # ==========================================================================
   # Language Detection
