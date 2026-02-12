@@ -12,7 +12,12 @@
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; };
-      native = nixnative.lib.native { inherit pkgs; };
+      nixPackage = nixnative.inputs.nix.packages.${system}.default;
+      ninjaPackages = nixnative.inputs.nix-ninja.packages.${system};
+      native = nixnative.lib.native {
+        inherit pkgs nixPackage;
+        inherit (ninjaPackages) nix-ninja nix-ninja-task;
+      };
 
       # Create a project with shared defaults
       proj = native.project {
@@ -78,8 +83,18 @@ in {
 ### Key Benefits
 
 - **Targets are real values**: Pass them directly to `libraries`, import from other files, or compose with plain Nix functions
-- **No string references**: Unlike module-based APIs, you don't need `{ target = "name"; }`
+- **No indirection**: Dependencies are plain values, not a separate label/reference system
 - **Composable**: Use standard Nix patterns like helpers, imports, and function composition
+
+## Mental Model
+
+Think in three layers:
+
+1. **Toolchain** (`toolset` + `policy`) defines *how* code is compiled and linked.
+2. **Project defaults** define shared conventions (`includeDirs`, flags, shared libraries).
+3. **Targets** define concrete artifacts and compose by passing target values through `libraries`.
+
+In practice, keep defaults small and explicit, and model reusable link/include policy as reusable library values.
 
 ### Merge Behavior
 
@@ -144,27 +159,13 @@ in { ... }
 - `sharedLib` - Shared library (.so)
 - `headerOnly` - Header-only library (no compilation)
 
-## Alternative: Module-Based API
+## Incrementality Gate
 
-If you prefer typed options and Nix module composition, use `native.evalProject`:
+Run the incrementality quality gate before making performance claims:
 
-```nix
-native.evalProject {
-  modules = [
-    {
-      native = {
-        root = ./.;
-        targets.myApp = {
-          type = "executable";
-          sources = [ "src/main.cc" ];
-        };
-      };
-    }
-  ];
-}
+```sh
+nix run .#incrementality-gate
 ```
-
-This returns `{ packages, checks, devShells, config }`. See the [API Reference](api/project.md) for module option documentation.
 
 ## Examples
 

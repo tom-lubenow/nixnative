@@ -1,143 +1,165 @@
 # Target Options
 
-Targets are the core build outputs: executables, static libraries, shared libraries, and header-only libraries.
+### `native.targets.<name>.compileFlags`
 
-## `executable`
+Raw compile flags.
 
-Builds an executable binary.
+**Type:** `list of string`
 
-```nix
-native.executable {
-  name = "my-app";              # Required: output name
-  root = ./.;                   # Required: project root directory
-  sources = [ "src/main.cc" ];  # Required: list of source files (relative to root)
+**Default:** `[]`
 
-  # Optional: toolchain selection (defaults to clang + lld)
-  compiler = "clang";           # "clang", "gcc", or compiler object
-  linker = "lld";               # "lld", "mold", "ld", or linker object
 
-  # Optional build configuration
-  includeDirs = [ "include" ];  # Include directories
-  defines = [ "DEBUG" ];        # Preprocessor definitions
-  compileFlags = [ "-O2" ];     # Additional compiler flags
-  languageFlags = { cpp = [ "-std=c++20" ]; };  # Per-language flags
-  linkFlags = [ "-lm" ];        # Additional linker flags
-  libraries = [ myLib ];        # Library dependencies
-  tools = [ myTool ];           # Tool plugins (protobuf, jinja, etc.)
-}
-```
+### `native.targets.<name>.compiler`
 
-Support queries (for example via `native.toolchainSupports`) use explicit `supports.features` metadata from the composed toolset/policy.
+Compiler selection for this target.
 
-Use `compileFlags`/`languageFlags`/`linkFlags`; legacy aliases (`cFlags`, `cxxFlags`, `ldFlags`) are not accepted.
+**Type:** `null or string or (attribute set)`
 
-## `staticLib`
+**Default:** _none_
 
-Builds a static library with public interface.
 
-```nix
-native.staticLib {
-  name = "libmylib";                  # Output: libmylib.a
-  root = ./.;
-  sources = [ "src/lib.cc" ];
-  publicIncludeDirs = [ "include" ];  # Headers exposed to consumers
-  publicDefines = [ "MY_LIB=1" ];     # Defines propagated to consumers
-  # ... same options as executable
-}
-```
+### `native.targets.<name>.defines`
 
-**Note:** The `name` is used exactly as specified for the output filename. Include the `lib` prefix for standard libraries (e.g., `name = "libfoo"` produces `libfoo.a`). For plugins loaded via `dlopen()`, omit the prefix (e.g., `name = "my-plugin"` produces `my-plugin.so`).
+Preprocessor defines.
 
-## `sharedLib`
+**Type:** `list of (string or (attribute set))`
 
-Builds a shared library (`.so`/`.dylib`).
+**Default:** `[]`
 
-```nix
-native.sharedLib {
-  name = "libmylib";                  # Output: libmylib.so
-  root = ./.;
-  sources = [ "src/lib.cc" ];
-  publicIncludeDirs = [ "include" ];
-  # ... same options as staticLib
-}
-```
 
-## `headerOnly`
+### `native.targets.<name>.includeDirs`
 
-Defines a header-only library (no compilation).
+Include directories.
 
-```nix
-native.headerOnly {
-  name = "my-headers";
-  root = ./.;
-  publicIncludeDirs = [ "include" ];
-  publicDefines = [ "HEADER_ONLY=1" ];
-}
-```
+**Type:** `list of (absolute path or string or (attribute set))`
 
-## Common Parameters
+**Default:** `[]`
 
-All target types share these parameters:
 
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `name` | Yes | - | Output name |
-| `root` | Yes | - | Project root directory |
-| `sources` | Varies | `[]` | Source files (not for headerOnly) |
-| `includeDirs` | No | `[]` | Include directories |
-| `defines` | No | `[]` | Preprocessor definitions |
-| `compileFlags` | No | `[]` | Additional compiler flags |
-| `languageFlags` | No | `{}` | Per-language flags (`{ c = [...]; cpp = [...]; }`) |
-| `linkFlags` | No | `[]` | Additional linker flags |
-| `libraries` | No | `[]` | Library dependencies |
-| `tools` | No | `[]` | Code generators |
+### `native.targets.<name>.languageFlags`
 
-## Library-Specific Parameters
+Per-language compile flags.
 
-| Parameter | Description |
-|-----------|-------------|
-| `publicIncludeDirs` | Include directories exposed to consumers |
-| `publicDefines` | Preprocessor definitions propagated to consumers |
-| `publicCompileFlags` | Compiler flags propagated to consumers |
-| `publicLinkFlags` | Linker flags propagated to consumers |
+**Type:** `attribute set of list of string`
 
-## Public Attribute Schema
+**Default:** `{}`
 
-Libraries expose a `public` attribute that propagates flags to dependents:
 
-```nix
-{
-  includeDirs = [ ];   # List of include directories
-  defines = [ ];       # List of preprocessor definitions
-  compileFlags = [ ];  # List of compiler flags
-  linkFlags = [ ];     # List of linker flags
-}
-```
+### `native.targets.<name>.libraries`
 
-## Low-Level Variants
+Library dependencies.
 
-For explicit toolchain control, use the `mk*` variants:
+**Type:** `list of (string or absolute path or (submodule) or (attribute set) or (attribute set))`
 
-- `mkExecutable` - Requires explicit `toolchain` parameter
-- `mkStaticLib` - Requires explicit `toolchain` parameter
-- `mkSharedLib` - Requires explicit `toolchain` parameter
-- `mkHeaderOnly` - No toolchain needed
+**Default:** `[]`
 
-```nix
-native.mkExecutable {
-  name = "my-app";
-  root = ./.;
-  sources = [ "src/main.cc" ];
-  toolchain = native.mkToolchain {
-    toolset = native.mkToolset {
-      languages = {
-        c = native.compilers.clang.c;
-        cpp = native.compilers.clang.cpp;
-      };
-      linker = native.linkers.mold;
-      bintools = native.compilers.clang.bintools;
-    };
-    policy = native.mkPolicy { };
-  };
-}
-```
+
+### `native.targets.<name>.linkFlags`
+
+Raw link flags.
+
+**Type:** `list of string`
+
+**Default:** `[]`
+
+
+### `native.targets.<name>.linker`
+
+Linker selection for this target.
+
+**Type:** `null or string or (attribute set)`
+
+**Default:** _none_
+
+
+### `native.targets.<name>.name`
+
+Output name for the target.
+
+**Type:** `string`
+
+**Default:** `"<name>"`
+
+
+### `native.targets.<name>.publicCompileFlags`
+
+Public compile flags (libraries).
+
+**Type:** `list of string`
+
+**Default:** `[]`
+
+
+### `native.targets.<name>.publicDefines`
+
+Public defines (libraries).
+
+**Type:** `list of (string or (attribute set))`
+
+**Default:** `[]`
+
+
+### `native.targets.<name>.publicIncludeDirs`
+
+Public include dirs (libraries).
+
+**Type:** `list of (absolute path or string or (attribute set))`
+
+**Default:** `[]`
+
+
+### `native.targets.<name>.publicLinkFlags`
+
+Public link flags (libraries).
+
+**Type:** `list of (string or absolute path)`
+
+**Default:** `[]`
+
+
+### `native.targets.<name>.root`
+
+Project root for the target.
+
+**Type:** `null or absolute path or string or (attribute set)`
+
+**Default:** _none_
+
+
+### `native.targets.<name>.sources`
+
+Source files for the target.
+
+**Type:** `list of (absolute path or string or (attribute set))`
+
+**Default:** `[]`
+
+
+### `native.targets.<name>.toolchain`
+
+Explicit toolchain for this target.
+
+**Type:** `null or (attribute set)`
+
+**Default:** _none_
+
+
+### `native.targets.<name>.tools`
+
+Tool plugins (code generators, etc.).
+
+**Type:** `list of (attribute set)`
+
+**Default:** `[]`
+
+
+### `native.targets.<name>.type`
+
+Target type.
+
+**Type:** `null or one of "executable", "staticLib", "sharedLib", "headerOnly"`
+
+**Default:** _none_
+
+
+

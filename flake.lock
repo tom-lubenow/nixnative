@@ -314,11 +314,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1766982151,
+        "lastModified": 1767242643,
         "narHash": "sha256-hjxygpY0VC+EuKUJzOX3muHDVHdOke1N2wmGWfHdiJ4=",
         "ref": "refs/heads/main",
-        "rev": "06e6a826257dadbb94ebcff88781ead51fb979ef",
-        "revCount": 23,
+        "rev": "fdd41d90a4b313eca86f2ef57d43d40772876ac5",
+        "revCount": 21,
         "type": "git",
         "url": "ssh://git@github.com/tom-lubenow/nix-ninja"
       },

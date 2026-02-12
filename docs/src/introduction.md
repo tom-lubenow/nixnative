@@ -1,6 +1,6 @@
 # Introduction
 
-nixnative provides a module-first API for building C/C++ projects with true per-file incrementality. It uses [nix-ninja](https://github.com/tom-lubenow/nix-ninja) as the build driver, which generates one derivation per source file at build time using [RFC 92 dynamic derivations](https://github.com/NixOS/rfcs/blob/master/rfcs/0092-plan-dynamism.md).
+nixnative provides a composable API for building C/C++ projects with dynamic-derivation-driven incremental builds. It uses [nix-ninja](https://github.com/tom-lubenow/nix-ninja) as the build driver, which generates one derivation per source file at build time using [RFC 92 dynamic derivations](https://github.com/NixOS/rfcs/blob/master/rfcs/0092-plan-dynamism.md).
 
 Launch scope: nixnative's native compilation pipeline is C/C++ only.
 
@@ -36,7 +36,7 @@ BUILD TIME (nix-ninja):
 This architecture gives you:
 
 - **Instant evaluation**: No IFD blocking during `nix eval` or `nix flake check`
-- **True incrementality**: Change one file, rebuild one derivation
+- **Incrementality gate**: verify one-file-change behavior with `nix run .#incrementality-gate`
 - **Parallel compilation**: Each source compiles in its own derivation
 - **Full toolchain control**: Compilers, linkers, and flags are explicit inputs
 - **Content-addressed caching**: Identical compilations are deduplicated across projects

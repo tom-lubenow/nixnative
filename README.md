@@ -4,7 +4,7 @@ Incremental C/C++ builds using Nix dynamic derivations and nix-ninja.
 
 ## Overview
 
-nixnative provides a module-first API for building C/C++ projects with true per-file incrementality. It uses [nix-ninja](https://github.com/tom-lubenow/nix-ninja) as the build driver, which generates one derivation per source file at build time using [RFC 92 dynamic derivations](https://github.com/NixOS/rfcs/blob/master/rfcs/0092-plan-dynamism.md).
+nixnative provides a composable API for building C/C++ projects with dynamic-derivation-driven incremental builds. It uses [nix-ninja](https://github.com/tom-lubenow/nix-ninja) as the build driver, which generates one derivation per source file at build time using [RFC 92 dynamic derivations](https://github.com/NixOS/rfcs/blob/master/rfcs/0092-plan-dynamism.md).
 
 **This project requires Nix with dynamic derivations support.** All builds use nix-ninja for incremental compilation—there is no fallback to traditional builds.
 
@@ -63,7 +63,7 @@ BUILD TIME (nix-ninja):
 This architecture gives you:
 
 - **Instant evaluation**: No IFD blocking during `nix eval` or `nix flake check`
-- **True incrementality**: Change one file, rebuild one derivation
+- **Incrementality gate**: validate one-file-change behavior with `nix run .#incrementality-gate`
 - **Parallel compilation**: Each source compiles in its own derivation
 - **Full toolchain control**: Compilers, linkers, and flags are explicit inputs
 - **Content-addressed caching**: Identical compilations are deduplicated across projects
@@ -79,7 +79,13 @@ This architecture gives you:
   outputs = { nixpkgs, nixnative, ... }:
     let
       pkgs = import nixpkgs { system = "x86_64-linux"; };
-      native = nixnative.lib.native { inherit pkgs; };
+      system = "x86_64-linux";
+      nixPackage = nixnative.inputs.nix.packages.${system}.default;
+      ninjaPackages = nixnative.inputs.nix-ninja.packages.${system};
+      native = nixnative.lib.native {
+        inherit pkgs nixPackage;
+        inherit (ninjaPackages) nix-ninja nix-ninja-task;
+      };
 
       # Create a project with shared defaults
       proj = native.project {
@@ -162,7 +168,7 @@ See the `examples/` directory for working examples:
 - `examples/library-chain` – Transitive library dependencies
 - `examples/app-with-library` – Executable depending on a static library
 - `examples/multi-toolchain` – Different compiler/linker combinations (clang/gcc + lld/mold)
-- `examples/testing` – Unit tests with module-defined tests
+- `examples/testing` – Unit tests with project-defined checks
 - `examples/test-libraries` – GoogleTest, Catch2, and doctest integration
 - `examples/coverage` – Code coverage with gcov/llvm-cov
 - `examples/plugins` – Shared library plugins with dlopen
@@ -217,7 +223,7 @@ The gate enforces:
 │   ├── compilers/      # Compiler implementations (clang, gcc)
 │   ├── linkers/        # Linker implementations (lld, mold, ld)
 │   ├── ninja/          # nix-ninja integration (build file generation)
-│   ├── modules/        # Module-first project interface
+│   ├── modules/        # Shared schema and module internals
 │   ├── builders/       # High-level API (executable, staticLib, etc.)
 │   ├── tools/          # Built-in tool plugins (protobuf, jinja, binary-blob)
 │   ├── testlibs/       # Test framework integrations (gtest, catch2, doctest)

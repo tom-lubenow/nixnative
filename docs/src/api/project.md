@@ -1,112 +1,84 @@
 # Project Options
 
-## `project` (Recommended)
+### `native.checks`
 
-Creates a project with shared defaults and returns scoped builders.
+Test derivations.
 
-```nix
-let
-  proj = native.project {
-    root = ./.;
-    includeDirs = [ "include" ];
-    compileFlags = [ "-Wall" "-Wextra" ];
-  };
+**Type:** `attribute set of anything`
 
-  myLib = proj.staticLib {
-    name = "libmylib";
-    sources = [ "src/lib.cc" ];
-    publicIncludeDirs = [ "include" ];
-  };
+**Default:** _none_
 
-  myApp = proj.executable {
-    name = "my-app";
-    sources = [ "src/main.cc" ];
-    libraries = [ myLib ];  # Direct reference!
-  };
 
-  testMyApp = native.test {
-    name = "test-my-app";
-    executable = myApp;
-    expectedOutput = "Hello";
-  };
-in {
-  packages = { inherit myLib myApp; };
-  checks = { inherit testMyApp; };
-  devShells.default = native.devShell { target = myApp; };
-}
-```
+### `native.compiler`
 
-## Project Parameters
+Default compiler selection.
 
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `root` | Yes | - | Project root directory |
-| `compiler` | No | `"clang"` | Compiler: `"clang"`, `"gcc"`, or compiler object |
-| `linker` | No | `"lld"` | Linker: `"lld"`, `"mold"`, `"ld"`, or linker object |
-| `includeDirs` | No | `[]` | Default include directories for all targets |
-| `defines` | No | `[]` | Default preprocessor definitions |
-| `compileFlags` | No | `[]` | Default compiler flags |
-| `languageFlags` | No | `{}` | Per-language flags (`{ c = [...]; cpp = [...]; }`) |
-| `linkFlags` | No | `[]` | Default linker flags |
-| `libraries` | No | `[]` | Default libraries for all targets |
-| `tools` | No | `[]` | Default code-generation tools |
-| `publicIncludeDirs` | No | `[]` | Default public include dirs for library targets |
-| `publicDefines` | No | `[]` | Default public defines for library targets |
-| `publicCompileFlags` | No | `[]` | Default public compile flags for library targets |
-| `publicLinkFlags` | No | `[]` | Default public link flags for library targets |
+**Type:** `null or string or (attribute set)`
 
-## Scoped Builders
+**Default:** _none_
 
-The project returns these scoped builder functions:
 
-- `proj.executable { ... }` - Build an executable
-- `proj.staticLib { ... }` - Build a static library
-- `proj.sharedLib { ... }` - Build a shared library
-- `proj.headerOnly { ... }` - Define a header-only library
+### `native.devShells`
 
-All builders inherit the project's defaults but can override them. Lists are concatenated; lists of strings/paths are
-deduplicated (first occurrence wins) while lists of attrsets are not. Flag fields (`compileFlags`, `linkFlags`,
-`languageFlags`, `publicCompileFlags`, `publicLinkFlags`) are merged through the toolchain policy:
+Development shells.
 
-- `mergeOrder = "defaults-first"` (default): project defaults then target flags
-- `mergeOrder = "target-first"`: target flags then project defaults
+**Type:** `attribute set of anything`
 
-Legacy aliases (`cFlags`, `cxxFlags`, `ldFlags`) are rejected.
+**Default:** _none_
 
-## Extending Projects
 
-Use `proj.extend` to create nested projects with additional defaults:
+### `native.extraChecks`
 
-```nix
-let
-  proj = native.project {
-    root = ./.;
-    compileFlags = [ "-Wall" "-Wextra" ];
-  };
+Additional checks to expose alongside tests.
 
-  debugProj = proj.extend {
-    defines = [ "DEBUG" ];
-    compileFlags = [ "-g" "-O0" ];
-  };
+**Type:** `attribute set of anything`
 
-  releaseProj = proj.extend {
-    compileFlags = [ "-O2" "-flto=thin" ];
-    linkFlags = [ "-flto=thin" ];
-  };
-in { ... }
-```
+**Default:** `{}`
 
-## Direct References
 
-Targets are real values that can be passed directly:
+### `native.extraPackages`
 
-```nix
-myLib = proj.staticLib { name = "mylib"; sources = [ "lib.cc" ]; };
-myApp = proj.executable {
-  name = "myapp";
-  sources = [ "main.cc" ];
-  libraries = [ myLib ];  # Direct reference, not a string!
-};
-```
+Additional packages to expose alongside targets.
 
-This replaces the older module-based `{ target = "name"; }` syntax.
+**Type:** `attribute set of anything`
+
+**Default:** `{}`
+
+
+### `native.linker`
+
+Default linker selection.
+
+**Type:** `null or string or (attribute set)`
+
+**Default:** _none_
+
+
+### `native.packages`
+
+Built target outputs.
+
+**Type:** `attribute set of anything`
+
+**Default:** _none_
+
+
+### `native.root`
+
+Default project root.
+
+**Type:** `null or absolute path or string or (attribute set)`
+
+**Default:** _none_
+
+
+### `native.toolchain`
+
+Default toolchain for all targets.
+
+**Type:** `null or (attribute set)`
+
+**Default:** _none_
+
+
+

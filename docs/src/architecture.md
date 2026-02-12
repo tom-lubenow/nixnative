@@ -42,12 +42,11 @@ The primary user-facing API:
 - Targets are real Nix values, not string references
 - Supports helper patterns and standard Nix composition
 
-### 2. Module-Based API (`modules/project.nix`)
+### 2. Shared Schema (`modules/schema.nix`)
 
-Alternative module-based interface (via `native.evalProject`):
-- Typed module options for targets, tests, and dev shells
-- Applies defaults and resolves target references
-- Emits `packages`, `checks`, and `devShells`
+- Single source of truth for option types/defaults
+- Used by API argument validation
+- Used by documentation generation
 
 ### 3. High-Level API (`builders/api.nix`)
 
@@ -56,7 +55,7 @@ The user-facing API that handles:
 - Validation and normalization of explicit build fields
 - Parameter validation and helpful error messages
 
-### 3. Helpers (`builders/helpers.nix`)
+### 4. Helpers (`builders/helpers.nix`)
 
 Low-level builder functions that:
 - Normalize explicit source paths (glob discovery is separate)
@@ -65,7 +64,7 @@ Low-level builder functions that:
 - Generate ninja file content
 - Create wrapper derivations
 
-### 4. Ninja Generation (`ninja/generate.nix`)
+### 5. Ninja Generation (`ninja/generate.nix`)
 
 Pure functions that generate ninja build file content:
 
@@ -87,7 +86,7 @@ Key features:
 - `deps = gcc` enables nix-ninja's header scanning
 - Per-language compile rules for C vs C++
 
-### 5. Ninja Wrapper (`ninja/wrapper.nix`)
+### 6. Ninja Wrapper (`ninja/wrapper.nix`)
 
 Creates the wrapper derivation that invokes nix-ninja:
 
@@ -105,15 +104,15 @@ mkNinjaDerivation = { name, ninjaContent, ... }:
   };
 ```
 
-### 6. Toolchain Abstraction (`core/toolchain.nix`)
+### 7. Toolchain Abstraction (`core/toolchain.nix`)
 
 Composes compilers, linkers, and binutils:
-- Language-aware (C, C++, potentially Rust)
+- Language-aware (C/C++)
 - Explicit compile/link flag composition
 - Explicit support metadata via `supports.features` on toolsets/toolchains
 - Platform-specific defaults
 
-### 7. Tool Plugins (`tools/`)
+### 8. Tool Plugins (`tools/`)
 
 Code generators that produce headers and sources at eval time:
 - Built-in: Jinja2, protobuf, gRPC
@@ -125,9 +124,11 @@ Code generators that produce headers and sources at eval time:
 ### Per-File Derivations
 
 nix-ninja creates one derivation per source file. This means:
-- Changing `src/foo.cc` only rebuilds `foo.o` + link step
-- Unchanged objects are fetched from the Nix store cache
+- The intended steady-state behavior is: changing `src/foo.cc` rebuilds `foo.o` + link step
+- Unchanged objects should be fetched from the Nix store cache
 - Header changes trigger rebuilds via `deps = gcc` scanning
+
+Use `nix run .#incrementality-gate` to verify these invariants on the current revision before making incrementality claims.
 
 ### Source Capture
 
@@ -137,7 +138,7 @@ Each source file is captured individually:
 store = builtins.path { path = "${rootHost}/${relativePath}"; };
 ```
 
-This makes each source content-addressed, so changing one file doesn't invalidate others.
+This keeps each source content-addressed and is one of the prerequisites for per-file incrementality.
 
 ### Tool Plugin Capture
 
@@ -211,3 +212,4 @@ Currently Linux-only (x86_64 and aarch64). The linker and platform abstractions 
 - Requires Nix with experimental features: `dynamic-derivations`, `ca-derivations`, `recursive-nix`
 - Windows/MSVC is not supported
 - IDE integration requires `compile_commands.json` which is generated at build time, not eval time
+- Incrementality claims should be validated with `nix run .#incrementality-gate`

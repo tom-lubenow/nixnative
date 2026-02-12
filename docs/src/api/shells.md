@@ -1,148 +1,66 @@
 # Shell Options
 
-Development shells provide a configured environment for working on your project.
+### `native.shells.<name>.extraPackages`
 
-## `devShell`
+Extra packages to include.
 
-Creates a development shell from a built target with toolchain and IDE support.
+**Type:** `list of anything`
 
-```nix
-native.devShell {
-  target = myApp;               # Built target to get toolchain from
-  extraPackages = [ pkgs.gdb ]; # Additional packages
-  includeTools = true;          # Include clang-tools, gdb (default: true)
-}
-```
+**Default:** `[]`
 
-## Parameters
 
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `target` | Yes | - | Built target to derive toolchain from |
-| `extraPackages` | No | `[]` | Additional packages to include |
-| `includeTools` | No | `true` | Include clang-tools, gdb, etc. |
+### `native.shells.<name>.includeTools`
 
-## Basic Usage
+Include common dev tools (clang-tools, gdb).
 
-```nix
-let
-  proj = native.project { root = ./.; };
+**Type:** `boolean`
 
-  myApp = proj.executable {
-    name = "my-app";
-    sources = [ "src/main.cc" ];
-  };
-in {
-  devShells.default = native.devShell { target = myApp; };
-}
-```
+**Default:** `true`
 
-Enter the shell:
-```sh
-nix develop
-```
 
-## What's Included
+### `native.shells.<name>.linkCompileCommands`
 
-When `includeTools = true` (default), the shell includes:
+Symlink compile_commands.json if available.
 
-- The target's compiler (clang or gcc)
-- The target's linker (lld, mold, or ld)
-- clang-tools (clang-format, clang-tidy, clangd)
-- gdb debugger
-- Any packages from `extraPackages`
+**Type:** `boolean`
 
-## `shell`
+**Default:** `true`
 
-Creates a standalone development shell without a target (just the toolchain).
 
-```nix
-native.shell {
-  compiler = "clang";           # "clang", "gcc", or compiler object
-  linker = "mold";              # "lld", "mold", "ld", or linker object
-  extraPackages = [ pkgs.cmake pkgs.ninja ];
-  includeTools = true;
-}
-```
+### `native.shells.<name>.name`
 
-This is useful when you want a development environment before defining any build targets.
+Dev shell name.
 
-## Parameters for `shell`
+**Type:** `string`
 
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `compiler` | No | `"clang"` | Compiler to include |
-| `linker` | No | `"lld"` | Linker to include |
-| `extraPackages` | No | `[]` | Additional packages |
-| `includeTools` | No | `true` | Include clang-tools, gdb |
+**Default:** `"<name>"`
 
-## Adding Extra Packages
 
-```nix
-native.devShell {
-  target = myApp;
-  extraPackages = [
-    pkgs.cmake
-    pkgs.ninja
-    pkgs.valgrind
-    pkgs.perf
-  ];
-}
-```
+### `native.shells.<name>.symlinkName`
 
-## Multiple Shells
+Symlink name for compile commands.
 
-Define different shells for different purposes:
+**Type:** `string`
 
-```nix
-let
-  proj = native.project { root = ./.; };
+**Default:** `"compile_commands.json"`
 
-  app = proj.executable {
-    name = "app";
-    sources = [ "main.cc" ];
-  };
 
-  debugApp = proj.executable {
-    name = "app-debug";
-    sources = [ "main.cc" ];
-    compileFlags = [ "-fsanitize=address" "-g" ];
-    linkFlags = [ "-fsanitize=address" ];
-  };
-in {
-  devShells = {
-    default = native.devShell { target = app; };
-    debug = native.devShell {
-      target = debugApp;
-      extraPackages = [ pkgs.valgrind ];
-    };
-  };
-}
-```
+### `native.shells.<name>.target`
 
-Enter a specific shell:
-```sh
-nix develop .#debug
-```
+Target to derive toolchain from.
 
-## Low-Level Variant
+**Type:** `null or string or (attribute set)`
 
-`mkDevShell` allows explicit toolchain specification:
+**Default:** _none_
 
-```nix
-native.mkDevShell {
-  target = myApp;
-  toolchain = myToolchain;  # Optional: override target's toolchain
-  includeTools = true;
-}
-```
 
-## IDE Integration
+### `native.shells.<name>.toolchain`
 
-The development shell sets up environment variables that IDEs can use:
+Explicit toolchain for the dev shell.
 
-- `CC` - C compiler path
-- `CXX` - C++ compiler path
-- `LD` - Linker path
+**Type:** `null or (attribute set)`
 
-clangd (for LSP support) will automatically find the compiler from the shell environment.
+**Default:** _none_
+
+
+
