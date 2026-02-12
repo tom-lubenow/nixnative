@@ -5,7 +5,10 @@
 { pkgs, native }:
 
 let
-  sources = [ "src/*.cc" ];
+  sources = native.utils.discoverSources {
+    root = ./.;
+    patterns = [ "src/*.cc" ];
+  };
   includeDirs = [ "src" ];
   isLinux = pkgs.stdenv.hostPlatform.isLinux;
 

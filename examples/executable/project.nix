@@ -6,13 +6,18 @@
 { pkgs, native }:
 
 let
+  sourceFiles = native.utils.discoverSources {
+    root = ./.;
+    patterns = [ "src/*.cc" ];
+  };
+
   proj = native.project {
     root = ./.;
   };
 
   executableExample = proj.executable {
     name = "executable-example";
-    sources = [ "src/*.cc" ];
+    sources = sourceFiles;
     includeDirs = [ "include" ];
   };
 

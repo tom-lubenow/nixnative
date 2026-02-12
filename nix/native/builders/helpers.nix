@@ -19,14 +19,12 @@ let
     normalizeIncludeDir
     mergePublic
     ensureList
-    toPathLike
     collectPublic
     collectEvalInputs
     compileFlagsForLanguage
     emptyPublic
     collectLinkFlags
     isGlob
-    expandGlob
     ;
 
   # Collect ninja-built library target outputs for dependency tracking
@@ -139,20 +137,22 @@ let
       path = srcInfo.path;
     };
 
-  # Normalize all sources for ninja (with glob expansion)
+  # Normalize all sources for ninja.
+  # Sources must be explicit file entries. Source discovery via globs is a
+  # separate step and should be done with `native.utils.discoverSources`.
   normalizeSourcesForNinja = { root, sources }:
     let
-      rootPath = toPathLike root;
-
-      # Expand globs first
-      expandedSources = lib.concatMap (source:
-        if isGlob source then
-          expandGlob { root = rootPath; pattern = source; }
+      globSources = builtins.filter isGlob sources;
+      globError =
+        if globSources == [ ] then
+          null
         else
-          [ source ]
-      ) sources;
+          throw ''
+            nixnative: sources must be explicit file paths; glob patterns are not accepted directly.
+            Use native.utils.discoverSources { root = ...; patterns = [ ... ]; } to expand globs first.
+          '';
     in
-    map (source: normalizeSourceForNinja { inherit root source; }) expandedSources;
+    builtins.seq globError (map (source: normalizeSourceForNinja { inherit root source; }) sources);
 
   # Common preparation for all target types
   # Returns: { normalizedSources, resolvedIncludeDirs, combinedIncludeDirs, combinedDefines, combinedCompileFlags, legacyLinkFlags, wrappedLinkFlags, libraryInputs, evalInputs }

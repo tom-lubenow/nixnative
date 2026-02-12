@@ -385,6 +385,21 @@ rec {
       in
       matchingFiles;
 
+  # Resolve a mixed list of explicit files and glob patterns to explicit files.
+  # Use this at call sites that want discovery behavior, then pass the result
+  # to builders as concrete source lists.
+  discoverSources = { root, patterns }:
+    concatMap (
+      entry:
+      if isGlob entry then
+        expandGlob {
+          inherit root;
+          pattern = entry;
+        }
+      else
+        [ entry ]
+    ) patterns;
+
   # Get basename of a path (last component)
   basestring = path:
     let

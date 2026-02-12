@@ -131,9 +131,12 @@ let
         type = listOfPathLike;
         default = [ ];
         description = ''
-          Source files to compile. Can be:
+          Explicit source files to compile. Can be:
           - Paths: `./src/main.cc`
-          - Strings: `"src/*.cc"` (glob patterns)
+          - Strings: `"src/main.cc"`
+
+          For glob discovery, use `native.utils.discoverSources` and pass the
+          expanded list here.
         '';
       };
       includeDirs = lib.mkOption {

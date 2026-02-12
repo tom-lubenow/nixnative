@@ -13,7 +13,7 @@
 #     };
 #   };
 #
-#   lib = project.staticLib { name = "mylib"; sources = [ "*.c" ]; };
+#   lib = project.staticLib { name = "mylib"; sources = [ "src/foo.c" "src/bar.c" ]; };
 #   app = project.executable { name = "myapp"; sources = [ "main.c" ]; };
 #
 {

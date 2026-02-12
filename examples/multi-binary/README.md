@@ -75,11 +75,15 @@ CLI ready!
 ```nix
 let
   proj = native.project { root = ./.; };
+  commonSources = native.utils.discoverSources {
+    root = ./.;
+    patterns = [ "common/*.cc" ];
+  };
 
   # Build common code as a static library
   commonLib = proj.staticLib {
     name = "libmyapp-common";
-    sources = [ "common/*.cc" ];  # Glob patterns supported!
+    sources = commonSources;
     includeDirs = [ "common/include" ];
     publicIncludeDirs = [ "common/include" ];
   };

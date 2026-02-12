@@ -6,6 +6,11 @@
 { pkgs, native }:
 
 let
+  commonSources = native.utils.discoverSources {
+    root = ./.;
+    patterns = [ "src/common/*.cc" ];
+  };
+
   proj = native.project {
     root = ./.;
     defines = [ "PROJECT_VERSION=100" ];
@@ -16,7 +21,7 @@ let
 
   libcommon = proj.staticLib {
     name = "libcommon";
-    sources = [ "src/common/*.cc" ];
+    sources = commonSources;
     publicIncludeDirs = [ "src/common" ];
   };
 

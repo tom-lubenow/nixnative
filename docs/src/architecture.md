@@ -59,7 +59,7 @@ The user-facing API that handles:
 ### 3. Helpers (`builders/helpers.nix`)
 
 Low-level builder functions that:
-- Normalize source paths and globs
+- Normalize explicit source paths (glob discovery is separate)
 - Aggregate library dependencies and their public interfaces
 - Process tool plugins for generated sources/headers
 - Generate ninja file content
