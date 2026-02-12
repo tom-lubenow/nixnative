@@ -31,7 +31,7 @@ cat > "$tmp_dir/flake.nix" <<FLAKE
       };
       proj = native.project {
         root = ./.;
-        compileFlags = [ "-O2" ];
+        compileFlags = [ "-O2" "-DNIXNATIVE_GATE_NONCE=${nonce}" ];
       };
       app = proj.executable {
         name = "incrementality-app";
@@ -99,10 +99,11 @@ count2="$(compile_count "$log2")"
 count3="$(compile_count "$log3")"
 
 b_drv_first="$(extract_object_drv "$log1" "b-cc")"
-b_drv_third="$(extract_object_drv "$log3" "b-cc")"
+b_compile_third="$(rg -c "nix-ninja-task: Compiling .*b\\.cc" "$log3" || echo 0)"
+a_compile_third="$(rg -c "nix-ninja-task: Compiling .*a\\.cc" "$log3" || echo 0)"
 
 echo "incrementality-gate: compile counts first=${count1} second=${count2} third=${count3}"
-echo "incrementality-gate: b.cc object drv first=${b_drv_first} third=${b_drv_third}"
+echo "incrementality-gate: b.cc object drv first=${b_drv_first}"
 
 if [ "${count1}" -lt 2 ]; then
   echo "incrementality-gate: expected first build to compile at least 2 sources" >&2
@@ -119,13 +120,18 @@ if [ "${count3}" -ne 1 ]; then
   exit 1
 fi
 
-if [ -z "${b_drv_first}" ] || [ -z "${b_drv_third}" ]; then
-  echo "incrementality-gate: failed to extract b.cc object derivation paths" >&2
+if [ -z "${b_drv_first}" ]; then
+  echo "incrementality-gate: failed to extract b.cc object derivation path from first build" >&2
   exit 1
 fi
 
-if [ "${b_drv_first}" != "${b_drv_third}" ]; then
-  echo "incrementality-gate: unchanged b.cc should keep same object derivation path" >&2
+if [ "${a_compile_third}" -ne 1 ]; then
+  echo "incrementality-gate: expected third build to compile a.cc exactly once" >&2
+  exit 1
+fi
+
+if [ "${b_compile_third}" -ne 0 ]; then
+  echo "incrementality-gate: unchanged b.cc should not be recompiled" >&2
   exit 1
 fi
 
