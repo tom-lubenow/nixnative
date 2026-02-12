@@ -62,6 +62,18 @@ rec {
         lib.mapAttrsToList (_: lang: lang.runtimeInputs or [ ]) languages
       );
 
+      languageFeatures = lib.unique (
+        lib.flatten (lib.mapAttrsToList (_: lang: (lang.supports.features or [ ])) languages)
+      );
+      linkerFeatures = linker.supports.features or [ ];
+      featuresRequiringBoth = [ "lto" "thinLto" "splitDwarf" ];
+      sharedFeatures = builtins.filter (f: builtins.elem f linkerFeatures) (
+        builtins.filter (f: builtins.elem f featuresRequiringBoth) languageFeatures
+      );
+      languageOnlyFeatures = builtins.filter (f: !(builtins.elem f featuresRequiringBoth)) languageFeatures;
+      linkerOnlyFeatures = builtins.filter (f: !(builtins.elem f featuresRequiringBoth)) linkerFeatures;
+      supportedFeatures = lib.unique (sharedFeatures ++ languageOnlyFeatures ++ linkerOnlyFeatures);
+
       allRuntimeInputs =
         lib.unique (
           languageRuntimeInputs
@@ -86,6 +98,7 @@ rec {
         linker
         bintools
         ;
+      supports = { features = supportedFeatures; };
       runtimeInputs = allRuntimeInputs;
       environment = finalEnvironment;
     };
@@ -101,6 +114,7 @@ rec {
       runtimeInputs ? [ ],
       environment ? { },
       flags ? { },
+      supports ? { features = [ ]; },
     }:
     let
       finalFlags = {
@@ -117,6 +131,7 @@ rec {
         environment
         ;
       flags = finalFlags;
+      inherit supports;
     };
 
   # ==========================================================================
@@ -148,6 +163,11 @@ rec {
 
       allRuntimeInputs = lib.unique (finalToolset.runtimeInputs ++ finalPolicy.runtimeInputs);
       finalEnvironment = finalToolset.environment // finalPolicy.environment;
+      supportedFeatures =
+        lib.unique (
+          (finalToolset.supports.features or [ ])
+          ++ (finalPolicy.supports.features or [ ])
+        );
 
       cxxRuntimeLibPath =
         if languages ? cpp then
@@ -160,6 +180,7 @@ rec {
       kind = "toolchain";
 
       inherit toolset policy;
+      supports = { features = supportedFeatures; };
 
       # Compatibility/convenience accessors
       inherit
@@ -290,6 +311,7 @@ rec {
         "name"
         "languages"
         "linker"
+        "supports"
       ];
       missing = builtins.filter (f: !(toolset ? ${f})) required;
     in
@@ -297,6 +319,8 @@ rec {
       throw "nixnative: toolset missing required fields: ${lib.concatStringsSep ", " missing}"
     else if toolset.languages == { } then
       throw "nixnative: toolset must have at least one language"
+    else if !(toolset.supports ? features) || !(builtins.isList toolset.supports.features) then
+      throw "nixnative: toolset.supports.features must be a list"
     else if !(toolset.linker ? driverFlag) then
       throw "nixnative: toolset linker is missing 'driverFlag' field"
     else
@@ -311,12 +335,15 @@ rec {
         "runtimeInputs"
         "environment"
         "flags"
+        "supports"
       ];
       missing = builtins.filter (f: !(policy ? ${f})) required;
       mergeOrder = policy.flags.mergeOrder or "defaults-first";
     in
     if missing != [ ] then
       throw "nixnative: policy missing required fields: ${lib.concatStringsSep ", " missing}"
+    else if !(policy.supports ? features) || !(builtins.isList policy.supports.features) then
+      throw "nixnative: policy.supports.features must be a list"
     else if !(builtins.elem mergeOrder [ "defaults-first" "target-first" ]) then
       throw "nixnative: policy.flags.mergeOrder must be 'defaults-first' or 'target-first'"
     else
@@ -330,6 +357,7 @@ rec {
           "name"
           "toolset"
           "policy"
+          "supports"
           "languages"
           "linker"
           "targetPlatform"
@@ -338,6 +366,8 @@ rec {
       in
       if missing != [ ] then
         throw "nixnative: toolchain missing required fields: ${lib.concatStringsSep ", " missing}"
+      else if !(toolchain.supports ? features) || !(builtins.isList toolchain.supports.features) then
+        throw "nixnative: toolchain.supports.features must be a list"
       else
         toolchain
     else
@@ -374,43 +404,37 @@ rec {
     toolchain:
     let
       tc = validateToolchain toolchain;
+      supportedFeatures = tc.supports.features or [ ];
+      hasFeature = feature: builtins.elem feature supportedFeatures;
       langCaps =
         if tc.languages ? cpp then tc.languages.cpp.capabilities or { }
         else if tc.languages ? c then tc.languages.c.capabilities or { }
         else { };
-      linkerCaps = tc.linker.capabilities or { };
     in
     {
       lto =
-        if langCaps.lto or null == null then
+        if !hasFeature "lto" then
           null
-        else if !(linkerCaps.lto or false) then
+        else if langCaps.lto or null == null then
           null
         else
           langCaps.lto;
 
-      thinLto = (langCaps.lto.thin or false) && (linkerCaps.thinLto or false);
-      sanitizers = langCaps.sanitizers or [ ];
-      coverage = langCaps.coverage or false;
-      icf = linkerCaps.icf or false;
-      parallelLinking = linkerCaps.parallelLinking or false;
-      splitDwarf = (langCaps.splitDwarf or false) && (linkerCaps.splitDwarf or false);
-      colorDiagnostics = langCaps.colorDiagnostics or false;
-      modules = langCaps.modules or false;
-      pch = langCaps.pch or false;
+      thinLto = hasFeature "thinLto";
+      sanitizers = if hasFeature "sanitizers" then (langCaps.sanitizers or [ ]) else [ ];
+      coverage = hasFeature "coverage";
+      icf = hasFeature "icf";
+      parallelLinking = hasFeature "parallelLinking";
+      splitDwarf = hasFeature "splitDwarf";
+      colorDiagnostics = hasFeature "colorDiagnostics";
+      modules = hasFeature "modules";
+      pch = hasFeature "pch";
     };
 
   toolchainSupports =
     toolchain: feature:
     let
-      caps = getCapabilities toolchain;
+      tc = validateToolchain toolchain;
     in
-    if feature == "lto" then
-      caps.lto != null
-    else if feature == "thinLto" then
-      caps.thinLto
-    else if feature == "sanitizers" then
-      caps.sanitizers != [ ]
-    else
-      caps.${feature} or false;
+    builtins.elem feature (tc.supports.features or [ ]);
 }

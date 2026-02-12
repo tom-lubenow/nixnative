@@ -33,6 +33,15 @@ rec {
         driverFlag = "-fuse-ld=${pkgs.mold}/bin/mold";
 
         capabilities = moldCapabilities;
+        supports = {
+          features = [
+            "lto"
+            "thinLto"
+            "parallelLinking"
+            "icf"
+            "splitDwarf"
+          ];
+        };
 
         platformFlags =
           platform:

@@ -47,6 +47,16 @@ let
         colorDiagnostics = true;
       };
 
+      supports = {
+        features = [
+          "lto"
+          "sanitizers"
+          "coverage"
+          "pch"
+          "colorDiagnostics"
+        ];
+      };
+
       bintools = {
         ar = "${pkgs.binutils}/bin/ar";
         ranlib = "${pkgs.binutils}/bin/ranlib";
@@ -72,6 +82,7 @@ let
         runtimeInputs = sharedRuntimeInputs;
         environment = { };
         inherit capabilities;
+        inherit supports;
         inherit bintools;
 
         # Scanner configuration for C files
@@ -95,6 +106,7 @@ let
         runtimeInputs = sharedRuntimeInputs;
         environment = { };
         inherit capabilities;
+        inherit supports;
         cxxRuntimeLibPath = "${gcc.cc.lib}/lib";
         inherit bintools;
 

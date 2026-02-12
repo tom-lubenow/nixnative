@@ -54,6 +54,8 @@ rec {
         pch = false; # Precompiled headers
         colorDiagnostics = false;
       },
+      # Explicit feature list used for support queries
+      supports ? null,
 
       # Default flags applied to all compilations
       defaultCFlags ? [ ],
@@ -71,6 +73,25 @@ rec {
       # Path to C++ runtime library (for rpath on Linux)
       cxxRuntimeLibPath ? null,
     }:
+    let
+      ltoCaps = capabilities.lto or null;
+      derivedFeatures =
+        lib.unique (
+          (if ltoCaps != null then [ "lto" ] else [ ])
+          ++ (if ltoCaps != null && (ltoCaps.thin or false) then [ "thinLto" ] else [ ])
+          ++ (if (capabilities.sanitizers or [ ]) != [ ] then [ "sanitizers" ] else [ ])
+          ++ (if capabilities.coverage or false then [ "coverage" ] else [ ])
+          ++ (if capabilities.modules or false then [ "modules" ] else [ ])
+          ++ (if capabilities.pch or false then [ "pch" ] else [ ])
+          ++ (if capabilities.colorDiagnostics or false then [ "colorDiagnostics" ] else [ ])
+        );
+
+      finalSupports =
+        if supports == null then
+          { features = derivedFeatures; }
+        else
+          { features = lib.unique (supports.features or [ ]); };
+    in
     {
       inherit
         name
@@ -79,6 +100,7 @@ rec {
         version
         capabilities
         ;
+      supports = finalSupports;
       inherit
         defaultCFlags
         defaultCxxFlags
@@ -94,16 +116,14 @@ rec {
 
       # Check if a capability is supported
       hasCapability =
-        cap:
-        if cap == "lto" then
-          capabilities.lto or null != null
-        else if cap == "sanitizers" then
-          (capabilities.sanitizers or [ ]) != [ ]
-        else
-          capabilities.${cap} or false;
+        cap: builtins.elem cap finalSupports.features;
 
       # Get supported sanitizers
-      supportedSanitizers = capabilities.sanitizers or [ ];
+      supportedSanitizers =
+        if builtins.elem "sanitizers" finalSupports.features then
+          capabilities.sanitizers or [ ]
+        else
+          [ ];
 
       # Check if a specific sanitizer is supported
       supportsSanitizer = san: builtins.elem san (capabilities.sanitizers or [ ]);

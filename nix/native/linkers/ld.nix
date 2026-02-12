@@ -31,6 +31,9 @@ rec {
         driverFlag = "-fuse-ld=bfd"; # BFD is the backend name for GNU ld
 
         capabilities = ldCapabilities;
+        supports = {
+          features = [ "lto" ];
+        };
 
         platformFlags =
           platform:

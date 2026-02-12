@@ -29,6 +29,15 @@ let
       driverFlag = "-fuse-ld=${llvm.lld}/bin/ld.lld";
 
       capabilities = lldCapabilities;
+      supports = {
+        features = [
+          "lto"
+          "thinLto"
+          "parallelLinking"
+          "icf"
+          "splitDwarf"
+        ];
+      };
 
       platformFlags =
         platform:

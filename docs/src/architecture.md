@@ -110,6 +110,7 @@ mkNinjaDerivation = { name, ninjaContent, ... }:
 Composes compilers, linkers, and binutils:
 - Language-aware (C, C++, potentially Rust)
 - Explicit compile/link flag composition
+- Explicit support metadata via `supports.features` on toolsets/toolchains
 - Platform-specific defaults
 
 ### 7. Tool Plugins (`tools/`)

@@ -24,6 +24,9 @@ rec {
         icf = false; # Identical Code Folding
         splitDwarf = false; # Split debug info
       },
+      # Explicit feature list used for support queries
+      # (kept separate from raw capability metadata)
+      supports ? null,
 
       # Platform-specific default flags
       platformFlags ? platform: [ ],
@@ -39,6 +42,14 @@ rec {
       # Environment variables
       environment ? { },
     }:
+    let
+      derivedFeatures = builtins.attrNames (lib.filterAttrs (_: v: v == true) capabilities);
+      finalSupports =
+        if supports == null then
+          { features = derivedFeatures; }
+        else
+          { features = lib.unique (supports.features or [ ]); };
+    in
     {
       inherit
         name
@@ -46,6 +57,7 @@ rec {
         driverFlag
         capabilities
         ;
+      supports = finalSupports;
       inherit
         platformFlags
         groupFlags
@@ -58,7 +70,7 @@ rec {
       # =======================================================================
 
       # Check if a capability is supported
-      hasCapability = cap: capabilities.${cap} or false;
+      hasCapability = cap: builtins.elem cap finalSupports.features;
 
       # Get the compiler flag to use this linker
       getDriverFlag = driverFlag;

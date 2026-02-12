@@ -77,6 +77,13 @@ let
           };
           editions = [ "2015" "2018" "2021" "2024" ];
         };
+
+        supports = {
+          features = [
+            "lto"
+            "thinLto"
+          ];
+        };
       };
 
       # No bintools needed for Rust (uses system linker)

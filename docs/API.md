@@ -61,6 +61,8 @@ in {
 }
 ```
 
+Toolchain support checks use explicit `supports.features` metadata composed from the selected toolset and policy.
+
 **Scoped builders:** `proj.executable`, `proj.staticLib`, `proj.sharedLib`, `proj.headerOnly`
 
 **Direct references:** Targets are real values passed directly to `libraries`, not string references.

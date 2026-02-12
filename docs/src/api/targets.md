@@ -27,6 +27,8 @@ native.executable {
 }
 ```
 
+Support queries (for example via `native.toolchainSupports`) use explicit `supports.features` metadata from the composed toolset/policy.
+
 ## `staticLib`
 
 Builds a static library with public interface.
