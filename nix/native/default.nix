@@ -215,10 +215,10 @@ let
   # Toolchain Factory
   # ==========================================================================
 
-  # Create a toolchain from languages map + linker
+  # Create a toolset from languages map + linker
   #
   # Usage:
-  #   mkToolchain {
+  #   mkToolset {
   #     languages = {
   #       c = native.compilers.clang.c;
   #       cpp = native.compilers.clang.cpp;
@@ -227,7 +227,7 @@ let
   #     bintools = native.compilers.clang.bintools;
   #   }
   #
-  mkToolchain =
+  mkToolset =
     {
       languages,
       linker ? null,
@@ -244,11 +244,10 @@ let
         else
           throw "nixnative.mkToolchain: 'bintools' is required. Pass a bintools set (e.g., native.compilers.clang.bintools).";
 
-      targetPlatform = pkgs.stdenv.targetPlatform;
     in
-    toolchainCore.mkToolchain (
+    toolchainCore.mkToolset (
       {
-        inherit languages targetPlatform;
+        inherit languages;
         linker = resolvedLinker;
         bintools = resolvedBintools;
       }
@@ -259,17 +258,103 @@ let
       ])
     );
 
+  # Create a policy with project/platform conventions.
+  # targetPlatform defaults to the current stdenv target.
+  mkPolicy =
+    args:
+    toolchainCore.mkPolicy (
+      {
+        targetPlatform = pkgs.stdenv.targetPlatform;
+      }
+      // args
+    );
+
+  # Create a toolchain by composing a toolset and a policy.
+  # Compatibility: if toolset/policy are omitted, they are derived from
+  # legacy mkToolchain fields.
+  mkToolchain =
+    {
+      name ? null,
+      toolset ? null,
+      policy ? null,
+      ...
+    }@args:
+    let
+      hasLegacyToolsetFields = args ? languages || args ? linker || args ? bintools;
+      hasLegacyPolicyFields = args ? targetPlatform || args ? runtimeInputs || args ? environment || args ? flags;
+
+      _toolsetConflict =
+        if toolset != null && hasLegacyToolsetFields then
+          throw "nixnative.mkToolchain: pass either 'toolset' or legacy fields ('languages'/'linker'/'bintools'), not both."
+        else
+          null;
+
+      _policyConflict =
+        if policy != null && hasLegacyPolicyFields then
+          throw "nixnative.mkToolchain: pass either 'policy' or legacy policy fields ('targetPlatform'/'runtimeInputs'/'environment'/'flags'), not both."
+        else
+          null;
+
+      legacyToolsetArgs = builtins.removeAttrs args [
+        "name"
+        "toolset"
+        "policy"
+        "targetPlatform"
+        "runtimeInputs"
+        "environment"
+        "flags"
+      ];
+
+      legacyPolicyArgs = builtins.removeAttrs args [
+        "name"
+        "toolset"
+        "policy"
+        "languages"
+        "linker"
+        "bintools"
+      ];
+
+      resolvedToolset = if toolset != null then toolset else mkToolset legacyToolsetArgs;
+      resolvedPolicy = if policy != null then policy else mkPolicy legacyPolicyArgs;
+    in
+    builtins.seq _toolsetConflict (
+      builtins.seq _policyConflict (
+        toolchainCore.mkToolchain {
+          inherit name;
+          toolset = resolvedToolset;
+          policy = resolvedPolicy;
+        }
+      )
+    );
+
   # ==========================================================================
   # Pre-Built Toolchains
   # ==========================================================================
 
   toolchains = rec {
+    defaultPolicy = mkPolicy { };
+
+    mkStandardToolchain =
+      {
+        name ? null,
+        languages,
+        linker,
+        bintools,
+      }:
+      mkToolchain {
+        inherit name;
+        toolset = mkToolset {
+          inherit languages linker bintools;
+        };
+        policy = defaultPolicy;
+      };
+
     # ========================================================================
     # Clang Toolchains
     # ========================================================================
 
     # Clang + LLD (Linux default)
-    clang-lld = mkToolchain {
+    clang-lld = mkStandardToolchain {
       languages = {
         c = compilers.clang.c;
         cpp = compilers.clang.cpp;
@@ -281,7 +366,7 @@ let
     # Clang + Mold (fast linking on Linux)
     clang-mold =
       if moldLinkers.isAvailable then
-        mkToolchain {
+        mkStandardToolchain {
           languages = {
             c = compilers.clang.c;
             cpp = compilers.clang.cpp;
@@ -304,7 +389,7 @@ let
     # GCC + GNU ld (the only working GCC combination)
     gcc-ld =
       if gnuLdLinkers.isAvailable && compilers ? gcc && linkers ? ld then
-        mkToolchain {
+        mkStandardToolchain {
           languages = {
             c = compilers.gcc.c;
             cpp = compilers.gcc.cpp;
@@ -374,10 +459,16 @@ in
   # Core factories
   inherit (compilerCore) mkCompiler mkGccStyleScanner validateScanner;
   inherit (linkerCore) mkLinker;
-  inherit (toolchainCore) validateToolchain getCapabilities toolchainSupports;
+  inherit (toolchainCore)
+    validateToolset
+    validatePolicy
+    validateToolchain
+    getCapabilities
+    toolchainSupports
+    ;
 
-  # Local mkToolchain with defaults (see let block)
-  inherit mkToolchain;
+  # Toolset/policy/toolchain factories with project defaults (see let block)
+  inherit mkToolset mkPolicy mkToolchain;
 
   # Platform utilities
   platform = platformUtils;
@@ -477,7 +568,10 @@ in
   #
   # Usage:
   #   native.mkExecutable {
-  #     toolchain = native.mkToolchain { compiler = ...; linker = ...; };
+  #     toolchain = native.mkToolchain {
+  #       toolset = native.mkToolset { languages = ...; linker = ...; bintools = ...; };
+  #       policy = native.mkPolicy { };
+  #     };
   #     name = "app";
   #     ...
   #   }

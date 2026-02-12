@@ -200,8 +200,15 @@ native.mkExecutable {
 
   # Required: explicit toolchain
   toolchain = native.mkToolchain {
-    compiler = native.compilers.clang;
-    linker = native.linkers.mold;
+    toolset = native.mkToolset {
+      languages = {
+        c = native.compilers.clang.c;
+        cpp = native.compilers.clang.cpp;
+      };
+      linker = native.linkers.mold;
+      bintools = native.compilers.clang.bintools;
+    };
+    policy = native.mkPolicy { };
   };
 
   # Optional arguments

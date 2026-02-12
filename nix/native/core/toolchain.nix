@@ -1,18 +1,29 @@
 # Toolchain abstraction for nixnative
 #
-# A toolchain composes language compilers, a linker, and binutils into a
-# complete build environment. Languages are explicitly specified via a map.
+# A toolchain is the composition of:
+#   - toolset: compilers, linker, and bintools
+#   - policy: platform and build-environment conventions
+#
+# This split keeps tool definitions (what to run) separate from policy
+# (how to run in a given environment).
 #
 # Usage:
-#   mkToolchain {
+#   toolset = mkToolset {
 #     languages = {
 #       c = native.compilers.clang.c;
 #       cpp = native.compilers.clang.cpp;
-#       rust = native.compilers.rustc.rust;
 #     };
 #     linker = native.linkers.lld;
 #     bintools = native.compilers.clang.bintools;
-#   }
+#   };
+#
+#   policy = mkPolicy {
+#     targetPlatform = pkgs.stdenv.targetPlatform;
+#   };
+#
+#   tc = mkToolchain {
+#     inherit toolset policy;
+#   };
 #
 {
   lib,
@@ -22,25 +33,19 @@
 
 rec {
   # ==========================================================================
-  # Toolchain Factory
+  # Toolset Factory
   # ==========================================================================
 
-  mkToolchain =
+  mkToolset =
     {
-      name ? null, # Optional name (auto-generated if not provided)
-      languages, # Map of language name -> language config
-      linker, # Linker object from mkLinker
-      bintools ? { }, # Bintools (ar, ranlib, nm, etc.)
-
-      # Platform configuration
-      targetPlatform, # The platform we're building for
-
-      # Additional inputs and environment
-      runtimeInputs ? [ ], # Additional packages for PATH
-      environment ? { }, # Additional environment variables
+      name ? null,
+      languages,
+      linker,
+      bintools ? { },
+      runtimeInputs ? [ ],
+      environment ? { },
     }:
     let
-      # Generate name from languages if not provided (prefer C++/C)
       generatedName =
         let
           langKey =
@@ -53,18 +58,17 @@ rec {
 
       finalName = if name != null then name else generatedName;
 
-      # Collect runtime inputs from all language compilers
       languageRuntimeInputs = lib.flatten (
         lib.mapAttrsToList (_: lang: lang.runtimeInputs or [ ]) languages
       );
 
-      # Merge runtime inputs from all sources
       allRuntimeInputs =
-        languageRuntimeInputs
-        ++ (linker.runtimeInputs or [ ])
-        ++ runtimeInputs;
+        lib.unique (
+          languageRuntimeInputs
+          ++ (linker.runtimeInputs or [ ])
+          ++ runtimeInputs
+        );
 
-      # Merge environments from all language compilers
       languageEnvironments = lib.foldl' (acc: lang: acc // (lang.environment or { })) { } (
         builtins.attrValues languages
       );
@@ -73,8 +77,78 @@ rec {
         languageEnvironments
         // (linker.environment or { })
         // environment;
+    in
+    validateToolset {
+      kind = "toolset";
+      name = finalName;
+      inherit
+        languages
+        linker
+        bintools
+        ;
+      runtimeInputs = allRuntimeInputs;
+      environment = finalEnvironment;
+    };
 
-      # Extract cxxRuntimeLibPath from cpp language if present
+  # ==========================================================================
+  # Policy Factory
+  # ==========================================================================
+
+  mkPolicy =
+    {
+      name ? "default",
+      targetPlatform,
+      runtimeInputs ? [ ],
+      environment ? { },
+      flags ? { },
+    }:
+    let
+      finalFlags = {
+        mergeOrder = "defaults-first";
+        dedupeStringPathLists = true;
+      } // flags;
+    in
+    validatePolicy {
+      kind = "policy";
+      inherit
+        name
+        targetPlatform
+        runtimeInputs
+        environment
+        ;
+      flags = finalFlags;
+    };
+
+  # ==========================================================================
+  # Toolchain Factory
+  # ==========================================================================
+
+  mkToolchain =
+    {
+      name ? null,
+      toolset,
+      policy,
+    }:
+    let
+      finalToolset = validateToolset toolset;
+      finalPolicy = validatePolicy policy;
+
+      generatedName =
+        if finalPolicy.name == "default" then
+          finalToolset.name
+        else
+          "${finalToolset.name}-${finalPolicy.name}";
+
+      finalName = if name != null then name else generatedName;
+
+      languages = finalToolset.languages;
+      linker = finalToolset.linker;
+      bintools = finalToolset.bintools;
+      targetPlatform = finalPolicy.targetPlatform;
+
+      allRuntimeInputs = lib.unique (finalToolset.runtimeInputs ++ finalPolicy.runtimeInputs);
+      finalEnvironment = finalToolset.environment // finalPolicy.environment;
+
       cxxRuntimeLibPath =
         if languages ? cpp then
           languages.cpp.cxxRuntimeLibPath or null
@@ -83,6 +157,11 @@ rec {
     in
     {
       name = finalName;
+      kind = "toolchain";
+
+      inherit toolset policy;
+
+      # Compatibility/convenience accessors
       inherit
         languages
         linker
@@ -90,7 +169,7 @@ rec {
         targetPlatform
         ;
 
-      # Bintools accessors (for convenience)
+      # Bintools accessors
       ar = bintools.ar or null;
       ranlib = bintools.ranlib or null;
       nm = bintools.nm or null;
@@ -106,28 +185,23 @@ rec {
       # Language-Aware Methods
       # =======================================================================
 
-      # Get the compiler command for a language
       getCompilerForLanguage = lang:
         if languages ? ${lang} then
           languages.${lang}.compiler
         else
           throw "nixnative: toolchain '${finalName}' does not support language '${lang}'";
 
-      # Get default flags for a language
       getDefaultFlagsForLanguage = lang:
         if languages ? ${lang} then
           languages.${lang}.defaultFlags
         else
           throw "nixnative: toolchain '${finalName}' does not support language '${lang}'";
 
-      # Check if toolchain supports a language
       supportsLanguage = lang: languages ? ${lang};
 
-      # Detect language name from filename
       getLanguageNameForFile = filename:
         language.detectLanguageName filename;
 
-      # Detect language from filename and get compiler
       getCompilerForFile = filename:
         let lang = language.detectLanguageName filename;
         in
@@ -136,7 +210,6 @@ rec {
         else
           throw "nixnative: toolchain '${finalName}' does not support language '${lang}' (detected from '${filename}')";
 
-      # Detect language from filename and get default flags
       getDefaultFlagsForFile = filename:
         let lang = language.detectLanguageName filename;
         in
@@ -145,7 +218,6 @@ rec {
         else
           throw "nixnative: toolchain '${finalName}' does not support language '${lang}' (detected from '${filename}')";
 
-      # Get the full language config for a file
       getLanguageConfigForFile = filename:
         let lang = language.detectLanguageName filename;
         in
@@ -158,12 +230,10 @@ rec {
       # Convenience Accessors
       # =======================================================================
 
-      # Check if specific languages are available
       hasC = languages ? c;
       hasCpp = languages ? cpp;
       hasRust = languages ? rust;
 
-      # Get language configs (throws if not present)
       getCConfig =
         if languages ? c then languages.c
         else throw "nixnative: toolchain '${finalName}' does not have C support";
@@ -180,13 +250,9 @@ rec {
       # Linker Methods
       # =======================================================================
 
-      # Get linker driver flag for compiler
       getLinkerFlag = linker.driverFlag;
-
-      # Check if linker supports a capability
       linkerHas = cap: linker.hasCapability cap;
 
-      # Wrap library flags for linking (handles --start-group on Linux)
       wrapLibraryFlags =
         libs:
         linker.wrapLinkFlags {
@@ -194,63 +260,127 @@ rec {
           flags = libs;
         };
 
-      # Get platform-specific linker flags
       getPlatformLinkerFlags = linker.platformFlags targetPlatform;
+
+      # =======================================================================
+      # Policy
+      # =======================================================================
+
+      getFlagPolicy = finalPolicy.flags;
 
       # =======================================================================
       # Environment
       # =======================================================================
 
-      # Build environment variables as shell export string
       getEnvironmentExports = lib.concatStringsSep "\n" (
         lib.mapAttrsToList (k: v: "export ${k}=${lib.escapeShellArg v}") finalEnvironment
       );
 
-      # Get all platform-specific compile flags (e.g., -fPIC on Linux)
       getPlatformCompileFlags = platform.defaultCompileFlags targetPlatform;
     };
 
   # ==========================================================================
-  # Toolchain Validation
+  # Validation
   # ==========================================================================
 
-  validateToolchain =
-    toolchain:
+  validateToolset =
+    toolset:
     let
       required = [
         "name"
         "languages"
         "linker"
-        "targetPlatform"
       ];
-      missing = builtins.filter (f: !(toolchain ? ${f})) required;
+      missing = builtins.filter (f: !(toolset ? ${f})) required;
     in
     if missing != [ ] then
-      throw "nixnative: toolchain missing required fields: ${lib.concatStringsSep ", " missing}"
-    else if toolchain.languages == { } then
-      throw "nixnative: toolchain must have at least one language"
-    else if !(toolchain.linker ? driverFlag) then
-      throw "nixnative: toolchain linker is missing 'driverFlag' field"
+      throw "nixnative: toolset missing required fields: ${lib.concatStringsSep ", " missing}"
+    else if toolset.languages == { } then
+      throw "nixnative: toolset must have at least one language"
+    else if !(toolset.linker ? driverFlag) then
+      throw "nixnative: toolset linker is missing 'driverFlag' field"
     else
-      toolchain;
+      toolset;
+
+  validatePolicy =
+    policy:
+    let
+      required = [
+        "name"
+        "targetPlatform"
+        "runtimeInputs"
+        "environment"
+        "flags"
+      ];
+      missing = builtins.filter (f: !(policy ? ${f})) required;
+      mergeOrder = policy.flags.mergeOrder or "defaults-first";
+    in
+    if missing != [ ] then
+      throw "nixnative: policy missing required fields: ${lib.concatStringsSep ", " missing}"
+    else if !(builtins.elem mergeOrder [ "defaults-first" "target-first" ]) then
+      throw "nixnative: policy.flags.mergeOrder must be 'defaults-first' or 'target-first'"
+    else
+      policy;
+
+  validateToolchain =
+    toolchain:
+    if toolchain ? toolset || toolchain ? policy then
+      let
+        required = [
+          "name"
+          "toolset"
+          "policy"
+          "languages"
+          "linker"
+          "targetPlatform"
+        ];
+        missing = builtins.filter (f: !(toolchain ? ${f})) required;
+      in
+      if missing != [ ] then
+        throw "nixnative: toolchain missing required fields: ${lib.concatStringsSep ", " missing}"
+      else
+        toolchain
+    else
+      let
+        required = [
+          "name"
+          "languages"
+          "linker"
+          "targetPlatform"
+        ];
+        missing = builtins.filter (f: !(toolchain ? ${f})) required;
+      in
+      if missing != [ ] then
+        throw "nixnative: toolchain missing required fields: ${lib.concatStringsSep ", " missing}"
+      else
+        mkToolchain {
+          name = toolchain.name;
+          toolset = mkToolset {
+            inherit (toolchain) languages linker;
+            bintools = toolchain.bintools or { };
+          };
+          policy = mkPolicy {
+            inherit (toolchain) targetPlatform;
+            runtimeInputs = toolchain.runtimeInputs or [ ];
+            environment = toolchain.environment or { };
+          };
+        };
 
   # ==========================================================================
   # Capability Queries
   # ==========================================================================
 
-  # Get all capabilities supported by the toolchain
   getCapabilities =
     toolchain:
     let
-      # Get capabilities from first C/C++ language
+      tc = validateToolchain toolchain;
       langCaps =
-        if toolchain.languages ? cpp then toolchain.languages.cpp.capabilities or { }
-        else if toolchain.languages ? c then toolchain.languages.c.capabilities or { }
+        if tc.languages ? cpp then tc.languages.cpp.capabilities or { }
+        else if tc.languages ? c then tc.languages.c.capabilities or { }
         else { };
-      linkerCaps = toolchain.linker.capabilities or { };
+      linkerCaps = tc.linker.capabilities or { };
     in
     {
-      # LTO requires both compiler and linker support
       lto =
         if langCaps.lto or null == null then
           null
@@ -260,33 +390,16 @@ rec {
           langCaps.lto;
 
       thinLto = (langCaps.lto.thin or false) && (linkerCaps.thinLto or false);
-
-      # Sanitizers come from compiler
       sanitizers = langCaps.sanitizers or [ ];
-
-      # Coverage comes from compiler
       coverage = langCaps.coverage or false;
-
-      # ICF comes from linker
       icf = linkerCaps.icf or false;
-
-      # Parallel linking from linker
       parallelLinking = linkerCaps.parallelLinking or false;
-
-      # Split DWARF requires both
       splitDwarf = (langCaps.splitDwarf or false) && (linkerCaps.splitDwarf or false);
-
-      # Color diagnostics from compiler
       colorDiagnostics = langCaps.colorDiagnostics or false;
-
-      # C++20 modules from compiler
       modules = langCaps.modules or false;
-
-      # PCH from compiler
       pch = langCaps.pch or false;
     };
 
-  # Check if a specific feature is supported by the toolchain
   toolchainSupports =
     toolchain: feature:
     let

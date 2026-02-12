@@ -173,12 +173,15 @@ Each build target provides:
 
 ```nix
 native.mkToolchain {
-  languages = {
-    c = native.compilers.gcc.c;
-    cpp = native.compilers.gcc.cpp;
+  toolset = native.mkToolset {
+    languages = {
+      c = native.compilers.gcc.c;
+      cpp = native.compilers.gcc.cpp;
+    };
+    linker = native.linkers.mold;
+    bintools = native.compilers.gcc.bintools;
   };
-  linker = native.linkers.mold;
-  bintools = native.compilers.gcc.bintools;
+  policy = native.mkPolicy { };
 }
 ```
 

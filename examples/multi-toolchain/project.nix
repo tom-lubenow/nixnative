@@ -85,12 +85,15 @@ let
     name = "demo-lowlevel-custom";
     inherit sources;
     toolchain = native.mkToolchain {
-      languages = {
-        c = native.compilers.clang.c;
-        cpp = native.compilers.clang.cpp;
+      toolset = native.mkToolset {
+        languages = {
+          c = native.compilers.clang.c;
+          cpp = native.compilers.clang.cpp;
+        };
+        linker = native.linkers.lld;
+        bintools = native.compilers.clang.bintools;
       };
-      linker = native.linkers.lld;
-      bintools = native.compilers.clang.bintools;
+      policy = native.mkPolicy { };
     };
     compileFlags = [ "-O2" ];
   };
