@@ -34,10 +34,18 @@ let
       # Named 'library' to avoid shadowing nixpkgs 'lib'
       collectFromLibrary = library:
         if builtins.isAttrs library then
-          # Check if this is a ninja-built library (has passthru.target)
-          if library ? passthru && library.passthru ? target then
-            # Return the target (builtins.outputOf) so Nix builds the dynamic derivation
-            [ library.passthru.target ] ++ (if library ? libraries then collectLibraryInputs library.libraries else [])
+          let
+            realizedTarget =
+              if library ? target then
+                library.target
+              else if library ? passthru && library.passthru ? target then
+                library.passthru.target
+              else
+                null;
+          in
+          # Return the target (builtins.outputOf) so Nix builds the dynamic derivation
+          if realizedTarget != null then
+            [ realizedTarget ] ++ (if library ? libraries then collectLibraryInputs library.libraries else [])
           else if library ? libraries then
             collectLibraryInputs library.libraries
           else
@@ -61,7 +69,7 @@ let
       throw "Invalid include dir: ${builtins.toJSON dir}";
 
   # Normalize a source file for ninja consumption
-  # Returns: { storePath, relNorm, objectName, lang, path }
+  # Returns: { storePath, relativePath, objectFile, language, path }
   #
   # For incremental builds, each source file gets its own store path via builtins.path.
   # This ensures that changing one file only invalidates derivations that depend on it.
@@ -69,6 +77,45 @@ let
   # IMPORTANT: We do NOT call sanitizePath on root here! sanitizePath would copy the
   # entire directory to the store, defeating per-file incrementality. Instead, we
   # keep root as a local path and use builtins.path on individual source files.
+  mkSourceUnit =
+    {
+      relativePath,
+      sourcePath,
+      sourceStorePath ? null,
+    }:
+    let
+      normalizedRelativePath =
+        if hasPrefix "./" relativePath then
+          removePrefix "./" relativePath
+        else
+          relativePath;
+      sourceLanguage = language.detectLanguageName normalizedRelativePath;
+      ext = lib.last (lib.splitString "." normalizedRelativePath);
+      baseName = lib.removeSuffix ".${ext}" normalizedRelativePath;
+      # Include extension in object file name to avoid collisions
+      sanitizedPath = lib.replaceStrings [ "/" ":" " " "." ] [ "-" "-" "-" "-" ] normalizedRelativePath;
+      objectHash = builtins.substring 0 8 (builtins.hashString "sha256" normalizedRelativePath);
+      objectFile = "${sanitizedPath}-${objectHash}.o";
+
+      finalStorePath =
+        if sourceStorePath != null then
+          "${sourceStorePath}"
+        else if builtins.isString sourcePath && builtins.hasContext sourcePath then
+          sourcePath
+        else
+          builtins.path {
+            path = sourcePath;
+            name = sanitizeName baseName + ".${ext}";
+          };
+    in
+    {
+      storePath = finalStorePath;
+      relativePath = normalizedRelativePath;
+      inherit objectFile;
+      path = sourcePath;
+      language = sourceLanguage;
+    };
+
   normalizeSourceForNinja = { root, source }:
     let
       # Keep root as a local path - do NOT copy to store yet
@@ -95,46 +142,11 @@ let
         else
           throw "Invalid source format: ${builtins.toJSON source}";
 
-      relNorm = if hasPrefix "./" srcInfo.rel
-        then removePrefix "./" srcInfo.rel
-        else srcInfo.rel;
-
-      lang = language.detectLanguageName relNorm;
-      ext = lib.last (lib.splitString "." relNorm);
-      baseName = lib.removeSuffix ".${ext}" relNorm;
-      # Include extension in object name to avoid collisions (foo.c → foo-c.o, foo.cc → foo-cc.o)
-      # Don't use sanitizeName since it strips extensions - just replace special chars
-      sanitizedPath = lib.replaceStrings [ "/" ":" " " "." ] [ "-" "-" "-" "-" ] relNorm;
-      objectHash = builtins.substring 0 8 (builtins.hashString "sha256" relNorm);
-      objectName = "${sanitizedPath}-${objectHash}.o";
-
-      # For incremental builds: create individual store paths for each source file
-      # This is the key to incrementality - each file is its own store path, so
-      # changing one file doesn't invalidate derivations that don't use it.
-      #
-      # IMPORTANT: We preserve the file extension in the store path name so the
-      # compiler can determine the source language.
-      storePath =
-        if srcInfo.store != null then
-          # Tool-generated sources already have a store path (explicit)
-          "${srcInfo.store}"
-        else if builtins.isString srcInfo.path && builtins.hasContext srcInfo.path then
-          # Tool-generated sources with derivation context in path string
-          # (e.g., "${drv}/foo.pb.cc"). Don't call builtins.path - that would
-          # try to read the file at eval time before the derivation is built.
-          srcInfo.path
-        else
-          # Regular source file: create an individual store path
-          # builtins.path copies just this one file to the store
-          # Preserve the extension (e.g., .c, .cpp) so compilers recognize the file type
-          builtins.path {
-            path = srcInfo.path;
-            name = sanitizeName baseName + ".${ext}";
-          };
     in
-    {
-      inherit storePath relNorm objectName lang;
-      path = srcInfo.path;
+    mkSourceUnit {
+      relativePath = srcInfo.rel;
+      sourcePath = srcInfo.path;
+      sourceStorePath = srcInfo.store;
     };
 
   # Normalize all sources for ninja.
@@ -273,12 +285,12 @@ let
       mkCommand = source:
         let
           srcPath = toString source.path;
-          objectName = source.objectName;
-          depFile = "${objectName}.d";
+          objectFile = source.objectFile;
+          depFile = "${objectFile}.d";
           compiler =
-            if source.lang == "c" then toolchain.getCompilerForLanguage "c"
+            if source.language == "c" then toolchain.getCompilerForLanguage "c"
             else toolchain.getCompilerForLanguage "cpp";
-          flags = mkLangFlags source.lang;
+          flags = mkLangFlags source.language;
         in
         {
           directory = rootStr;
@@ -293,7 +305,7 @@ let
               "-c"
               srcPath
               "-o"
-              objectName
+              objectFile
             ];
         };
 
@@ -350,7 +362,7 @@ let
         libraryInputs = if includeLibraryInputs then prep.libraryInputs else [ ];
       };
 
-      targetOut = wrapper.passthru.target;
+      targetOut = wrapper.target or wrapper.passthru.target;
     in
     {
       inherit prep ninjaContent compileCommands wrapper targetOut;
@@ -399,11 +411,15 @@ rec {
     wrapper // {
       artifactType = "executable";
       inherit name libraries tools;
+      target = targetOut;
+      inherit toolchain;
       executablePath = "${targetOut}/${name}";
       compileCommands = build.compileCommands;
+      sourceUnits = build.prep.normalizedSources;
+      ninjaContent = build.ninjaContent;
       passthru = wrapper.passthru // {
         inherit toolchain;
-        translationUnits = build.prep.normalizedSources;
+        sourceUnits = build.prep.normalizedSources;
         ninjaContent = build.ninjaContent;
         compileCommands = build.compileCommands;
       };
@@ -479,12 +495,16 @@ rec {
     wrapper // {
       artifactType = "static";
       inherit name libraries tools;
+      target = archiveOut;
+      inherit toolchain;
       archivePath = "${archiveOut}/${archiveName}";
       public = combinedPublic;
       compileCommands = build.compileCommands;
+      sourceUnits = build.prep.normalizedSources;
+      ninjaContent = build.ninjaContent;
       passthru = wrapper.passthru // {
         inherit toolchain;
-        translationUnits = build.prep.normalizedSources;
+        sourceUnits = build.prep.normalizedSources;
         ninjaContent = build.ninjaContent;
         compileCommands = build.compileCommands;
       };
@@ -567,12 +587,16 @@ rec {
     wrapper // {
       artifactType = "shared";
       inherit name libraries tools;
+      target = sharedOut;
+      inherit toolchain;
       sharedLibrary = sharedLibPath;
       public = combinedPublic;
       compileCommands = build.compileCommands;
+      sourceUnits = build.prep.normalizedSources;
+      ninjaContent = build.ninjaContent;
       passthru = wrapper.passthru // {
         inherit toolchain;
-        translationUnits = build.prep.normalizedSources;
+        sourceUnits = build.prep.normalizedSources;
         ninjaContent = build.ninjaContent;
         compileCommands = build.compileCommands;
       };
@@ -665,7 +689,7 @@ rec {
         if toolchain != null then
           toolchain
         else if target != null then
-          target.passthru.toolchain or (throw "mkDevShell: target has no passthru.toolchain; pass 'toolchain' explicitly")
+          target.toolchain or target.passthru.toolchain or (throw "mkDevShell: target has no toolchain metadata; pass 'toolchain' explicitly")
         else
           throw "mkDevShell: provide either 'toolchain' or 'target'";
 
@@ -732,7 +756,7 @@ rec {
     }:
     let
       # Check if this is a ninja-built executable
-      isNinjaBuilt = executable ? passthru && executable.passthru ? target;
+      isNinjaBuilt = executable ? target || (executable ? passthru && executable.passthru ? target);
 
       stdinFile = if stdin != null then pkgs.writeText "stdin" stdin else null;
       escapedArgs = map lib.escapeShellArg args;
@@ -742,7 +766,7 @@ rec {
       exeName = lib.removeSuffix ".drv" (executable.name or "unknown");
       ninjaTest = ninja.mkNinjaTest {
         inherit name args;
-        target = executable.passthru.target;
+        target = executable.target or executable.passthru.target;
         executableName = exeName;
         inherit expectedOutput;
       };

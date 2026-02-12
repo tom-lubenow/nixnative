@@ -45,8 +45,8 @@ let
 
   # Generate a build statement for a source file
   # Uses storePath directly - each source file has its own store path for incrementality
-  mkBuildStatement = { source, rule, objectName, flags }: ''
-    build ${objectName}: ${rule} ${escapeNinja (toString source.storePath)}
+  mkBuildStatement = { source, rule, objectFile, flags }: ''
+    build ${objectFile}: ${rule} ${escapeNinja (toString source.storePath)}
       FLAGS = ${flags}
   '';
 
@@ -56,19 +56,19 @@ let
       cCompiler = toolchain.getCompilerForLanguage "c";
       cxxCompiler = toolchain.getCompilerForLanguage "cpp";
 
-      cSources = builtins.filter (s: s.lang == "c") sources;
-      cppSources = builtins.filter (s: s.lang == "cpp") sources;
+      cSources = builtins.filter (s: s.language == "c") sources;
+      cppSources = builtins.filter (s: s.language == "cpp") sources;
 
-      cFlags = formatFlags (compileFlagsForLanguage {
+      cCompileFlags = formatFlags (compileFlagsForLanguage {
         inherit toolchain includeDirs defines compileFlags languageFlags extraCFlags;
         language = "c";
       });
-      cppFlags = formatFlags (compileFlagsForLanguage {
+      cppCompileFlags = formatFlags (compileFlagsForLanguage {
         inherit toolchain includeDirs defines compileFlags languageFlags extraCFlags;
         language = "cpp";
       });
 
-      allObjects = map (s: s.objectName) sources;
+      allObjects = map (s: s.objectFile) sources;
 
       compileRules = ''
         ${mkCompileRule { name = "cc"; compiler = cCompiler; }}
@@ -79,12 +79,12 @@ let
       buildStatements = ''
         # C sources
         ${concatMapStringsSep "\n" (src:
-          mkBuildStatement { source = src; rule = "cc"; objectName = src.objectName; flags = cFlags; }
+          mkBuildStatement { source = src; rule = "cc"; objectFile = src.objectFile; flags = cCompileFlags; }
         ) cSources}
 
         # C++ sources
         ${concatMapStringsSep "\n" (src:
-          mkBuildStatement { source = src; rule = "cxx"; objectName = src.objectName; flags = cppFlags; }
+          mkBuildStatement { source = src; rule = "cxx"; objectFile = src.objectFile; flags = cppCompileFlags; }
         ) cppSources}
       '';
     in {

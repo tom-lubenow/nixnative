@@ -36,7 +36,7 @@ let
         '';
 
   # Extract compile_commands.json from a target
-  extractCompileCommands = target: target.passthru.compileCommands or null;
+  extractCompileCommands = target: target.compileCommands or target.passthru.compileCommands or null;
 
 in
 rec {

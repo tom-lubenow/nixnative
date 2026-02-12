@@ -20,7 +20,9 @@
 let
   # Get the actual output from a nixnative target
   realizeTarget = pkg:
-    if pkg ? passthru && pkg.passthru ? target
+    if pkg ? target
+    then pkg.target
+    else if pkg ? passthru && pkg.passthru ? target
     then pkg.passthru.target
     else pkg;
 

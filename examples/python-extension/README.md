@@ -70,12 +70,12 @@ The shared library is wrapped into a Python package:
 ```nix
 pythonPackage = pkgs.stdenv.mkDerivation {
   name = "mathext-python";
-  buildInputs = [ mathext.passthru.target ];
+  buildInputs = [ mathext.target ];
 
   buildPhase = ''
     ext_suffix=$(python3 -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
     mkdir -p $out/lib/python${python.pythonVersion}/site-packages
-    cp ${mathext.passthru.target}/mathext.so \
+    cp ${mathext.target}/mathext.so \
        $out/lib/python${python.pythonVersion}/site-packages/mathext$ext_suffix
   '';
 };

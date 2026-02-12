@@ -124,9 +124,9 @@ in { ... }
   combined = pkgs.symlinkJoin {
     name = "myapp";
     paths = [
-      cli.passthru.target
-      daemon.passthru.target
-      tests.passthru.target
+      cli.target
+      daemon.target
+      tests.target
     ];
   };
 ```

@@ -134,7 +134,7 @@ nix-ninja creates one derivation per source file. This means:
 Each source file is captured individually:
 
 ```nix
-store = builtins.path { path = "${rootHost}/${relNorm}"; };
+store = builtins.path { path = "${rootHost}/${relativePath}"; };
 ```
 
 This makes each source content-addressed, so changing one file doesn't invalidate others.
@@ -165,8 +165,9 @@ When a target depends on a library, these are automatically merged into the buil
 Each build target provides:
 - The built artifact (executable, library, etc.)
 - `compileCommands` - `compile_commands.json` for IDE integration
-- `passthru.toolchain` - The toolchain used for building
-- `passthru.target` - The `builtins.outputOf` reference to the actual output
+- `toolchain` - The toolchain used for building
+- `target` - The `builtins.outputOf` reference to the actual output
+- `sourceUnits` - Normalized source metadata used to generate compile/link steps
 
 ## Extensibility
 

@@ -29,7 +29,7 @@ let
   pythonPackage = pkgs.stdenv.mkDerivation {
     name = "mathext-python";
 
-    buildInputs = [ mathext.passthru.target ];
+    buildInputs = [ mathext.target ];
 
     dontUnpack = true;
     dontConfigure = true;
@@ -41,7 +41,7 @@ let
 
       mkdir -p $out/lib/python${python.pythonVersion}/site-packages
 
-      cp ${mathext.passthru.target}/mathext.so \
+      cp ${mathext.target}/mathext.so \
          $out/lib/python${python.pythonVersion}/site-packages/mathext$ext_suffix
 
       runHook postBuild

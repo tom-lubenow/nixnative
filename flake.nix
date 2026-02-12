@@ -83,9 +83,11 @@
           ...
         }:
         let
-          # Extract .passthru.target from packages that have it
+          # Extract dynamic outputs from nixnative packages
           realizeTarget = pkg:
-            if pkg ? passthru && pkg.passthru ? target
+            if pkg ? target
+            then pkg.target
+            else if pkg ? passthru && pkg.passthru ? target
             then pkg.passthru.target
             else pkg;
         in

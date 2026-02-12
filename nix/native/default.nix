@@ -609,7 +609,9 @@ in
   # Extract the actual target from a nixnative package
   # Safe to call on both dynamic and regular derivations
   realizeTarget = pkg:
-    if pkg ? passthru && pkg.passthru ? target
+    if pkg ? target
+    then pkg.target
+    else if pkg ? passthru && pkg.passthru ? target
     then pkg.passthru.target
     else pkg;
 
@@ -617,11 +619,16 @@ in
   # Usage in flake.nix:
   #   legacyPackages.${system} = native.mkLegacyPackages project.packages;
   mkLegacyPackages = packages:
-    lib.mapAttrs (_name: pkg:
-      if pkg ? passthru && pkg.passthru ? target
-      then pkg.passthru.target
-      else pkg
-    ) packages;
+    let
+      resolve = pkg:
+        if pkg ? target then
+          pkg.target
+        else if pkg ? passthru && pkg.passthru ? target then
+          pkg.passthru.target
+        else
+          pkg;
+    in
+    lib.mapAttrs (_name: resolve) packages;
 
   # Create a check derivation that builds multiple packages
   # Useful for `nix build .` to build everything
@@ -632,11 +639,14 @@ in
   #   ];
   mkBuildAllCheck = pkgs': name: packages:
     let
-      realizedPkgs = map (pkg:
-        if pkg ? passthru && pkg.passthru ? target
-        then pkg.passthru.target
-        else pkg
-      ) packages;
+      resolve = pkg:
+        if pkg ? target then
+          pkg.target
+        else if pkg ? passthru && pkg.passthru ? target then
+          pkg.passthru.target
+        else
+          pkg;
+      realizedPkgs = map resolve packages;
       validInputs = pkg:
         pkg == null
         || lib.isDerivation pkg
