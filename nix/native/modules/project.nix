@@ -6,6 +6,7 @@
   lib,
   pkgs,
   utils,
+  defaultsCore,
   api,
   helpers,
 }:
@@ -189,12 +190,7 @@ let
     freeformType = types.attrs;
   });
 
-  flagListFields = [
-    "compileFlags"
-    "linkFlags"
-    "publicCompileFlags"
-    "publicLinkFlags"
-  ];
+  flagListFields = builtins.filter (name: name != "languageFlags") defaultsCore.projectFlagFields;
 
   mergeDefaults =
     {
@@ -537,7 +533,8 @@ let
     let
       cfg = config.native;
       defaults =
-        cfg.defaults
+        defaultsCore.project
+        // cfg.defaults
         // {
           root = cfg.root;
           compiler = cfg.compiler;
@@ -687,7 +684,7 @@ let
 
         defaults = lib.mkOption {
           type = types.submodule defaultsModule;
-          default = { };
+          default = defaultsCore.project;
           description = "Default target settings.";
         };
 

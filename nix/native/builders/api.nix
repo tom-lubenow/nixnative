@@ -25,6 +25,7 @@
   pkgs,
   lib,
   utils,
+  defaultsCore,
   compilers,
   linkers,
   mkToolchain,
@@ -339,19 +340,13 @@ let
     defaults:
     let
       _legacyDefaultsCheck = assertNoLegacyFlagAliases { context = "project(defaults)"; args = defaults; };
+      baseDefaults = defaultsCore.project // defaults;
 
       isDedupableList = values:
         builtins.all (value: builtins.isString value || builtins.isPath value) values;
 
       # Fields that should be concatenated (lists)
-      listFields = [
-        "includeDirs"
-        "defines"
-        "libraries"
-        "tools"
-        "publicIncludeDirs"
-        "publicDefines"
-      ];
+      listFields = defaultsCore.projectListFields;
 
       # Fields that should be deeply merged (attrs)
       attrFields = [ ];
@@ -386,7 +381,7 @@ let
           _legacyTargetCheck = assertNoLegacyFlagAliases { context = "project(target)"; args = targetArgs; };
 
           # Start with defaults
-          base = defaults;
+          base = baseDefaults;
 
           # For list fields: concatenate defaults ++ target
           mergedLists = lib.foldl' (acc: field:
@@ -444,7 +439,7 @@ let
       test = scopedTest;
 
       # Expose the defaults for introspection
-      inherit defaults;
+      defaults = baseDefaults;
 
       # Allow creating a nested project with additional defaults
       extend = extraDefaults: project (mergeArgs extraDefaults);

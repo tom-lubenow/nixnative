@@ -19,6 +19,7 @@
 {
   lib,
   utils,
+  defaultsCore,
   api,
   helpers,
 }:
@@ -60,14 +61,7 @@ let
       toolchain ? null,
     }:
     let
-      listFields = [
-        "includeDirs"
-        "defines"
-        "libraries"
-        "tools"
-        "publicIncludeDirs"
-        "publicDefines"
-      ];
+      listFields = defaultsCore.projectListFields;
 
       scalarDefaults = builtins.removeAttrs defaults listFields;
       scalarTarget = builtins.removeAttrs target listFields;
@@ -110,6 +104,7 @@ let
     }:
     let
       _legacyDefaultsCheck = assertNoLegacyFlagAliases { context = "mkProject(defaults)"; args = defaults; };
+      baseDefaults = defaultsCore.project // defaults;
 
       # Build the toolchain args to pass through
       toolchainArgs =
@@ -127,7 +122,7 @@ let
 
           # Merge defaults with target args
           merged = mergeDefaults {
-            defaults = defaults;
+            defaults = baseDefaults;
             target = withRoot;
             toolchain = withRoot.toolchain or toolchain;
           };
@@ -143,7 +138,7 @@ let
           _legacyTargetCheck = assertNoLegacyFlagAliases { context = "mkProject(target)"; args = targetArgs; };
           withRoot = { inherit root; } // targetArgs;
           merged = mergeDefaults {
-            defaults = defaults;
+            defaults = baseDefaults;
             target = withRoot;
             toolchain = withRoot.toolchain or toolchain;
           };
@@ -155,7 +150,8 @@ let
     in
     builtins.seq _legacyDefaultsCheck {
       # Expose the defaults for inspection
-      inherit defaults root;
+      defaults = baseDefaults;
+      inherit root;
 
       # High-level builders (resolve compiler/linker automatically)
       executable = wrapBuilder api.executable;
@@ -163,7 +159,7 @@ let
       sharedLib = wrapBuilder api.sharedLib;
       headerOnly = args:
         helpers.mkHeaderOnly (mergeDefaults {
-          defaults = defaults;
+          defaults = baseDefaults;
           target = ({ inherit root; } // args);
           toolchain = toolchain;
         });
@@ -177,7 +173,7 @@ let
       extend = extraDefaults: mkProject {
         inherit root compiler linker toolchain;
         defaults = mergeDefaults {
-          defaults = defaults;
+          defaults = baseDefaults;
           target = extraDefaults;
           inherit toolchain;
         };
