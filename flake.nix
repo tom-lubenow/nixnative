@@ -122,7 +122,12 @@
         }
       );
 
-      # Apps removed - sync-manifest was for static scanning mode (now obsolete)
+      apps = forAllSystems (_: {
+        incrementality-gate = {
+          type = "app";
+          program = "${self}/scripts/incrementality-gate.sh";
+        };
+      });
 
       devShells = forAllSystems (
         {

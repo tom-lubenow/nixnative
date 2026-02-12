@@ -189,6 +189,19 @@ Run all checks:
 nix flake check
 ```
 
+Run the incrementality/cache behavior gate:
+
+```sh
+nix run .#incrementality-gate
+# or
+./scripts/incrementality-gate.sh
+```
+
+The gate enforces:
+- no recompilation on a no-op rebuild
+- exactly one recompilation after editing one source file in a two-source target
+- stable object derivation identity for unchanged sources
+
 ## Platform Support
 
 - **Linux** (x86_64, aarch64): Fully supported
