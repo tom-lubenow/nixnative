@@ -29,6 +29,8 @@ native.executable {
 
 Support queries (for example via `native.toolchainSupports`) use explicit `supports.features` metadata from the composed toolset/policy.
 
+Use `compileFlags`/`languageFlags`/`linkFlags`; legacy aliases (`cFlags`, `cxxFlags`, `ldFlags`) are not accepted.
+
 ## `staticLib`
 
 Builds a static library with public interface.

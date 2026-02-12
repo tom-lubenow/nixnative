@@ -65,7 +65,13 @@ The project returns these scoped builder functions:
 - `proj.headerOnly { ... }` - Define a header-only library
 
 All builders inherit the project's defaults but can override them. Lists are concatenated; lists of strings/paths are
-deduplicated (first occurrence wins) while lists of attrsets are not.
+deduplicated (first occurrence wins) while lists of attrsets are not. Flag fields (`compileFlags`, `linkFlags`,
+`languageFlags`, `publicCompileFlags`, `publicLinkFlags`) are merged through the toolchain policy:
+
+- `mergeOrder = "defaults-first"` (default): project defaults then target flags
+- `mergeOrder = "target-first"`: target flags then project defaults
+
+Legacy aliases (`cFlags`, `cxxFlags`, `ldFlags`) are rejected.
 
 ## Extending Projects
 

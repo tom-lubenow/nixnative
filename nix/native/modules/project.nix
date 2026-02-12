@@ -5,6 +5,7 @@
 {
   lib,
   pkgs,
+  utils,
   api,
   helpers,
 }:
@@ -188,11 +189,38 @@ let
     freeformType = types.attrs;
   });
 
-  mergeDefaults = defaults: target:
+  flagListFields = [
+    "compileFlags"
+    "linkFlags"
+    "publicCompileFlags"
+    "publicLinkFlags"
+  ];
+
+  mergeDefaults =
+    {
+      defaults,
+      target,
+      mergeOrder ? "defaults-first",
+      dedupeFlags ? true,
+    }:
     let
       mergeValue = _name: defaultVal: targetVal:
         if targetVal == null then
           defaultVal
+        else if builtins.elem _name flagListFields && builtins.isList defaultVal && builtins.isList targetVal then
+          utils.mergeFlagLists {
+            defaults = defaultVal;
+            target = targetVal;
+            inherit mergeOrder;
+            dedupe = dedupeFlags;
+          }
+        else if _name == "languageFlags" && builtins.isAttrs defaultVal && builtins.isAttrs targetVal then
+          utils.mergeLanguageFlagAttrs {
+            defaults = defaultVal;
+            target = targetVal;
+            inherit mergeOrder;
+            dedupe = dedupeFlags;
+          }
         else if builtins.isList defaultVal && builtins.isList targetVal then
           let
             merged = defaultVal ++ targetVal;
@@ -202,7 +230,11 @@ let
           else
             merged
         else if builtins.isAttrs defaultVal && builtins.isAttrs targetVal then
-          mergeDefaults defaultVal targetVal
+          mergeDefaults {
+            defaults = defaultVal;
+            target = targetVal;
+            inherit mergeOrder dedupeFlags;
+          }
         else
           targetVal;
 
@@ -514,7 +546,18 @@ let
         };
 
       resolveTarget = _name: target:
-        mergeDefaults defaults target;
+        let
+          mergeToolchain =
+            if target.toolchain or null != null then
+              target.toolchain
+            else
+              defaults.toolchain or null;
+        in
+        mergeDefaults {
+          inherit defaults target;
+          mergeOrder = utils.flagMergeOrderForToolchain mergeToolchain;
+          dedupeFlags = utils.flagDedupeForToolchain mergeToolchain;
+        };
 
       resolvedTargets = lib.mapAttrs resolveTarget cfg.targets;
 

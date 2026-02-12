@@ -428,6 +428,7 @@ let
     inherit
       pkgs
       lib
+      utils
       compilers
       linkers
       mkToolchain
@@ -437,12 +438,12 @@ let
 
   # Project defaults (legacy mkProject)
   projectBuilders = import ./builders/project.nix {
-    inherit lib api helpers;
+    inherit lib utils api helpers;
   };
 
   # Module-first project interface
   projectModules = import ./modules/project.nix {
-    inherit lib pkgs api helpers;
+    inherit lib pkgs utils api helpers;
   };
 
   # Installation packaging

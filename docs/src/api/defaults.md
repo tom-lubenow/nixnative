@@ -84,10 +84,36 @@ let
   debugApp = proj.executable {
     name = "debug-app";
     sources = [ "main.cc" ];
-    compileFlags = [ "-g" "-O0" ];  # Added after project defaults
+    compileFlags = [ "-g" "-O0" ];  # Merged with project flags (order from toolchain policy)
     defines = [ "DEBUG" ];  # Add debug define
   };
 in { ... }
+```
+
+## Flag Merge Policy
+
+Flag fields are merged with deterministic ordering and deduplication:
+
+- `compileFlags`, `languageFlags`, `linkFlags`
+- `publicCompileFlags`, `publicLinkFlags`
+
+By default (`mergeOrder = "defaults-first"`), project defaults come first.
+To prioritize target flags, set `mergeOrder = "target-first"` in toolchain policy:
+
+```nix
+customToolchain = native.mkToolchain {
+  toolset = native.mkToolset {
+    languages = {
+      c = native.compilers.clang.c;
+      cpp = native.compilers.clang.cpp;
+    };
+    linker = native.linkers.lld;
+    bintools = native.compilers.clang.bintools;
+  };
+  policy = native.mkPolicy {
+    flags.mergeOrder = "target-first";
+  };
+};
 ```
 
 ## Extending Defaults

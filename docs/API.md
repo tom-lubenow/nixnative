@@ -69,6 +69,10 @@ Toolchain support checks use explicit `supports.features` metadata composed from
 
 **Extend:** Use `proj.extend { ... }` to create nested projects with additional defaults.
 
+Flag fields (`compileFlags`, `languageFlags`, `linkFlags`, `publicCompileFlags`, `publicLinkFlags`) are merged with
+deduplication and deterministic ordering controlled by toolchain policy (`flags.mergeOrder`).
+Legacy aliases (`cFlags`, `cxxFlags`, `ldFlags`) are rejected.
+
 ---
 
 ## High-Level API (Compatibility)

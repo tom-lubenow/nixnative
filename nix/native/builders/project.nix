@@ -18,60 +18,78 @@
 #
 {
   lib,
+  utils,
   api,
   helpers,
 }:
 
 let
+  legacyFlagAliases = [
+    "cFlags"
+    "cxxFlags"
+    "ldFlags"
+  ];
+
+  assertNoLegacyFlagAliases =
+    { context, args }:
+    let
+      found = builtins.filter (field: args ? ${field}) legacyFlagAliases;
+    in
+    if found == [ ] then
+      null
+    else
+      throw "nixnative.${context}: unsupported flag fields: ${lib.concatStringsSep ", " found}. Use compileFlags/languageFlags/linkFlags instead.";
+
   isDedupableList = values:
     builtins.all (value: builtins.isString value || builtins.isPath value) values;
 
-  # Merge two attribute sets, concatenating lists and recursively merging attrs
-  # Target values take precedence over defaults for non-list values
-  mergeDefaults = defaults: target:
+  flagSetFrom = attrs: {
+    compileFlags = attrs.compileFlags or [ ];
+    linkFlags = attrs.linkFlags or [ ];
+    languageFlags = attrs.languageFlags or { };
+    publicCompileFlags = attrs.publicCompileFlags or [ ];
+    publicLinkFlags = attrs.publicLinkFlags or [ ];
+  };
+
+  # Merge two attribute sets for project defaults.
+  # Non-flag lists are deduped (first occurrence wins); flags use policy merge order.
+  mergeDefaults =
+    {
+      defaults,
+      target,
+      toolchain ? null,
+    }:
     let
-      mergeValue = name: defaultVal: targetVal:
-        if targetVal == null then
-          defaultVal
-        else if builtins.isList defaultVal && builtins.isList targetVal then
-          # Lists are concatenated (defaults first, then target additions)
-          let
-            merged = defaultVal ++ targetVal;
-          in
-          if isDedupableList merged then lib.unique merged else merged
-        else if builtins.isAttrs defaultVal && builtins.isAttrs targetVal then
-          # Attrs are recursively merged
-          mergeDefaults defaultVal targetVal
-        else
-          # Scalars: target wins
-          targetVal;
+      listFields = [
+        "includeDirs"
+        "defines"
+        "libraries"
+        "tools"
+        "publicIncludeDirs"
+        "publicDefines"
+      ];
 
-      # Get all keys from both defaults and target
-      allKeys = lib.unique (
-        builtins.attrNames defaults ++ builtins.attrNames target
-      );
+      scalarDefaults = builtins.removeAttrs defaults listFields;
+      scalarTarget = builtins.removeAttrs target listFields;
 
-      # Merge each key
-      mergedPairs = map (name:
+      mergedLists = lib.foldl' (
+        acc: field:
         let
-          hasDefault = defaults ? ${name};
-          hasTarget = target ? ${name};
-          defaultVal = defaults.${name} or null;
-          targetVal = target.${name} or null;
+          merged = (defaults.${field} or [ ]) ++ (target.${field} or [ ]);
+          value = if isDedupableList merged then lib.unique merged else merged;
         in
-        {
-          inherit name;
-          value =
-            if hasDefault && hasTarget then
-              mergeValue name defaultVal targetVal
-            else if hasDefault then
-              defaultVal
-            else
-              targetVal;
-        }
-      ) allKeys;
+        if merged == [ ] then acc else acc // { ${field} = value; }
+      ) { } listFields;
+
+      mergeOrder = utils.flagMergeOrderForToolchain toolchain;
+      dedupe = utils.flagDedupeForToolchain toolchain;
+      mergedFlags = utils.mergeFlagSets {
+        defaults = flagSetFrom defaults;
+        target = flagSetFrom target;
+        inherit mergeOrder dedupe;
+      };
     in
-    builtins.listToAttrs mergedPairs;
+    scalarDefaults // scalarTarget // mergedLists // mergedFlags;
 
   # Create a project with shared defaults
   mkProject =
@@ -91,6 +109,8 @@ let
       toolchain ? null,
     }:
     let
+      _legacyDefaultsCheck = assertNoLegacyFlagAliases { context = "mkProject(defaults)"; args = defaults; };
+
       # Build the toolchain args to pass through
       toolchainArgs =
         (if compiler != null then { inherit compiler; } else {})
@@ -100,29 +120,40 @@ let
       # Wrap a builder to apply defaults
       wrapBuilder = builder: targetArgs:
         let
+          _legacyTargetCheck = assertNoLegacyFlagAliases { context = "mkProject(target)"; args = targetArgs; };
+
           # Start with root from project
           withRoot = { inherit root; } // targetArgs;
 
           # Merge defaults with target args
-          merged = mergeDefaults defaults withRoot;
+          merged = mergeDefaults {
+            defaults = defaults;
+            target = withRoot;
+            toolchain = withRoot.toolchain or toolchain;
+          };
 
           # Add toolchain args
           final = toolchainArgs // merged;
         in
-        builder final;
+        builtins.seq _legacyTargetCheck (builder final);
 
       # Wrap the low-level mk* builders too
       wrapMkBuilder = builder: targetArgs:
         let
+          _legacyTargetCheck = assertNoLegacyFlagAliases { context = "mkProject(target)"; args = targetArgs; };
           withRoot = { inherit root; } // targetArgs;
-          merged = mergeDefaults defaults withRoot;
+          merged = mergeDefaults {
+            defaults = defaults;
+            target = withRoot;
+            toolchain = withRoot.toolchain or toolchain;
+          };
           # For mk* builders, toolchain must be provided by caller or project
           final = (if toolchain != null then { inherit toolchain; } else {}) // merged;
         in
-        builder final;
+        builtins.seq _legacyTargetCheck (builder final);
 
     in
-    {
+    builtins.seq _legacyDefaultsCheck {
       # Expose the defaults for inspection
       inherit defaults root;
 
@@ -130,7 +161,12 @@ let
       executable = wrapBuilder api.executable;
       staticLib = wrapBuilder api.staticLib;
       sharedLib = wrapBuilder api.sharedLib;
-      headerOnly = args: helpers.mkHeaderOnly (mergeDefaults defaults ({ inherit root; } // args));
+      headerOnly = args:
+        helpers.mkHeaderOnly (mergeDefaults {
+          defaults = defaults;
+          target = ({ inherit root; } // args);
+          toolchain = toolchain;
+        });
 
       # Low-level builders (require explicit toolchain)
       mkExecutable = wrapMkBuilder helpers.mkExecutable;
@@ -140,7 +176,11 @@ let
       # Utility: create a sub-project with additional defaults
       extend = extraDefaults: mkProject {
         inherit root compiler linker toolchain;
-        defaults = mergeDefaults defaults extraDefaults;
+        defaults = mergeDefaults {
+          defaults = defaults;
+          target = extraDefaults;
+          inherit toolchain;
+        };
       };
     };
 

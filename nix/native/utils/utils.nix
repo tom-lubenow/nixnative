@@ -195,6 +195,186 @@ rec {
     else if d ? name then "-D${d.name}"
     else throw "nixnative: invalid define: ${showValue d}";
 
+  assertFlagList =
+    {
+      field,
+      value,
+      allowPath ? false,
+    }:
+    if !(builtins.isList value) then
+      throw "nixnative: ${field} must be a list, got ${builtins.typeOf value}"
+    else if !(builtins.all (entry: builtins.isString entry || (allowPath && builtins.isPath entry)) value) then
+      throw "nixnative: ${field} entries must be ${if allowPath then "string/path" else "strings"}, got ${showValue value}"
+    else
+      value;
+
+  assertLanguageFlags =
+    languageFlags:
+    if !(builtins.isAttrs languageFlags) then
+      throw "nixnative: languageFlags must be an attrset of string lists, got ${builtins.typeOf languageFlags}"
+    else
+      builtins.mapAttrs (
+        lang: flags:
+        assertFlagList {
+          field = "languageFlags.${lang}";
+          value = flags;
+        }
+      ) languageFlags;
+
+  mkFlagSet =
+    {
+      compileFlags ? [ ],
+      linkFlags ? [ ],
+      languageFlags ? { },
+      publicCompileFlags ? [ ],
+      publicLinkFlags ? [ ],
+      ...
+    }@args:
+    let
+      allowed = [
+        "compileFlags"
+        "linkFlags"
+        "languageFlags"
+        "publicCompileFlags"
+        "publicLinkFlags"
+      ];
+      unknown = builtins.filter (name: !(builtins.elem name allowed)) (builtins.attrNames args);
+      unknownCheck =
+        if unknown == [ ] then
+          null
+        else
+          throw "nixnative: unknown flag-set fields: ${concatStringsSep ", " unknown}";
+    in
+    builtins.seq unknownCheck {
+      compileFlags = assertFlagList {
+        field = "compileFlags";
+        value = compileFlags;
+      };
+      linkFlags = assertFlagList {
+        field = "linkFlags";
+        value = linkFlags;
+        allowPath = true;
+      };
+      languageFlags = assertLanguageFlags languageFlags;
+      publicCompileFlags = assertFlagList {
+        field = "publicCompileFlags";
+        value = publicCompileFlags;
+      };
+      publicLinkFlags = assertFlagList {
+        field = "publicLinkFlags";
+        value = publicLinkFlags;
+        allowPath = true;
+      };
+    };
+
+  validateMergeOrder =
+    mergeOrder:
+    if builtins.elem mergeOrder [
+      "defaults-first"
+      "target-first"
+    ] then
+      mergeOrder
+    else
+      throw "nixnative: invalid flag mergeOrder '${mergeOrder}'. Expected 'defaults-first' or 'target-first'.";
+
+  mergeFlagLists =
+    {
+      defaults ? [ ],
+      target ? [ ],
+      mergeOrder ? "defaults-first",
+      dedupe ? true,
+    }:
+    let
+      finalOrder = validateMergeOrder mergeOrder;
+      merged =
+        if finalOrder == "target-first" then
+          target ++ defaults
+        else
+          defaults ++ target;
+    in
+    if dedupe then unique merged else merged;
+
+  mergeLanguageFlagAttrs =
+    {
+      defaults ? { },
+      target ? { },
+      mergeOrder ? "defaults-first",
+      dedupe ? true,
+    }:
+    let
+      normalizedDefaults = assertLanguageFlags defaults;
+      normalizedTarget = assertLanguageFlags target;
+      keys = unique (builtins.attrNames normalizedDefaults ++ builtins.attrNames normalizedTarget);
+    in
+    builtins.listToAttrs (
+      map (
+        key: {
+          name = key;
+          value = mergeFlagLists {
+            defaults = normalizedDefaults.${key} or [ ];
+            target = normalizedTarget.${key} or [ ];
+            inherit mergeOrder dedupe;
+          };
+        }
+      ) keys
+    );
+
+  mergeFlagSets =
+    {
+      defaults ? { },
+      target ? { },
+      mergeOrder ? "defaults-first",
+      dedupe ? true,
+    }:
+    let
+      defaultSet = mkFlagSet defaults;
+      targetSet = mkFlagSet target;
+    in
+    {
+      compileFlags = mergeFlagLists {
+        defaults = defaultSet.compileFlags;
+        target = targetSet.compileFlags;
+        inherit mergeOrder dedupe;
+      };
+      linkFlags = mergeFlagLists {
+        defaults = defaultSet.linkFlags;
+        target = targetSet.linkFlags;
+        inherit mergeOrder dedupe;
+      };
+      languageFlags = mergeLanguageFlagAttrs {
+        defaults = defaultSet.languageFlags;
+        target = targetSet.languageFlags;
+        inherit mergeOrder dedupe;
+      };
+      publicCompileFlags = mergeFlagLists {
+        defaults = defaultSet.publicCompileFlags;
+        target = targetSet.publicCompileFlags;
+        inherit mergeOrder dedupe;
+      };
+      publicLinkFlags = mergeFlagLists {
+        defaults = defaultSet.publicLinkFlags;
+        target = targetSet.publicLinkFlags;
+        inherit mergeOrder dedupe;
+      };
+    };
+
+  toolchainFlagPolicy =
+    toolchain:
+    if toolchain == null then
+      { }
+    else if toolchain ? getFlagPolicy then
+      toolchain.getFlagPolicy or { }
+    else if toolchain ? policy && toolchain.policy ? flags then
+      toolchain.policy.flags
+    else
+      { };
+
+  flagMergeOrderForToolchain =
+    toolchain:
+    validateMergeOrder ((toolchainFlagPolicy toolchain).mergeOrder or "defaults-first");
+
+  flagDedupeForToolchain = toolchain: (toolchainFlagPolicy toolchain).dedupeStringPathLists or true;
+
   compileFlagsForLanguage =
     {
       toolchain,
