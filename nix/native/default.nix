@@ -49,6 +49,10 @@ let
 
   defaultsCore = import ./core/defaults.nix;
 
+  projectSchema = import ./modules/schema.nix {
+    inherit lib defaultsCore;
+  };
+
   toolchainCore = import ./core/toolchain.nix {
     inherit lib language;
     platform = platformUtils;
@@ -385,6 +389,7 @@ let
       lib
       utils
       defaultsCore
+      projectSchema
       compilers
       linkers
       mkToolset
@@ -392,11 +397,6 @@ let
       mkToolchain
       helpers
       ;
-  };
-
-  # Module-first project interface
-  projectModules = import ./modules/project.nix {
-    inherit lib pkgs utils defaultsCore api helpers;
   };
 
   # Installation packaging

@@ -26,6 +26,7 @@
   lib,
   utils,
   defaultsCore,
+  projectSchema,
   compilers,
   linkers,
   mkToolset,
@@ -38,6 +39,52 @@ let
   compilerNames = builtins.attrNames compilers;
   linkerNames = builtins.attrNames linkers;
   formatNames = names: lib.concatStringsSep ", " names;
+  stripImplicitFields =
+    {
+      original,
+      normalized,
+      fields,
+    }:
+    lib.foldl' (
+      acc: field:
+      if original ? ${field} then
+        acc
+      else
+        builtins.removeAttrs acc [ field ]
+    ) normalized fields;
+
+  dropNullFields =
+    fields: attrs:
+    lib.foldl' (
+      acc: field:
+      if acc ? ${field} && acc.${field} == null then
+        builtins.removeAttrs acc [ field ]
+      else
+        acc
+    ) attrs fields;
+
+  normalizeTargetArgs =
+    args:
+    dropNullFields
+      [
+        "type"
+        "root"
+        "compiler"
+        "linker"
+        "toolchain"
+      ]
+      (stripImplicitFields {
+        original = args;
+        normalized = projectSchema.validateTargetArgs args;
+        fields = [
+          "type"
+          "name"
+          "root"
+          "compiler"
+          "linker"
+          "toolchain"
+        ];
+      });
 
   # ==========================================================================
   # Resolvers
@@ -145,6 +192,7 @@ let
       "compiler"
       "linker"
       "toolchain"
+      "type"
     ];
 
   # ==========================================================================
@@ -171,11 +219,12 @@ let
   executable =
     args:
     let
-      toolchain = extractToolchain args;
-      rootCheck = if !(args ? root) then
+      normalizedArgs = normalizeTargetArgs args;
+      toolchain = extractToolchain normalizedArgs;
+      rootCheck = if !(normalizedArgs ? root) then
         throw "nixnative.executable: 'root' is required. Add 'root = ./.;' to specify your project directory."
       else null;
-      cleanedArgs = cleanArgs args;
+      cleanedArgs = cleanArgs normalizedArgs;
     in
     builtins.seq rootCheck (
       helpers.mkExecutable (cleanedArgs // { inherit toolchain; })
@@ -191,11 +240,12 @@ let
   staticLib =
     args:
     let
-      toolchain = extractToolchain args;
-      rootCheck = if !(args ? root) then
+      normalizedArgs = normalizeTargetArgs args;
+      toolchain = extractToolchain normalizedArgs;
+      rootCheck = if !(normalizedArgs ? root) then
         throw "nixnative.staticLib: 'root' is required. Add 'root = ./.;' to specify your project directory."
       else null;
-      cleanedArgs = cleanArgs args;
+      cleanedArgs = cleanArgs normalizedArgs;
     in
     builtins.seq rootCheck (
       helpers.mkStaticLib (cleanedArgs // { inherit toolchain; })
@@ -209,11 +259,12 @@ let
   sharedLib =
     args:
     let
-      toolchain = extractToolchain args;
-      rootCheck = if !(args ? root) then
+      normalizedArgs = normalizeTargetArgs args;
+      toolchain = extractToolchain normalizedArgs;
+      rootCheck = if !(normalizedArgs ? root) then
         throw "nixnative.sharedLib: 'root' is required. Add 'root = ./.;' to specify your project directory."
       else null;
-      cleanedArgs = cleanArgs args;
+      cleanedArgs = cleanArgs normalizedArgs;
     in
     builtins.seq rootCheck (
       helpers.mkSharedLib (cleanedArgs // { inherit toolchain; })
@@ -222,7 +273,18 @@ let
   # Create a header-only library (no compilation)
   #
   # Note: Header-only libraries don't need a toolchain, so we just pass through
-  headerOnly = helpers.mkHeaderOnly;
+  headerOnly =
+    args:
+    let
+      normalizedArgs = normalizeTargetArgs args;
+      cleanedArgs = cleanArgs normalizedArgs;
+      finalArgs =
+        if cleanedArgs.root or null == null then
+          builtins.removeAttrs cleanedArgs [ "root" ]
+        else
+          cleanedArgs;
+    in
+    helpers.mkHeaderOnly finalArgs;
 
   # Create a development shell
   #
@@ -322,9 +384,25 @@ let
   # scalar values from the target override defaults.
   #
   project =
-    defaults:
+    args:
     let
-      baseDefaults = defaultsCore.project // defaults;
+      validatedProject = dropNullFields
+        [
+          "compiler"
+          "linker"
+          "toolchain"
+        ]
+        (stripImplicitFields {
+          original = args;
+          normalized = projectSchema.validateProjectArgs args;
+          fields = [
+            "compiler"
+            "linker"
+            "toolchain"
+          ];
+        });
+
+      baseDefaults = defaultsCore.project // validatedProject;
 
       isDedupableList = values:
         builtins.all (value: builtins.isString value || builtins.isPath value) values;
@@ -360,8 +438,10 @@ let
         };
 
       # Merge defaults with target-specific args
-      mergeArgs = targetArgs:
+      mergeArgs = rawTargetArgs:
         let
+          targetArgs = normalizeTargetArgs rawTargetArgs;
+
           # Start with defaults
           base = baseDefaults;
 
