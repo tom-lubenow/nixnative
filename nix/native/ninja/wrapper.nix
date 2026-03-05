@@ -64,6 +64,7 @@ in
         # Enable nix-ninja derivation mode
         preConfigure = ''
           export NIX_NINJA_DRV="true"
+          export NIX_SYSTEM="${pkgs.stdenv.hostPlatform.system}"
           export NINJA="${nix-ninja}/bin/nix-ninja"
           export NIX_CONFIG="extra-experimental-features = nix-command ca-derivations dynamic-derivations"
         '';
