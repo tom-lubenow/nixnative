@@ -435,8 +435,12 @@ rec {
   libraryEvalInputs =
     lib: if builtins.isAttrs lib && lib ? evalInputs then ensureList lib.evalInputs else [ ];
 
-  # Collect all evalInputs from libraries
-  collectEvalInputs = libs: concatMap libraryEvalInputs libs;
+  # Collect all evalInputs from libraries (recursive through .libraries)
+  collectEvalInputs = libs:
+    unique (concatMap (l:
+      (libraryEvalInputs l) ++
+      (if builtins.isAttrs l && l ? libraries then collectEvalInputs l.libraries else [])
+    ) libs);
 
   # ==========================================================================
   # Glob Pattern Expansion
