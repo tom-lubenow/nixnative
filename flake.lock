@@ -314,11 +314,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1772678716,
-        "narHash": "sha256-ind190KYctNCKu+Livab0VS7IPcyVyuR4e4oZPAqpQM=",
+        "lastModified": 1772693031,
+        "narHash": "sha256-ObzW/GsJjT4u2G7kXvjDwUCwhqqCuOHx3S2RxwoMeuw=",
         "owner": "tom-lubenow",
         "repo": "nix-ninja",
-        "rev": "f3e83c4b61faef82d416cd705a2fcaa76480a6eb",
+        "rev": "cb995eb562988818ce1611e108a133b1db43a94f",
         "type": "github"
       },
       "original": {
