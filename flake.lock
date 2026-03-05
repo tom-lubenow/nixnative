@@ -316,15 +316,15 @@
       "locked": {
         "lastModified": 1770907283,
         "narHash": "sha256-U3dq54kXTGy5CZHrMafO4jzo4/Zzr/M4h7sKH6DJSQs=",
-        "ref": "refs/heads/main",
+        "owner": "tom-lubenow",
+        "repo": "nix-ninja",
         "rev": "3dd6cdbb976e65a5292c9b15a3e7bb67e4352ee3",
-        "revCount": 25,
-        "type": "git",
-        "url": "ssh://git@github.com/tom-lubenow/nix-ninja"
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "ssh://git@github.com/tom-lubenow/nix-ninja"
+        "owner": "tom-lubenow",
+        "repo": "nix-ninja",
+        "type": "github"
       }
     },
     "nix_2": {
